@@ -20,7 +20,7 @@ export function CataloguePage() {
           id="group-filter"
           value={groupFilter ?? ''}
           onChange={(e) => setParams(e.target.value ? { group: e.target.value } : {})}
-          className="ml-2 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="ml-2 rounded-md border border-line bg-surface px-2 py-1 text-sm"
         >
           <option value="">All groups</option>
           {groups.map((g) => (
@@ -36,17 +36,17 @@ export function CataloguePage() {
           <h2 id={`g-${g.id}`} className="text-lg font-semibold">
             {g.title}
           </h2>
-          <ul className="mt-3 divide-y divide-slate-200 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+          <ul className="mt-3 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
             {topicsInGroup(g.id).map((t) => (
               <li key={t.id}>
                 <Link
                   to={`/topics/${t.id}`}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-indigo-500 dark:hover:bg-slate-900"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-subtle"
                 >
-                  <span className={`font-medium ${t.status === 'stub' ? 'text-slate-500 dark:text-slate-400' : ''}`}>{t.title}</span>
+                  <span className={`font-medium ${t.status === 'stub' ? 'text-muted ' : ''}`}>{t.title}</span>
                   <LevelBadge level={t.level} />
                   <StatusBadge status={t.status} />
-                  <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
+                  <span className="ml-auto text-xs text-muted">
                     {t.estimatedMinutes} min{t.questionCount ? ` · ${t.questionCount} questions` : ''}
                   </span>
                 </Link>

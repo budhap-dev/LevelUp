@@ -89,8 +89,8 @@ quadrantChart
   SSO for enterprise: [0.7, 0.85]
   Export to CSV: [0.15, 0.6]
   Dark mode: [0.3, 0.3]
-  Rewrite billing engine: [0.9, 0.35]
-  Fix flaky checkout test: [0.1, 0.75]
+  Billing rewrite: [0.78, 0.3]
+  Fix flaky test: [0.22, 0.78]
 ```
 
 A 2×2 is a conversation starter; follow it with Cost of Delay for anything contested.

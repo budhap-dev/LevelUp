@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from './router';
@@ -36,5 +37,25 @@ describe('app routes', () => {
     renderAt('/topics?group=data');
     expect(await screen.findByRole('heading', { level: 1, name: 'Data' })).toBeInTheDocument();
     expect(within(screen.getByRole('main')).getAllByRole('heading', { level: 2 })).toHaveLength(1);
+  });
+
+  it('opens the mobile menu as a modal drawer and closes it with Escape', async () => {
+    const user = userEvent.setup();
+    renderAt('/');
+    const button = await screen.findByRole('button', { name: 'Open menu' });
+    const main = screen.getByRole('main');
+    expect(document.getElementById('sidebar')).toHaveAttribute('inert');
+
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(button).toHaveAccessibleName('Close menu');
+    expect(main).toHaveAttribute('inert');
+    expect(document.getElementById('sidebar')).not.toHaveAttribute('inert');
+    expect(document.getElementById('sidebar')).toContainElement(document.activeElement as HTMLElement);
+
+    await user.keyboard('{Escape}');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(main).not.toHaveAttribute('inert');
+    expect(button).toHaveFocus();
   });
 });

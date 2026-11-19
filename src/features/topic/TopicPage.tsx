@@ -20,7 +20,7 @@ export function TopicPage() {
   return (
     <article className="mx-auto max-w-4xl">
       <header>
-        <nav aria-label="Breadcrumb" className="text-sm text-slate-500 dark:text-slate-400">
+        <nav aria-label="Breadcrumb" className="text-sm text-muted">
           <Link to={`/topics?group=${meta.group}`} className="hover:underline">
             {group?.title}
           </Link>
@@ -30,11 +30,11 @@ export function TopicPage() {
           <LevelBadge level={meta.level} />
           <StatusBadge status={meta.status} />
           {meta.verifyCount > 0 && (
-            <Badge tone="amber" title="Claims marked VERIFY: in the source still need checking">
+            <Badge tone="warning" title="Claims marked VERIFY: in the source still need checking">
               {meta.verifyCount} unverified claim{meta.verifyCount === 1 ? '' : 's'}
             </Badge>
           )}
-          <span className="text-slate-500 dark:text-slate-400">
+          <span className="text-muted">
             {meta.estimatedMinutes} min · reviewed {meta.lastReviewed}
           </span>
         </div>
@@ -50,9 +50,9 @@ export function TopicPage() {
       </header>
 
       {meta.status === 'stub' ? (
-        <div className="mt-10 rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+        <div className="mt-10 rounded-xl border border-dashed border-line p-8 text-center">
           <h2 className="text-lg font-semibold">No content yet</h2>
-          <p className="mt-2 text-slate-600 dark:text-slate-400">
+          <p className="mt-2 text-muted">
             Generate it with Prompt 2 using <code className="text-sm">content/_template.md</code>, then save it to{' '}
             <code className="text-sm">
               content/{meta.group}/{meta.id}.md
@@ -63,7 +63,7 @@ export function TopicPage() {
       ) : (
         topic.sections.map((s) => (
           <section key={s.id} id={s.id} aria-labelledby={`${s.id}-h`} className="mt-12 scroll-mt-20">
-            <h2 id={`${s.id}-h`} className="border-b border-slate-200 pb-2 text-2xl font-semibold tracking-tight dark:border-slate-800">
+            <h2 id={`${s.id}-h`} className="border-b border-line pb-2 text-2xl font-semibold tracking-tight">
               {s.title}
             </h2>
             {s.id === 'interview-questions' ? <QuestionList questions={topic.questions} /> : <Prose html={s.html} className="mt-6" />}
@@ -72,8 +72,8 @@ export function TopicPage() {
       )}
 
       {meta.related.length > 0 && (
-        <aside className="mt-16 border-t border-slate-200 pt-6 dark:border-slate-800" aria-labelledby="related-h">
-          <h2 id="related-h" className="text-sm font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        <aside className="mt-16 border-t border-line pt-6" aria-labelledby="related-h">
+          <h2 id="related-h" className="text-sm font-semibold tracking-wide text-muted uppercase">
             Related topics
           </h2>
           <ul className="mt-3 flex flex-wrap gap-2">
@@ -81,7 +81,7 @@ export function TopicPage() {
               <li key={id}>
                 <Link
                   to={`/topics/${id}`}
-                  className="inline-block rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700"
+                  className="inline-block rounded-lg border border-line bg-surface px-3 py-1.5 text-sm transition-colors hover:border-accent hover:text-accent-ink"
                 >
                   {getTopicMeta(id)?.title ?? id}
                 </Link>

@@ -17,7 +17,7 @@ RULES THE BUILD ENFORCES
 - Use exactly these nine "## " headings (any order; the app shows them in this order).
 - stub: no sections required. draft: missing sections are warnings. complete: everything below is required.
 - Plain Markdown only (GitHub-flavoured: tables, task lists). No JSX/MDX, no raw HTML (it is stripped).
-- Diagrams: fenced code blocks with the language `mermaid`.
+- Diagrams: fenced code blocks with the language `mermaid`. Quote labels containing punctuation (A["Client (web)"]); no semicolons in sequence-diagram messages (they end the statement).
 - Mark any fact you are not sure of with "VERIFY:" — the app counts and flags these.
 -->
 

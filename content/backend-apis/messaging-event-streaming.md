@@ -104,7 +104,7 @@ sequenceDiagram
   participant Billing as Billing consumer
   participant Done as processed_messages
 
-  API->>DB: BEGIN; insert order; insert outbox row; COMMIT
+  API->>DB: BEGIN, insert order + outbox row, COMMIT
   Relay->>DB: poll unsent outbox rows
   Relay->>Broker: publish (key = orderId)
   Relay->>DB: mark row sent

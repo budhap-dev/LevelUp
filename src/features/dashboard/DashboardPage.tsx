@@ -8,7 +8,7 @@ export function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-      <p className="mt-2 text-slate-600 dark:text-slate-400">
+      <p className="mt-2 text-muted">
         {topics.length} topics across {groups.length} groups · {ready} with content · {questions} interview questions
       </p>
 
@@ -21,11 +21,11 @@ export function DashboardPage() {
             <li key={g.id}>
               <Link
                 to={`/topics?group=${g.id}`}
-                className="block h-full rounded-xl border border-slate-200 p-5 transition hover:border-indigo-300 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-slate-800 dark:hover:border-indigo-700"
+                className="block h-full rounded-xl border border-line bg-surface p-5 transition duration-300 ease-(--ease-out-expo) hover:-translate-y-0.5 hover:border-accent"
               >
                 <h3 className="font-semibold">{g.title}</h3>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{g.description}</p>
-                <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 text-sm text-muted">{g.description}</p>
+                <p className="mt-3 text-xs text-muted">
                   {inGroup.length} topics · {withContent} with content
                 </p>
               </Link>

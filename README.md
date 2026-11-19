@@ -56,6 +56,12 @@ src/
 
 Put `VERIFY:` in front of any claim that still needs checking. The topic page shows how many remain.
 
+## Themes and motion
+
+- **Themes:** seven solid-colour themes (Daylight, Midnight, Sepia, Rose, Forest, Ocean, High contrast) plus System, which follows the OS light/dark setting. Colours live only in [`src/styles/themes.css`](src/styles/themes.css), as tokens such as `--canvas`, `--fg`, `--accent` and `--muted`, and are used through Tailwind classes such as `bg-canvas`, `text-muted` and `bg-accent`. To add a theme, add a block there and an entry in [`src/lib/themes.ts`](src/lib/themes.ts). [`scripts/checks/themes-contrast.test.ts`](scripts/checks/themes-contrast.test.ts) fails if any theme misses WCAG AA contrast.
+- **Motion:** page transitions, a circular reveal when switching themes (View Transitions API), an animated sidebar accordion, a slide-out mobile drawer with swipe-to-close, and diagrams that animate in (nodes fade in, edges draw). Everything respects `prefers-reduced-motion`.
+- **Logo:** [`src/components/Logo.tsx`](src/components/Logo.tsx) uses the active theme's accent colour. [`public/favicon.svg`](public/favicon.svg) has the same geometry in the default indigo.
+
 ## Deployment
 
 Azure Static Web Apps via GitHub Actions. This arrives in phase 5.
