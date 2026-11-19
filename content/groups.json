@@ -1,0 +1,62 @@
+[
+  {
+    "id": "languages-frontend",
+    "title": "Languages & Frontend",
+    "shortTitle": "Frontend",
+    "description": "JavaScript and TypeScript in depth, React and React Native, performance, accessibility and frontend architecture."
+  },
+  {
+    "id": "backend-apis",
+    "title": "Backend & APIs",
+    "shortTitle": "Backend",
+    "description": "Node.js, API styles, identity and asynchronous messaging."
+  },
+  {
+    "id": "data",
+    "title": "Data",
+    "shortTitle": "Data",
+    "description": "Choosing and modelling data stores, caching, and the basics of data engineering."
+  },
+  {
+    "id": "cloud-devops",
+    "title": "Cloud & DevOps",
+    "shortTitle": "Cloud",
+    "description": "Cloud platforms, delivery pipelines, containers, infrastructure as code, observability and cost."
+  },
+  {
+    "id": "architecture-design",
+    "title": "Architecture & Design",
+    "shortTitle": "Architecture",
+    "description": "Patterns, system design, DDD, diagrams and recording decisions."
+  },
+  {
+    "id": "quality-security",
+    "title": "Quality & Security",
+    "shortTitle": "Quality",
+    "description": "Testing strategy, application security and security in the delivery pipeline."
+  },
+  {
+    "id": "ai",
+    "title": "AI",
+    "shortTitle": "AI",
+    "description": "ML fundamentals, LLM systems, AI in the development workflow and using AI responsibly."
+  },
+  {
+    "id": "delivery",
+    "title": "Delivery",
+    "shortTitle": "Delivery",
+    "description": "Agile ways of working, estimation and measuring delivery performance."
+  },
+  {
+    "id": "product-business",
+    "title": "Product & Business",
+    "shortTitle": "Product",
+    "description": "Product thinking, requirements, stakeholders and prioritisation."
+  },
+  {
+    "id": "leadership-people",
+    "title": "Leadership & People",
+    "shortTitle": "Leadership",
+    "description": "Managing and growing people, technical strategy, hiring and influence."
+  }
+]

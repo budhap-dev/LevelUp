@@ -1,0 +1,68 @@
+[
+  {
+    "id": "senior-to-staff",
+    "title": "Senior → Staff/Principal Engineer",
+    "description": "Widen your scope from a team to an organisation: design systems that outlast you, set technical direction, and lead through influence rather than authority.",
+    "steps": [
+      { "topicId": "system-design", "note": "The core of most Staff-level interview loops." },
+      { "topicId": "architecture-patterns" },
+      { "topicId": "messaging-event-streaming" },
+      { "topicId": "caching" },
+      { "topicId": "domain-driven-design" },
+      { "topicId": "observability-sre", "note": "Staff engineers own reliability outcomes, not just features." },
+      { "topicId": "adrs-nfrs" },
+      { "topicId": "diagrams-c4-uml-sequence" },
+      { "topicId": "testing-strategy" },
+      { "topicId": "dora-metrics" },
+      { "topicId": "technical-strategy" },
+      { "topicId": "influence-without-authority" },
+      { "topicId": "mentorship" },
+      { "topicId": "llms-rag-agents", "optional": true }
+    ]
+  },
+  {
+    "id": "senior-to-solution-architect",
+    "title": "Senior → Solution Architect",
+    "description": "Turn business needs into cloud solutions that meet their non-functional requirements, and explain the trade-offs to technical and non-technical audiences.",
+    "steps": [
+      { "topicId": "business-requirement-gathering", "note": "Architecture starts with the problem, not the technology." },
+      { "topicId": "adrs-nfrs" },
+      { "topicId": "cloud-fundamentals" },
+      { "topicId": "azure" },
+      { "topicId": "architecture-patterns" },
+      { "topicId": "system-design" },
+      { "topicId": "domain-driven-design" },
+      { "topicId": "api-styles" },
+      { "topicId": "authentication-authorisation" },
+      { "topicId": "messaging-event-streaming" },
+      { "topicId": "databases-sql-nosql" },
+      { "topicId": "caching" },
+      { "topicId": "owasp-threat-modelling" },
+      { "topicId": "infrastructure-as-code" },
+      { "topicId": "observability-sre" },
+      { "topicId": "finops" },
+      { "topicId": "diagrams-c4-uml-sequence" },
+      { "topicId": "stakeholder-management" }
+    ]
+  },
+  {
+    "id": "senior-to-engineering-manager",
+    "title": "Senior → Engineering Manager",
+    "description": "Shift from delivering through your own work to delivering through a team: people, process, prioritisation and partnership with product.",
+    "steps": [
+      { "topicId": "people-management" },
+      { "topicId": "leadership" },
+      { "topicId": "mentorship" },
+      { "topicId": "hiring-interviewing" },
+      { "topicId": "behavioural-interviews-star", "note": "EM loops lean heavily on behavioural rounds." },
+      { "topicId": "agile-scrum-kanban-safe" },
+      { "topicId": "estimation" },
+      { "topicId": "dora-metrics" },
+      { "topicId": "prioritisation" },
+      { "topicId": "product-management" },
+      { "topicId": "stakeholder-management" },
+      { "topicId": "technical-strategy" },
+      { "topicId": "influence-without-authority" }
+    ]
+  }
+]
