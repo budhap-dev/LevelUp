@@ -1,13 +1,14 @@
 import { readdir, readFile, mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { z } from 'zod';
-import { GroupsFile, PathsFile, type Manifest, type Topic } from '../../src/lib/content/schema.ts';
+import { GroupsFile, PathsFile, type Manifest, type SearchRecord, type Topic } from '../../src/lib/content/schema.ts';
 import { Diagnostics } from './diagnostics.ts';
-import { buildTopic } from './build-topic.ts';
+import { buildTopic, type BuiltTopic } from './build-topic.ts';
 
 export interface ContentBuild {
   manifest: Manifest;
   topics: Topic[];
+  search: SearchRecord[];
   diagnostics: Diagnostics;
 }
 
@@ -56,7 +57,7 @@ export async function buildContent(contentDir: string): Promise<ContentBuild> {
   }
   files.sort();
 
-  const topics: Topic[] = [];
+  const topics: BuiltTopic[] = [];
   for (const file of files) {
     const source = await readFile(path.join(contentDir, file), 'utf8');
     const topic = await buildTopic({ file, source }, diag);
@@ -64,7 +65,7 @@ export async function buildContent(contentDir: string): Promise<ContentBuild> {
   }
 
   // Cross-reference checks.
-  const byId = new Map<string, Topic>();
+  const byId = new Map<string, BuiltTopic>();
   for (const t of topics) {
     if (byId.has(t.meta.id)) diag.error(`${t.meta.group}/${t.meta.id}.md`, `duplicate topic id "${t.meta.id}"`);
     byId.set(t.meta.id, t);
@@ -89,7 +90,8 @@ export async function buildContent(contentDir: string): Promise<ContentBuild> {
 
   return {
     manifest: { generatedAt: new Date().toISOString(), groups, topics: topics.map((t) => t.meta), paths },
-    topics,
+    topics: topics.map(({ search: _search, ...topic }) => topic),
+    search: topics.flatMap((t) => t.search),
     diagnostics: diag,
   };
 }
@@ -111,6 +113,8 @@ export async function writeContent(outDir: string, build: ContentBuild) {
   if (!previous || comparable(previous) !== comparable(build.manifest)) {
     await writeFile(manifestFile, JSON.stringify(build.manifest));
   }
+
+  await writeIfChanged(path.join(outDir, 'search.json'), JSON.stringify(build.search));
 
   const keep = new Set<string>();
   for (const topic of build.topics) {

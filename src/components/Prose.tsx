@@ -31,7 +31,7 @@ export function Prose({ html, className = '' }: { html: string; className?: stri
   return (
     <div
       ref={ref}
-      className={`prose max-w-none prose-headings:scroll-mt-24 prose-pre:p-4 ${className}`}
+      className={`prose max-w-none prose-headings:scroll-mt-32 prose-pre:p-4 ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
