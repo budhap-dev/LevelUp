@@ -1,72 +1,178 @@
-import { useEffect, useState } from 'react';
-import { Link, Outlet, ScrollRestoration, useLocation } from 'react-router';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react';
+import { Link, Outlet, ScrollRestoration, useLocation, useNavigation } from 'react-router';
+import { Logo } from '@/components/Logo';
+import { ThemePicker } from '@/components/ThemePicker';
+import { ThemeProvider } from '@/lib/theme';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { Sidebar } from './Sidebar';
 
+/** Three bars that morph into an X. */
+function HamburgerIcon({ open }: { open: boolean }) {
+  const bar = 'absolute left-0 h-0.5 w-5 rounded-full bg-current transition-all duration-300 ease-(--ease-drawer)';
+  return (
+    <span aria-hidden="true" className="relative block h-3.5 w-5">
+      <span className={`${bar} ${open ? 'top-1.5 rotate-45' : 'top-0'}`} />
+      <span className={`${bar} top-1.5 ${open ? 'scale-x-0 opacity-0' : ''}`} />
+      <span className={`${bar} ${open ? 'top-1.5 -rotate-45' : 'top-3'}`} />
+    </span>
+  );
+}
+
+/** Thin accent bar while a route (e.g. a topic chunk) is loading. */
+function NavigationProgress() {
+  const navigation = useNavigation();
+  const busy = navigation.state !== 'idle';
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden transition-opacity duration-300 ${busy ? 'opacity-100' : 'opacity-0'}`}
+    >
+      <div className="h-full w-full origin-left animate-progress bg-accent" />
+    </div>
+  );
+}
+
 export function Layout() {
+  return (
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
+  );
+}
+
+function Shell() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openCount, setOpenCount] = useState(0);
   const location = useLocation();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const drawerRef = useRef<HTMLElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerOpen = menuOpen && !isDesktop;
 
-  // Close the mobile drawer on navigation.
-  useEffect(() => setMenuOpen(false), [location.pathname]);
+  const openMenu = () => {
+    setOpenCount((c) => c + 1);
+    setMenuOpen(true);
+  };
+  const closeMenu = useCallback((returnFocus = false) => {
+    setMenuOpen(false);
+    if (returnFocus) menuButtonRef.current?.focus();
+  }, []);
 
+  // Close on navigation and when resizing up to desktop.
+  useEffect(() => setMenuOpen(false), [location.pathname, location.search]);
   useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    if (isDesktop) setMenuOpen(false);
+  }, [isDesktop]);
+
+  // While the drawer is open: lock page scroll, close on Escape, move focus into the drawer.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeMenu(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpen]);
+    drawerRef.current?.querySelector<HTMLElement>('a, button')?.focus({ preventScroll: true });
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [drawerOpen, closeMenu]);
+
+  // Swipe left on the drawer to close it; the drawer follows the finger.
+  const drag = useRef<{ x: number; y: number; dx: number; axis: 'x' | 'y' | null } | null>(null);
+  const onTouchStart = (e: TouchEvent) => {
+    if (!drawerOpen) return;
+    const t = e.touches[0]!;
+    drag.current = { x: t.clientX, y: t.clientY, dx: 0, axis: null };
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    const d = drag.current;
+    const drawer = drawerRef.current;
+    if (!d || !drawer) return;
+    const t = e.touches[0]!;
+    const dx = t.clientX - d.x;
+    const dy = t.clientY - d.y;
+    if (!d.axis && Math.hypot(dx, dy) > 8) d.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (d.axis !== 'x') return;
+    d.dx = Math.min(0, dx);
+    drawer.style.transition = 'none';
+    drawer.style.transform = `translateX(${d.dx}px)`;
+    if (scrimRef.current) scrimRef.current.style.opacity = String(0.5 * (1 + d.dx / drawer.offsetWidth));
+  };
+  const onTouchEnd = () => {
+    const d = drag.current;
+    const drawer = drawerRef.current;
+    drag.current = null;
+    if (!d || !drawer) return;
+    drawer.style.transition = '';
+    drawer.style.transform = '';
+    if (scrimRef.current) scrimRef.current.style.opacity = '';
+    if (d.axis === 'x' && d.dx < -drawer.offsetWidth * 0.3) closeMenu();
+  };
 
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh bg-canvas text-fg">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-accent focus:px-4 focus:py-2 focus:text-on-accent"
       >
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+      <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-line bg-surface px-3 sm:px-5">
         <button
+          ref={menuButtonRef}
           type="button"
-          className="rounded-md p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-indigo-500 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800"
-          aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
-          aria-expanded={menuOpen}
+          className="flex size-10 items-center justify-center rounded-lg text-fg-soft transition-colors hover:bg-subtle lg:hidden"
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={drawerOpen}
           aria-controls="sidebar"
-          onClick={() => setMenuOpen((o) => !o)}
+          onClick={() => (menuOpen ? closeMenu() : openMenu())}
         >
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-            {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 6h16M4 12h16M4 18h16" />}
-          </svg>
+          <HamburgerIcon open={drawerOpen} />
         </button>
-        <Link to="/" className="flex items-center gap-2 rounded-md font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-indigo-500">
-          <img src="/favicon.svg" alt="" className="size-7" />
-          LevelUp Engineer
+        <Link to="/" className="logo-link rounded-lg p-1" aria-label="LevelUp Engineer — home">
+          <Logo />
         </Link>
         <div className="ml-auto flex items-center gap-1">
-          <ThemeToggle />
+          <ThemePicker />
         </div>
+        <NavigationProgress />
       </header>
 
       <div className="flex">
-        {menuOpen && (
-          <div className="fixed inset-0 top-14 z-20 bg-slate-900/40 lg:hidden" aria-hidden="true" onClick={() => setMenuOpen(false)} />
-        )}
+        {/* Scrim: solid colour faded in behind the drawer (mobile only). */}
+        <div
+          ref={scrimRef}
+          aria-hidden="true"
+          onClick={() => closeMenu()}
+          className={`fixed inset-0 top-16 z-30 bg-scrim transition-opacity duration-300 lg:hidden ${
+            drawerOpen ? 'opacity-50' : 'pointer-events-none opacity-0'
+          }`}
+        />
         <aside
           id="sidebar"
+          ref={drawerRef}
+          aria-label="Site navigation"
           // Off-screen on mobile when closed: keep it out of the tab order and accessibility tree.
           inert={!isDesktop && !menuOpen}
-          className={`fixed top-14 bottom-0 z-20 w-72 shrink-0 overflow-y-auto border-r border-slate-200 bg-white transition-transform dark:border-slate-800 dark:bg-slate-950 lg:sticky lg:h-[calc(100dvh-3.5rem)] lg:translate-x-0 ${
-            menuOpen ? 'translate-x-0' : '-translate-x-full'
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchEnd}
+          className={`fixed top-16 bottom-0 left-0 z-30 w-[min(20rem,85vw)] shrink-0 overflow-y-auto overscroll-contain border-r border-line bg-surface transition-transform duration-[400ms] ease-(--ease-drawer) lg:sticky lg:h-[calc(100dvh-4rem)] lg:w-72 lg:translate-x-0 lg:transition-none ${
+            drawerOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
-          <Sidebar onNavigate={() => setMenuOpen(false)} />
+          <Sidebar animateKey={isDesktop ? 0 : openCount} />
         </aside>
 
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-8 focus:outline-none sm:px-8 lg:px-12">
-          <Outlet />
+        <main id="main" tabIndex={-1} inert={drawerOpen} className="min-w-0 flex-1 px-4 pt-6 pb-16 focus:outline-none sm:px-8 sm:pt-8 lg:px-12">
+          {/* Re-keyed per route so each page animates in. */}
+          <div key={location.pathname} className="animate-page-in">
+            <Outlet />
+          </div>
         </main>
       </div>
       <ScrollRestoration />

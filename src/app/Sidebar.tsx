@@ -1,5 +1,7 @@
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router';
 import { groups, getTopicMeta, topicsInGroup } from '@/lib/content';
+import type { Group } from '@/lib/content/schema';
 
 const MAIN_LINKS = [
   { to: '/', label: 'Dashboard', end: true },
@@ -11,52 +13,126 @@ const MAIN_LINKS = [
   { to: '/settings', label: 'Settings', end: false },
 ];
 
+/** Active link: accent bar slides in from the left, background fades in. */
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `block rounded-md px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-indigo-500 ${
-    isActive
-      ? 'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
-      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+  `group/link relative flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
+    isActive ? 'bg-accent-soft font-medium text-accent-ink' : 'text-fg-soft hover:bg-subtle hover:text-fg'
   }`;
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+function ActiveBar({ active }: { active: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`absolute top-1.5 bottom-1.5 left-0 w-1 rounded-full bg-accent transition-all duration-300 ease-(--ease-out-expo) ${
+        active ? 'scale-y-100 opacity-100' : 'scale-y-0 opacity-0'
+      }`}
+    />
+  );
+}
+
+/** Staggered slide-in when the mobile drawer opens. */
+function Item({ index, animate, children }: { index: number; animate: boolean; children: ReactNode }) {
+  return (
+    <li className={animate ? 'animate-slide-in' : undefined} style={animate ? { animationDelay: `${60 + index * 30}ms` } : undefined}>
+      {children}
+    </li>
+  );
+}
+
+function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; onToggle: () => void }) {
+  const panelId = useId();
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-fg transition-colors hover:bg-subtle"
+      >
+        {group.title}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          className={`size-4 text-muted transition-transform duration-300 ease-(--ease-out-expo) ${open ? 'rotate-90' : ''}`}
+          fill="currentColor"
+        >
+          <path d="M7.3 4.3a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4L11.6 10 7.3 5.7a1 1 0 0 1 0-1.4z" />
+        </svg>
+      </button>
+      {/* grid-rows 0fr → 1fr animates the height without measuring it. */}
+      <div
+        id={panelId}
+        inert={!open}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-(--ease-out-expo) ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+      >
+        <div className="overflow-hidden">
+          <ul className="mt-0.5 mb-1 ml-3 space-y-0.5 border-l border-line pl-2">
+            {topicsInGroup(group.id).map((t) => (
+              <li key={t.id}>
+                <NavLink to={`/topics/${t.id}`} className={linkClass}>
+                  {({ isActive }) => (
+                    <>
+                      <ActiveBar active={isActive} />
+                      <span className={t.status === 'stub' && !isActive ? 'text-muted' : undefined}>{t.title}</span>
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * @param animateKey changes each time the mobile drawer opens, replaying the stagger. 0 = no animation (desktop).
+ */
+export function Sidebar({ animateKey }: { animateKey: number }) {
   const { topicId } = useParams();
   const activeGroup = topicId ? getTopicMeta(topicId)?.group : undefined;
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(activeGroup ? [activeGroup] : []));
+  const animate = animateKey > 0;
+
+  // Reveal the group of the topic being viewed.
+  useEffect(() => {
+    if (activeGroup) setOpenGroups((s) => (s.has(activeGroup) ? s : new Set(s).add(activeGroup)));
+  }, [activeGroup]);
+
+  const toggle = (id: string) =>
+    setOpenGroups((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <nav aria-label="Main" className="space-y-6 p-4">
-      <ul className="space-y-0.5">
-        {MAIN_LINKS.map((l) => (
-          <li key={l.to}>
-            <NavLink to={l.to} end={l.end} className={linkClass} onClick={onNavigate}>
-              {l.label}
+      <ul className="space-y-0.5" key={`main-${animateKey}`}>
+        {MAIN_LINKS.map((l, i) => (
+          <Item key={l.to} index={i} animate={animate}>
+            <NavLink to={l.to} end={l.end} className={linkClass}>
+              {({ isActive }) => (
+                <>
+                  <ActiveBar active={isActive} />
+                  {l.label}
+                </>
+              )}
             </NavLink>
-          </li>
+          </Item>
         ))}
       </ul>
 
       <div>
-        <h2 className="px-3 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Topics</h2>
-        <ul className="mt-2 space-y-1">
-          {groups.map((g) => (
-            <li key={g.id}>
-              <details open={g.id === activeGroup} className="group">
-                <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-indigo-500 dark:text-slate-200 dark:hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
-                  {g.title}
-                  <svg aria-hidden="true" viewBox="0 0 20 20" className="size-4 text-slate-400 transition-transform group-open:rotate-90" fill="currentColor">
-                    <path d="M7.3 4.3a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4L11.6 10 7.3 5.7a1 1 0 0 1 0-1.4z" />
-                  </svg>
-                </summary>
-                <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-slate-200 pl-2 dark:border-slate-800">
-                  {topicsInGroup(g.id).map((t) => (
-                    <li key={t.id}>
-                      <NavLink to={`/topics/${t.id}`} className={linkClass} onClick={onNavigate}>
-                        <span className={t.status === 'stub' ? 'text-slate-400 dark:text-slate-500' : undefined}>{t.title}</span>
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </li>
+        <h2 className="px-3 text-xs font-semibold tracking-wide text-muted uppercase">Topics</h2>
+        <ul className="mt-2 space-y-0.5" key={`groups-${animateKey}`}>
+          {groups.map((g, i) => (
+            <Item key={g.id} index={MAIN_LINKS.length + i} animate={animate}>
+              <GroupSection group={g} open={openGroups.has(g.id)} onToggle={() => toggle(g.id)} />
+            </Item>
           ))}
         </ul>
       </div>

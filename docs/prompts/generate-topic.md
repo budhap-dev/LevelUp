@@ -25,7 +25,7 @@ FORMAT — the app parses this file, so follow the attached template EXACTLY:
   ## Cheat Sheet
   ## Further Reading
 - Use H3 (###) and below for sub-headings inside sections.
-- Diagrams: fenced code blocks with language "mermaid". Wrap node labels containing punctuation in double quotes, e.g. A["Client (browser)"].
+- Diagrams: fenced code blocks with language "mermaid". Wrap node labels containing punctuation in double quotes, e.g. A["Client (browser)"]. Never use semicolons inside sequence-diagram message text (Mermaid treats them as statement ends).
 - Code examples: fenced blocks with a language; TypeScript where relevant.
 
 CONTENT:

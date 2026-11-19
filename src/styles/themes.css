@@ -1,0 +1,136 @@
+/*
+ * Colour themes. All colours are solid (no gradients, no transparency).
+ * This file is the single source of truth for colours; src/lib/themes.ts lists the ids,
+ * and src/lib/themes.test.ts checks every theme meets WCAG AA contrast.
+ *
+ * Selectors are attribute-only (not :root-only) so a swatch can preview a theme by
+ * setting data-theme on itself.
+ *
+ * Tokens
+ *   --canvas       page background
+ *   --surface      header, sidebar, cards
+ *   --subtle       hover fills, inline code, quiet backgrounds
+ *   --line         borders and dividers
+ *   --fg           headings and primary text
+ *   --fg-soft      body text
+ *   --muted        secondary text (≥ 4.5:1 on canvas and surface)
+ *   --accent       brand colour: buttons, active states, logo
+ *   --on-accent    text/icons on --accent
+ *   --accent-soft  selected/active backgrounds
+ *   --accent-ink   links and text on --accent-soft (≥ 4.5:1 on canvas and accent-soft)
+ *   --code         code block background
+ *   --scrim        overlay behind the mobile menu (shown at 50% opacity)
+ */
+
+:root,
+[data-theme='light'] {
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --subtle: #f1f5f9;
+  --line: #e2e8f0;
+  --fg: #0f172a;
+  --fg-soft: #334155;
+  --muted: #5b6678;
+  --accent: #4f46e5;
+  --on-accent: #ffffff;
+  --accent-soft: #eef2ff;
+  --accent-ink: #4338ca;
+  --code: #f8fafc;
+  --scrim: #0f172a;
+}
+
+[data-theme='dark'] {
+  --canvas: #020617;
+  --surface: #0b1222;
+  --subtle: #1a2436;
+  --line: #263248;
+  --fg: #f1f5f9;
+  --fg-soft: #cbd5e1;
+  --muted: #94a3b8;
+  --accent: #818cf8;
+  --on-accent: #0b1020;
+  --accent-soft: #1e1b4b;
+  --accent-ink: #c7d2fe;
+  --code: #0b1222;
+  --scrim: #000000;
+}
+
+[data-theme='sepia'] {
+  --canvas: #f7f0e1;
+  --surface: #fbf7ee;
+  --subtle: #efe3cc;
+  --line: #ddcdb0;
+  --fg: #2b2118;
+  --fg-soft: #46382a;
+  --muted: #6a5843;
+  --accent: #9a4a24;
+  --on-accent: #ffffff;
+  --accent-soft: #f0dcc2;
+  --accent-ink: #7a3517;
+  --code: #f3e8d4;
+  --scrim: #2b2118;
+}
+
+[data-theme='forest'] {
+  --canvas: #0b1912;
+  --surface: #102219;
+  --subtle: #193424;
+  --line: #24452f;
+  --fg: #e8f5ec;
+  --fg-soft: #c3dccb;
+  --muted: #8fb59c;
+  --accent: #4ade80;
+  --on-accent: #052e16;
+  --accent-soft: #14432a;
+  --accent-ink: #bbf7d0;
+  --code: #0e2017;
+  --scrim: #000000;
+}
+
+[data-theme='ocean'] {
+  --canvas: #05131e;
+  --surface: #0a1d2c;
+  --subtle: #10293d;
+  --line: #1b3a52;
+  --fg: #e6f4ff;
+  --fg-soft: #bcd7ea;
+  --muted: #86a9c2;
+  --accent: #22d3ee;
+  --on-accent: #04222c;
+  --accent-soft: #0c3646;
+  --accent-ink: #a5f3fc;
+  --code: #081a28;
+  --scrim: #000000;
+}
+
+[data-theme='rose'] {
+  --canvas: #fffafb;
+  --surface: #ffffff;
+  --subtle: #fdeaee;
+  --line: #f4d3da;
+  --fg: #2a0f17;
+  --fg-soft: #4c2531;
+  --muted: #7a4a58;
+  --accent: #be123c;
+  --on-accent: #ffffff;
+  --accent-soft: #ffe4e9;
+  --accent-ink: #9f1239;
+  --code: #fff3f5;
+  --scrim: #2a0f17;
+}
+
+[data-theme='contrast'] {
+  --canvas: #000000;
+  --surface: #000000;
+  --subtle: #1c1c1c;
+  --line: #ffffff;
+  --fg: #ffffff;
+  --fg-soft: #ffffff;
+  --muted: #e0e0e0;
+  --accent: #ffd400;
+  --on-accent: #000000;
+  --accent-soft: #3a3000;
+  --accent-ink: #ffe34d;
+  --code: #0d0d0d;
+  --scrim: #000000;
+}

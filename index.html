@@ -2,17 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Knowledge base and interview prep for senior engineers and architects." />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#4f46e5" />
     <title>LevelUp Engineer</title>
     <script>
-      // Apply the saved theme before first paint to avoid a flash.
-      try {
-        const t = localStorage.getItem('levelup:theme');
-        const dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.classList.toggle('dark', dark);
-      } catch {}
+      // Apply the saved theme before first paint to avoid a flash of the wrong colours.
+      // The mode is stored next to the theme so this script needs no theme table.
+      (function () {
+        var root = document.documentElement;
+        var systemDark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = null, mode = null;
+        try {
+          theme = localStorage.getItem('levelup:theme');
+          mode = localStorage.getItem('levelup:theme-mode');
+        } catch (e) {}
+        if (!theme || (mode !== 'light' && mode !== 'dark')) {
+          theme = systemDark ? 'dark' : 'light';
+          mode = theme;
+        }
+        root.setAttribute('data-theme', theme);
+        if (mode === 'dark') root.classList.add('dark');
+      })();
     </script>
   </head>
   <body>
