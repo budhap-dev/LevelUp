@@ -25,7 +25,7 @@ describe('topic progress', () => {
     expect(screen.getByRole('radio', { name: 'Learning' })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: 'Learned' }));
     expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Marked as learned');
-    expect(within(sidebar()).getByText('(Learned)')).toBeInTheDocument();
+    expect(within(sidebar()).getByRole('link', { name: 'Caching (Learned)' })).toBeInTheDocument();
 
     await waitFor(() => expect(stored()?.topics.caching.state).toBe('learned'));
     first.unmount();

@@ -4,6 +4,7 @@ import { groups, getTopicMeta, topicsInGroup } from '@/lib/content';
 import type { Group } from '@/lib/content/schema';
 import { useProgress } from '@/lib/progress/react';
 import { TopicStatusIcon } from '@/components/TopicStatusIcon';
+import { useDueCounts } from '@/lib/srs/useDueCounts';
 
 const MAIN_LINKS = [
   { to: '/', label: 'Dashboard', end: true },
@@ -99,6 +100,8 @@ export function Sidebar({ animateKey }: { animateKey: number }) {
   const activeGroup = topicId ? getTopicMeta(topicId)?.group : undefined;
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(activeGroup ? [activeGroup] : []));
   const animate = animateKey > 0;
+  const due = useDueCounts();
+  const dueFor: Record<string, number> = { '/interview': due.questions, '/flashcards': due.flashcards };
 
   // Reveal the group of the topic being viewed.
   useEffect(() => {
@@ -122,7 +125,15 @@ export function Sidebar({ animateKey }: { animateKey: number }) {
               {({ isActive }) => (
                 <>
                   <ActiveBar active={isActive} />
-                  {l.label}
+                  <span className="flex-1">{l.label}</span>
+                  {!!dueFor[l.to] && (
+                    <>
+                      {/* Real spaces so assistive tech reads "Interview mode, 3 due", not "Interview mode3due". */}{' '}
+                      <span className="rounded-full bg-accent px-1.5 py-px text-xs font-semibold text-on-accent tabular-nums">
+                        {dueFor[l.to]} <span className="sr-only">due</span>
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </NavLink>

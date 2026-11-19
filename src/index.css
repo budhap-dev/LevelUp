@@ -228,6 +228,27 @@ dialog.palette[open]::backdrop {
   100% { box-shadow: 0 0 0 3px transparent; }
 }
 
+/* ---------- Flashcard flip (3D) ---------- */
+.flip {
+  perspective: 1600px;
+}
+.flip-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 650ms var(--ease-out-expo);
+}
+.flip-inner[data-flipped='true'] {
+  transform: rotateY(180deg);
+}
+.flip-face {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+
 /* ---------- Logo: chevrons lift on hover ---------- */
 .logo-mark .logo-chevron {
   transform-box: fill-box;

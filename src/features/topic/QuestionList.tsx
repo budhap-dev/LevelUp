@@ -4,7 +4,7 @@ import { Prose } from '@/components/Prose';
 import { useProgress, useProgressController } from '@/lib/progress/react';
 import { BookmarkIcon } from './TopicToolbar';
 
-function QuestionBookmark({ q }: { q: Question }) {
+export function QuestionBookmark({ q }: { q: Question }) {
   const progress = useProgressController();
   const id = `${q.topicId}#q-${q.id}`;
   const bookmarked = useProgress((d) => !!d.bookmarks[id]);
@@ -26,13 +26,32 @@ function Bullets({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
   return (
     <div className="mt-5">
-      <h4 className="text-sm font-semibold">{title}</h4>
+      <h4 className="text-sm font-semibold text-fg">{title}</h4>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg-soft">
         {items.map((html, i) => (
           <li key={i} dangerouslySetInnerHTML={{ __html: html }} />
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Model answer, what the interviewer is looking for, follow-ups and red flags. Shared with Interview Mode. */
+export function AnswerBody({ q }: { q: Question }) {
+  return (
+    <>
+      <div className="-mt-1 flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-fg">Model answer</h4>
+        <QuestionBookmark q={q} />
+      </div>
+      <Prose html={q.modelAnswerHtml} className="mt-2 text-[0.95rem]" />
+      <div className="mt-5 rounded-lg bg-accent-soft p-4">
+        <h4 className="text-sm font-semibold text-accent-ink">What the interviewer is looking for</h4>
+        <Prose html={q.lookingForHtml} className="mt-2 text-sm" />
+      </div>
+      <Bullets title="Follow-ups" items={q.followUpsHtml} />
+      <Bullets title="Red flags" items={q.redFlagsHtml} />
+    </>
   );
 }
 
@@ -52,17 +71,7 @@ export function QuestionList({ questions }: { questions: Question[] }) {
               </svg>
             </summary>
             <div className="border-t border-line p-4">
-              <div className="-mt-1 flex items-center justify-between">
-                <h4 className="text-sm font-semibold">Model answer</h4>
-                <QuestionBookmark q={q} />
-              </div>
-              <Prose html={q.modelAnswerHtml} className="mt-2 text-[0.95rem]" />
-              <div className="mt-5 rounded-lg bg-accent-soft p-4">
-                <h4 className="text-sm font-semibold text-accent-ink">What the interviewer is looking for</h4>
-                <Prose html={q.lookingForHtml} className="mt-2 text-sm" />
-              </div>
-              <Bullets title="Follow-ups" items={q.followUpsHtml} />
-              <Bullets title="Red flags" items={q.redFlagsHtml} />
+              <AnswerBody q={q} />
             </div>
           </details>
         </li>
