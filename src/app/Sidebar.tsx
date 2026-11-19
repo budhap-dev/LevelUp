@@ -2,6 +2,8 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router';
 import { groups, getTopicMeta, topicsInGroup } from '@/lib/content';
 import type { Group } from '@/lib/content/schema';
+import { useProgress } from '@/lib/progress/react';
+import { TopicStatusIcon } from '@/components/TopicStatusIcon';
 
 const MAIN_LINKS = [
   { to: '/', label: 'Dashboard', end: true },
@@ -41,6 +43,7 @@ function Item({ index, animate, children }: { index: number; animate: boolean; c
 
 function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; onToggle: () => void }) {
   const panelId = useId();
+  const progress = useProgress((d) => d.topics);
   return (
     <>
       <button
@@ -74,7 +77,8 @@ function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; 
                   {({ isActive }) => (
                     <>
                       <ActiveBar active={isActive} />
-                      <span className={t.status === 'stub' && !isActive ? 'text-muted' : undefined}>{t.title}</span>
+                      <span className={`flex-1 ${t.status === 'stub' && !isActive ? 'text-muted' : ''}`}>{t.title}</span>
+                      <TopicStatusIcon state={progress[t.id]?.state} className="size-3.5" />
                     </>
                   )}
                 </NavLink>

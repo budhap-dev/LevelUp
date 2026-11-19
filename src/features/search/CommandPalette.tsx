@@ -40,6 +40,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const [engine, setEngine] = useState<SearchEngine | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
@@ -53,6 +54,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     if (!dialog) return;
     const isOpen = dialog.hasAttribute('open'); // `open` attribute works even where HTMLDialogElement is incomplete
     if (open && !isOpen) {
+      returnFocus.current = document.activeElement as HTMLElement | null;
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
       inputRef.current?.focus();
@@ -61,6 +63,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     } else if (!open && isOpen) {
       if (typeof dialog.close === 'function') dialog.close();
       else dialog.removeAttribute('open');
+      // Native dialogs restore focus themselves; do it explicitly for the fallback.
+      if (dialog.contains(document.activeElement)) returnFocus.current?.focus?.();
     }
   }, [open]);
 

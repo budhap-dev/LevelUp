@@ -1,6 +1,26 @@
 import type { Question } from '@/lib/content/schema';
 import { LevelBadge } from '@/components/Badge';
 import { Prose } from '@/components/Prose';
+import { useProgress, useProgressController } from '@/lib/progress/react';
+import { BookmarkIcon } from './TopicToolbar';
+
+function QuestionBookmark({ q }: { q: Question }) {
+  const progress = useProgressController();
+  const id = `${q.topicId}#q-${q.id}`;
+  const bookmarked = useProgress((d) => !!d.bookmarks[id]);
+  return (
+    <button
+      type="button"
+      aria-pressed={bookmarked}
+      aria-label={bookmarked ? 'Remove bookmark for this question' : 'Bookmark this question'}
+      title={bookmarked ? 'Bookmarked' : 'Bookmark'}
+      onClick={() => progress.toggleBookmark({ topicId: q.topicId, anchor: `q-${q.id}`, label: q.question })}
+      className={`flex size-8 items-center justify-center rounded-lg transition-colors ${bookmarked ? 'text-accent-ink' : 'text-muted hover:bg-subtle hover:text-fg'}`}
+    >
+      <BookmarkIcon filled={bookmarked} className={`size-4.5 ${bookmarked ? 'animate-pop-in' : ''}`} />
+    </button>
+  );
+}
 
 function Bullets({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
@@ -32,7 +52,10 @@ export function QuestionList({ questions }: { questions: Question[] }) {
               </svg>
             </summary>
             <div className="border-t border-line p-4">
-              <h4 className="text-sm font-semibold">Model answer</h4>
+              <div className="-mt-1 flex items-center justify-between">
+                <h4 className="text-sm font-semibold">Model answer</h4>
+                <QuestionBookmark q={q} />
+              </div>
               <Prose html={q.modelAnswerHtml} className="mt-2 text-[0.95rem]" />
               <div className="mt-5 rounded-lg bg-accent-soft p-4">
                 <h4 className="text-sm font-semibold text-accent-ink">What the interviewer is looking for</h4>

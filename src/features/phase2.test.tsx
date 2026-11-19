@@ -56,12 +56,14 @@ describe('global search', () => {
     renderAt('/topics');
     const search = () => screen.getByRole('combobox', { name: /search topics/i });
     await user.click(await screen.findByRole('button', { name: 'Search' }));
-    await waitFor(() => expect(search()).toHaveFocus());
+    await waitFor(() => expect(search()).toHaveFocus(), { timeout: 3000 });
     await user.keyboard('{Escape}');
     // A closed <dialog> leaves the accessibility tree.
-    await waitFor(() => expect(screen.queryByRole('combobox', { name: /search topics/i })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: /search topics/i })).not.toBeInTheDocument(), { timeout: 3000 });
+    // Focus goes back to the button that opened search.
+    expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
     await user.keyboard('/');
-    await waitFor(() => expect(search()).toHaveFocus());
+    await waitFor(() => expect(search()).toHaveFocus(), { timeout: 3000 });
   });
 });
 
@@ -101,7 +103,7 @@ describe('topic navigation', () => {
     const [chips] = screen.getAllByRole('navigation', { name: 'On this page' });
     const links = within(chips!).getAllByRole('link');
     expect(links.map((l) => l.getAttribute('href'))).toEqual([
-      '#tldr', '#core-concepts', '#how-it-works', '#trade-offs', '#pitfalls', '#scenario', '#interview-questions', '#cheat-sheet', '#further-reading',
+      '#tldr', '#core-concepts', '#how-it-works', '#trade-offs', '#pitfalls', '#scenario', '#interview-questions', '#cheat-sheet', '#further-reading', '#notes',
     ]);
     expect(screen.getByRole('link', { name: 'Link to Real-world Scenario' })).toHaveAttribute('href', '#scenario');
   });

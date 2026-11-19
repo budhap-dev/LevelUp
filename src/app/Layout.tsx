@@ -5,6 +5,7 @@ import { ThemePicker } from '@/components/ThemePicker';
 import { CommandPalette } from '@/features/search/CommandPalette';
 import { SearchButton } from '@/features/search/SearchButton';
 import { ThemeProvider } from '@/lib/theme';
+import { ProgressProvider } from '@/lib/progress/react';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { Sidebar } from './Sidebar';
 
@@ -37,7 +38,9 @@ function NavigationProgress() {
 export function Layout() {
   return (
     <ThemeProvider>
-      <Shell />
+      <ProgressProvider>
+        <Shell />
+      </ProgressProvider>
     </ThemeProvider>
   );
 }
@@ -197,7 +200,11 @@ function Shell() {
         </main>
       </div>
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <ScrollRestoration />
+      <ScrollRestoration
+        // Every fresh page load gets the history key "default"; keying that entry by URL stops one page's
+        // scroll position leaking into the next full page load, while a reload still restores its place.
+        getKey={(location) => (location.key === 'default' ? `default:${location.pathname}${location.search}` : location.key)}
+      />
     </div>
   );
 }
