@@ -3,8 +3,9 @@
  * Keep this file free of browser/Node-specific imports.
  */
 import { z } from 'zod';
+import { LEVELS, SECTIONS, type SectionId } from './constants';
 
-export const LEVELS = ['Foundation', 'Senior', 'Architect'] as const;
+export { LEVELS, SECTIONS, type SectionId };
 export const Level = z.enum(LEVELS);
 export type Level = z.infer<typeof Level>;
 
@@ -48,18 +49,6 @@ export const TopicFrontmatter = z.strictObject({
 });
 export type TopicFrontmatter = z.output<typeof TopicFrontmatter>;
 
-export const SECTIONS = [
-  { id: 'tldr', heading: 'TL;DR' },
-  { id: 'core-concepts', heading: 'Core Concepts' },
-  { id: 'how-it-works', heading: 'How It Works' },
-  { id: 'trade-offs', heading: 'When to Use / Trade-offs' },
-  { id: 'pitfalls', heading: 'Common Pitfalls & Anti-patterns' },
-  { id: 'scenario', heading: 'Real-world Scenario' },
-  { id: 'interview-questions', heading: 'Interview Questions' },
-  { id: 'cheat-sheet', heading: 'Cheat Sheet' },
-  { id: 'further-reading', heading: 'Further Reading' },
-] as const;
-export type SectionId = (typeof SECTIONS)[number]['id'];
 
 export interface Section {
   id: SectionId;
@@ -115,6 +104,31 @@ export const LearningPath = z.strictObject({
 });
 export type LearningPath = z.output<typeof LearningPath>;
 export const PathsFile = z.array(LearningPath);
+
+/**
+ * One searchable item. src/generated/search.json holds all of them and is loaded lazily
+ * the first time search opens.
+ *   topic    — the topic itself (title, tags, TL;DR)
+ *   section  — a top-level section, or an H3 sub-heading inside one
+ *   question — an interview question (anchor opens it on the topic page)
+ *   cheat    — a cheat-sheet flashcard
+ */
+export type SearchKind = 'topic' | 'section' | 'question' | 'cheat';
+
+export interface SearchRecord {
+  /** Unique across the index. */
+  id: string;
+  kind: SearchKind;
+  topicId: string;
+  topicTitle: string;
+  title: string;
+  /** Plain-text snippet used for matching and as a preview. */
+  text: string;
+  tags: string[];
+  level?: Level;
+  /** Element id on the topic page to jump to. */
+  anchor?: string;
+}
 
 /** Shape of src/generated/manifest.json — small, loaded eagerly. */
 export interface Manifest {

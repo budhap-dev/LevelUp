@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react
 import { Link, Outlet, ScrollRestoration, useLocation, useNavigation } from 'react-router';
 import { Logo } from '@/components/Logo';
 import { ThemePicker } from '@/components/ThemePicker';
+import { CommandPalette } from '@/features/search/CommandPalette';
+import { SearchButton } from '@/features/search/SearchButton';
 import { ThemeProvider } from '@/lib/theme';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { Sidebar } from './Sidebar';
@@ -49,6 +51,24 @@ function Shell() {
   const scrimRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerOpen = menuOpen && !isDesktop;
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Global shortcuts: Ctrl/Cmd+K toggles search; "/" opens it when not typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      } else if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const openMenu = () => {
     setOpenCount((c) => c + 1);
@@ -135,7 +155,8 @@ function Shell() {
         <Link to="/" className="logo-link rounded-lg p-1" aria-label="LevelUp Engineer — home">
           <Logo />
         </Link>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <SearchButton onClick={() => setSearchOpen(true)} />
           <ThemePicker />
         </div>
         <NavigationProgress />
@@ -175,6 +196,7 @@ function Shell() {
           </div>
         </main>
       </div>
+      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <ScrollRestoration />
     </div>
   );

@@ -73,9 +73,12 @@ body {
   color: var(--on-accent);
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* In the base layer so utilities (e.g. focus-visible:outline-none) can override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 /* ---------- Prose: typography plugin coloured from theme tokens ---------- */
@@ -198,6 +201,33 @@ details.animated[open]::details-content {
   to { clip-path: circle(var(--reveal-r, 150vmax) at var(--reveal-x, 50%) var(--reveal-y, 0)); }
 }
 
+/* ---------- Search dialog ---------- */
+dialog.palette[open] {
+  animation: var(--animate-pop-in);
+}
+dialog.palette::backdrop {
+  background-color: #0f172a; /* fallback for browsers where ::backdrop doesn't inherit custom properties */
+  background-color: var(--scrim);
+  opacity: 0.5;
+}
+dialog.palette[open]::backdrop {
+  animation: backdrop-in 200ms ease-out;
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 0.5; }
+}
+
+/* ---------- Deep-link target: brief accent ring when arriving via a #hash ---------- */
+.flash-target {
+  border-radius: 0.75rem;
+  animation: flash-target 1.6s var(--ease-out-expo);
+}
+@keyframes flash-target {
+  0%, 30% { box-shadow: 0 0 0 3px var(--accent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
 /* ---------- Logo: chevrons lift on hover ---------- */
 .logo-mark .logo-chevron {
   transform-box: fill-box;
@@ -218,6 +248,7 @@ details.animated[open]::details-content {
   *,
   *::before,
   *::after,
+  ::backdrop,
   ::view-transition-new(root),
   ::view-transition-old(root) {
     animation-duration: 0.01ms !important;

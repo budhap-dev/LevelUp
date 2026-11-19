@@ -21,7 +21,7 @@ export function QuestionList({ questions }: { questions: Question[] }) {
   return (
     <ol className="mt-6 space-y-3">
       {questions.map((q, i) => (
-        <li key={q.id} id={`q-${q.id}`} className="scroll-mt-20">
+        <li key={q.id} id={`q-${q.id}`} className="scroll-mt-32">
           <details className="animated group rounded-xl border border-line bg-surface transition-colors duration-300 open:border-accent">
             <summary className="flex cursor-pointer list-none items-start gap-3 rounded-xl p-4 hover:bg-subtle [&::-webkit-details-marker]:hidden">
               <span className="mt-0.5 text-sm text-muted tabular-nums">{i + 1}.</span>

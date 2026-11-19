@@ -9,6 +9,7 @@ import {
   type Flashcard,
   type Level,
   type Question,
+  type SearchRecord,
   type Section,
   type Topic,
 } from '../../src/lib/content/schema.ts';
@@ -17,6 +18,10 @@ import { parseMarkdown, renderNodes } from './markdown.ts';
 import { splitSections } from './parse-sections.ts';
 import { parseQuestions } from './parse-questions.ts';
 import { parseCheatSheet } from './parse-cheatsheet.ts';
+import { buildSearchRecords } from './search-records.ts';
+
+/** A compiled topic plus its search records (written to separate files). */
+export type BuiltTopic = Topic & { search: SearchRecord[] };
 
 /** Question mix Prompt 2 asks for. Deviations are warnings on complete topics. */
 export const TARGET_QUESTION_MIX: Record<Level, number> = { Foundation: 4, Senior: 6, Architect: 5 };
@@ -37,7 +42,7 @@ function addHeadingIds(root: Root) {
   }
 }
 
-export async function buildTopic({ file, source }: BuildTopicInput, diag: Diagnostics): Promise<Topic | null> {
+export async function buildTopic({ file, source }: BuildTopicInput, diag: Diagnostics): Promise<BuiltTopic | null> {
   let parsed: matter.GrayMatterFile<string>;
   try {
     // gray-matter caches by content; pass an options object to disable that.
@@ -113,5 +118,6 @@ export async function buildTopic({ file, source }: BuildTopicInput, diag: Diagno
     sections,
     questions,
     flashcards,
+    search: buildSearchRecords(meta, rawSections, questions, flashcards),
   };
 }
