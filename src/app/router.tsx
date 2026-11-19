@@ -8,6 +8,8 @@ import { ComingSoon } from '@/components/ComingSoon';
 import { NotFound } from './NotFound';
 import { BookmarksPage } from '@/features/bookmarks/BookmarksPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
+import { InterviewPage } from '@/features/interview/InterviewPage';
+import { FlashcardsPage } from '@/features/flashcards/FlashcardsPage';
 
 export const routes: RouteObject[] = [
   {
@@ -21,8 +23,8 @@ export const routes: RouteObject[] = [
           { index: true, element: <DashboardPage /> },
           { path: 'topics', element: <CataloguePage /> },
           { path: 'topics/:topicId', loader: topicLoader, element: <TopicPage /> },
-          { path: 'interview', element: <ComingSoon title="Interview Mode" phase={4} /> },
-          { path: 'flashcards', element: <ComingSoon title="Flashcards" phase={4} /> },
+          { path: 'interview', element: <InterviewPage /> },
+          { path: 'flashcards', element: <FlashcardsPage /> },
           { path: 'paths', element: <ComingSoon title="Learning Paths" phase={5} /> },
           { path: 'paths/:pathId', element: <ComingSoon title="Learning Path" phase={5} /> },
           { path: 'bookmarks', element: <BookmarksPage /> },

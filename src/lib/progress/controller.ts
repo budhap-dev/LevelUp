@@ -4,7 +4,8 @@
  * Every mutation produces a new immutable snapshot, sharing unchanged branches.
  */
 import { ProgressFormatError, mergeProgress, normaliseProgress, toExportJson } from './normalise';
-import { emptyProgress, type Bookmark, type ProgressData, type ProgressStore, type TopicState } from './types';
+import { emptyProgress, type Bookmark, type ProgressData, type ProgressStore, type Rating, type ReviewCard, type TopicState } from './types';
+import { review } from '@/lib/srs/sm2';
 
 export interface SaveStatus {
   state: 'idle' | 'pending' | 'saved' | 'error';
@@ -161,6 +162,14 @@ export class ProgressController {
       }
       return { ...d, notes: { ...d.notes, [topicId]: { body, updatedAt: this.stamp() } } };
     });
+  }
+
+  // ----- spaced repetition -----
+  /** Schedule a card after the user rates their recall. Returns the updated card. */
+  recordReview(cardId: string, kind: ReviewCard['kind'], rating: Rating): ReviewCard {
+    const next = review(this.data.reviews[cardId], cardId, kind, rating, this.now());
+    this.update((d) => ({ ...d, reviews: { ...d.reviews, [cardId]: next } }));
+    return next;
   }
 
   // ----- backup -----

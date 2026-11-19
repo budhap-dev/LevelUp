@@ -75,6 +75,13 @@ Progress lives in the browser (`localStorage`, key `levelup:progress`) and stays
 - `ProgressController` holds state in memory, updates the screen instantly and saves in the background (debounced, with a reported save status).
 - `normalise.ts` validates, migrates and merges data. It's hand-written rather than Zod, to keep the app bundle small.
 
+## Practice: Interview mode and Flashcards
+
+- **Interview mode (`/interview`):** choose topics, levels and a session size, then for each question think it through (a timer runs), reveal the model answer, and rate yourself **Again / Hard / Good / Easy**. Keys: <kbd>Space</kbd> reveals, <kbd>1</kbd>–<kbd>4</kbd> rate. Each button shows when the question would come back. "Again" brings the card back a few cards later in the same session.
+- **Flashcards (`/flashcards`):** the cheat-sheet cards, which flip to show the answer and use the same ratings and schedule.
+- **Session order:** due cards first (most overdue first), then new cards at random. "Practise ahead" also includes cards that aren't due yet. Due counts appear in the sidebar and on the dashboard.
+- **Scheduling ([`src/lib/srs/sm2.ts`](src/lib/srs/sm2.ts)):** SM-2, where Again/Hard/Good/Easy map to quality 1/3/4/5. Easiness starts at 2.5 and never drops below 1.3. Passing intervals go 1 day → 6 days → previous interval × easiness. Again resets the card to 10 minutes. On top of SM-2, Hard grows the interval by ×1.2 and Easy adds a ×1.3 bonus (4 days for a new card), as in Anki.
+
 ## Themes and motion
 
 - **Themes:** seven solid-colour themes (Daylight, Midnight, Sepia, Rose, Forest, Ocean, High contrast) plus System, which follows the OS light/dark setting. Colours live only in [`src/styles/themes.css`](src/styles/themes.css), as tokens such as `--canvas`, `--fg`, `--accent` and `--muted`, and are used through Tailwind classes such as `bg-canvas`, `text-muted` and `bg-accent`. To add a theme, add a block there and an entry in [`src/lib/themes.ts`](src/lib/themes.ts). [`scripts/checks/themes-contrast.test.ts`](scripts/checks/themes-contrast.test.ts) fails if any theme misses WCAG AA contrast.

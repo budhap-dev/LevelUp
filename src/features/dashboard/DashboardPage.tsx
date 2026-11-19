@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { getTopicMeta, groups, topics, topicsInGroup } from '@/lib/content';
 import { SECTIONS } from '@/lib/content/constants';
 import { useProgress } from '@/lib/progress/react';
+import { useDueCounts } from '@/lib/srs/useDueCounts';
 
 function ProgressBar({ value, max, label }: { value: number; max: number; label: string }) {
   const pct = max ? Math.round((value / max) * 100) : 0;
@@ -18,6 +19,7 @@ export function DashboardPage() {
   const withContent = topics.filter((t) => t.status !== 'stub');
   const learned = withContent.filter((t) => progress[t.id]?.state === 'learned').length;
   const questions = topics.reduce((n, t) => n + t.questionCount, 0);
+  const due = useDueCounts();
 
   /** Most recently read topic that isn't finished. */
   const resume = useMemo(() => {
@@ -78,6 +80,14 @@ export function DashboardPage() {
           </p>
           <div className="mt-3">
             <ProgressBar value={learned} max={withContent.length} label="Topics learned" />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-sm">
+            <Link to="/interview" className="rounded-lg border border-line px-3 py-1.5 text-fg-soft transition-colors hover:border-accent hover:text-accent-ink">
+              <span className="font-semibold text-fg tabular-nums">{due.questions}</span> questions due
+            </Link>
+            <Link to="/flashcards" className="rounded-lg border border-line px-3 py-1.5 text-fg-soft transition-colors hover:border-accent hover:text-accent-ink">
+              <span className="font-semibold text-fg tabular-nums">{due.flashcards}</span> flashcards due
+            </Link>
           </div>
           {revision.length > 0 && (
             <div className="mt-4">

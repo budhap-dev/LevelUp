@@ -11,6 +11,8 @@ export const STATE_LABEL: Record<TopicState, string> = {
 export function TopicStatusIcon({ state, className = 'size-4' }: { state: TopicState | undefined; className?: string }) {
   if (!state || state === 'not-started') return null;
   return (
+    <>
+      {/* A real space so link names read "Caching (Learned)", not "Caching(Learned)". */}{' '}
     <span className="inline-flex shrink-0 items-center" title={STATE_LABEL[state]}>
       <span className="sr-only">({STATE_LABEL[state]})</span>
       {state === 'learned' && (
@@ -30,5 +32,6 @@ export function TopicStatusIcon({ state, className = 'size-4' }: { state: TopicS
         </svg>
       )}
     </span>
+    </>
   );
 }
