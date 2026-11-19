@@ -7,6 +7,9 @@ import { Prose } from '@/components/Prose';
 import { QuestionList } from './QuestionList';
 import { SectionHeading, TocChips, TocSidebar, type TocItem } from './TopicToc';
 import { useActiveSection } from './useActiveSection';
+import { TopicToolbar } from './TopicToolbar';
+import { NotesPanel } from './NotesPanel';
+import { useProgressController } from '@/lib/progress/react';
 
 export async function topicLoader({ params }: LoaderFunctionArgs): Promise<Topic> {
   const topic = params.topicId ? await loadTopic(params.topicId) : undefined;
@@ -44,14 +47,23 @@ export function TopicPage() {
 
   const toc: TocItem[] = useMemo(
     () =>
-      topic.sections.map((s) => ({
-        id: s.id,
-        title: s.title,
-        count: s.id === 'interview-questions' ? topic.questions.length : undefined,
-      })),
+      [
+        ...topic.sections.map((s) => ({
+          id: s.id,
+          title: s.title,
+          count: s.id === 'interview-questions' ? topic.questions.length : undefined,
+        })),
+        ...(topic.sections.length ? [{ id: 'notes', title: 'Your notes' }] : []),
+      ],
     [topic],
   );
   const active = useActiveSection(useMemo(() => toc.map((t) => t.id), [toc]));
+
+  // Remember what's being read, for "continue where you left off". Stubs don't count as learning.
+  const progress = useProgressController();
+  useEffect(() => {
+    if (meta.status !== 'stub') progress.recordVisit(meta.id, active);
+  }, [progress, meta.id, meta.status, active]);
 
   return (
     <div className="mx-auto max-w-6xl xl:grid xl:grid-cols-[minmax(0,1fr)_13rem] xl:gap-12">
@@ -89,6 +101,7 @@ export function TopicPage() {
               ))}
             </ul>
           )}
+          <TopicToolbar meta={meta} />
         </header>
 
         {meta.status === 'stub' ? (
@@ -113,6 +126,8 @@ export function TopicPage() {
             ))}
           </>
         )}
+
+        <NotesPanel topicId={meta.id} />
 
         {meta.related.length > 0 && (
           <aside className="mt-16 border-t border-line pt-6" aria-labelledby="related-h">

@@ -3,6 +3,9 @@ import { getGroup, groups, topics } from '@/lib/content';
 import { LEVELS, type Level } from '@/lib/content/constants';
 import type { TopicMeta } from '@/lib/content/schema';
 import { LevelBadge, StatusBadge } from '@/components/Badge';
+import { STATE_LABEL, TopicStatusIcon } from '@/components/TopicStatusIcon';
+import { useProgress } from '@/lib/progress/react';
+import { TOPIC_STATES, type ProgressData, type TopicState } from '@/lib/progress/types';
 
 /** Filters live in the URL (?group=&level=&tag=&content=1) so views can be bookmarked and shared. */
 interface Filters {
@@ -10,6 +13,7 @@ interface Filters {
   level: Level | null;
   tag: string | null;
   contentOnly: boolean;
+  state: TopicState | null;
 }
 
 const ALL_TAGS: { tag: string; count: number }[] = Object.entries(
@@ -30,10 +34,14 @@ function readFilters(params: URLSearchParams): Filters {
     level: LEVELS.includes(level as Level) ? (level as Level) : null,
     tag: tag && ALL_TAGS.some((t) => t.tag === tag) ? tag : null,
     contentOnly: params.get('content') === '1',
+    state: TOPIC_STATES.includes(params.get('status') as TopicState) ? (params.get('status') as TopicState) : null,
   };
 }
 
-const matches = (t: TopicMeta, f: Filters) =>
+const stateOf = (t: TopicMeta, progress: ProgressData['topics']): TopicState => progress[t.id]?.state ?? 'not-started';
+
+const matches = (t: TopicMeta, f: Filters, progress: ProgressData['topics']) =>
+  (!f.state || stateOf(t, progress) === f.state) &&
   (!f.group || t.group === f.group) &&
   (!f.level || t.level === f.level) &&
   (!f.tag || t.tags.includes(f.tag)) &&
@@ -45,9 +53,10 @@ const selectClass =
 export function CataloguePage() {
   const [params, setParams] = useSearchParams();
   const filters = readFilters(params);
-  const active = !!(filters.group || filters.level || filters.tag || filters.contentOnly);
+  const progress = useProgress((d) => d.topics);
+  const active = !!(filters.group || filters.level || filters.tag || filters.contentOnly || filters.state);
 
-  const update = (patch: Partial<Record<'group' | 'level' | 'tag' | 'content', string | null>>) => {
+  const update = (patch: Partial<Record<'group' | 'level' | 'tag' | 'content' | 'status', string | null>>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(patch)) {
       if (value) next.set(key, value);
@@ -56,7 +65,7 @@ export function CataloguePage() {
     setParams(next, { replace: true, preventScrollReset: true });
   };
 
-  const shown = topics.filter((t) => matches(t, filters));
+  const shown = topics.filter((t) => matches(t, filters, progress));
   const byGroup = groups.map((g) => ({ group: g, items: shown.filter((t) => t.group === g.id) })).filter((g) => g.items.length);
   const heading = filters.group ? getGroup(filters.group)!.title : 'All topics';
 
@@ -99,6 +108,18 @@ export function CataloguePage() {
             {ALL_TAGS.map(({ tag, count }) => (
               <option key={tag} value={tag}>
                 #{tag} ({count})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col">
+          <span className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">Your status</span>
+          <select value={filters.state ?? ''} onChange={(e) => update({ status: e.target.value || null })} className={selectClass}>
+            <option value="">Any status</option>
+            {TOPIC_STATES.map((s) => (
+              <option key={s} value={s}>
+                {STATE_LABEL[s]}
               </option>
             ))}
           </select>
@@ -151,6 +172,7 @@ export function CataloguePage() {
               {items.map((t) => (
                 <li key={t.id}>
                   <Link to={`/topics/${t.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-subtle">
+                    <TopicStatusIcon state={progress[t.id]?.state} />
                     <span className={`font-medium ${t.status === 'stub' ? 'text-muted' : 'text-fg'}`}>{t.title}</span>
                     <LevelBadge level={t.level} />
                     <StatusBadge status={t.status} />

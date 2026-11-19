@@ -62,6 +62,19 @@ Put `VERIFY:` in front of any claim that still needs checking. The topic page sh
 - **Catalogue filters:** level, group, tag and "with content only". They're kept in the URL (`/topics?level=Architect&tag=kafka`), so filtered views can be bookmarked. Tags on topic pages link straight to a filtered view.
 - **Topic navigation:** an "On this page" list that tracks your scroll position on wide screens, or a row of section chips on narrower ones. Each section heading has a `#` link for sharing.
 
+## Your progress
+
+- **Per topic:** set Learning, Learned or Needs revision. Topics you open with content are marked Learning automatically, and the section you were reading is remembered for "continue where you left off" on the dashboard. Your status shows in the sidebar and catalogue, and you can filter the catalogue by it.
+- **Bookmarks:** bookmark a whole topic, or an individual interview question from its expanded answer. They're all listed on `/bookmarks`.
+- **Notes:** private per-topic notes at the end of each topic page. They save as you type, and anything pending is saved if you leave the page.
+- **Backup:** `/settings` exports everything as JSON and imports it again. You see a preview first, then choose Merge (the newest entry wins) or Replace. There's also a confirmed reset.
+
+Progress lives in the browser (`localStorage`, key `levelup:progress`) and stays in sync across tabs. The code is in [`src/lib/progress/`](src/lib/progress/):
+
+- `ProgressStore` is a small async backend interface, so an API can replace localStorage without UI changes.
+- `ProgressController` holds state in memory, updates the screen instantly and saves in the background (debounced, with a reported save status).
+- `normalise.ts` validates, migrates and merges data. It's hand-written rather than Zod, to keep the app bundle small.
+
 ## Themes and motion
 
 - **Themes:** seven solid-colour themes (Daylight, Midnight, Sepia, Rose, Forest, Ocean, High contrast) plus System, which follows the OS light/dark setting. Colours live only in [`src/styles/themes.css`](src/styles/themes.css), as tokens such as `--canvas`, `--fg`, `--accent` and `--muted`, and are used through Tailwind classes such as `bg-canvas`, `text-muted` and `bg-accent`. To add a theme, add a block there and an entry in [`src/lib/themes.ts`](src/lib/themes.ts). [`scripts/checks/themes-contrast.test.ts`](scripts/checks/themes-contrast.test.ts) fails if any theme misses WCAG AA contrast.
