@@ -1,18 +1,11 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router';
-import { getTopicMeta, groups, topics, topicsInGroup } from '@/lib/content';
+import { getTopicMeta, groups, paths, topics, topicsInGroup } from '@/lib/content';
+import { pathProgress } from '@/lib/paths';
+import { ProgressBar } from '@/components/ProgressBar';
 import { SECTIONS } from '@/lib/content/constants';
 import { useProgress } from '@/lib/progress/react';
 import { useDueCounts } from '@/lib/srs/useDueCounts';
-
-function ProgressBar({ value, max, label }: { value: number; max: number; label: string }) {
-  const pct = max ? Math.round((value / max) * 100) : 0;
-  return (
-    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={value} className="h-1.5 overflow-hidden rounded-full bg-subtle">
-      <div className="h-full rounded-full bg-accent transition-[width] duration-700 ease-(--ease-out-expo)" style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
 
 export function DashboardPage() {
   const progress = useProgress((d) => d.topics);
@@ -108,6 +101,29 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      <h2 className="mt-10 text-lg font-semibold text-fg">Learning paths</h2>
+      <ul className="mt-4 grid gap-4 md:grid-cols-2">
+        {paths.map((p) => {
+          const pp = pathProgress(p, progress);
+          return (
+            <li key={p.id}>
+              <Link
+                to={`/paths/${p.id}`}
+                className="flex h-full flex-col rounded-xl border border-line bg-surface p-5 transition duration-300 ease-(--ease-out-expo) hover:-translate-y-0.5 hover:border-accent"
+              >
+                <h3 className="font-semibold text-fg">{p.title}</h3>
+                <div className="mt-4">
+                  <ProgressBar value={pp.learned} max={pp.required} label={`${p.title}: steps learned`} />
+                </div>
+                <p className="mt-2 text-xs text-muted">
+                  {pp.learned}/{pp.required} steps · {pp.next ? `next: ${pp.next.meta.title}` : 'complete'}
+                </p>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
 
       <h2 className="mt-10 text-lg font-semibold text-fg">Topic groups</h2>
       <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

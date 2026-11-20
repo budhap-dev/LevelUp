@@ -82,12 +82,30 @@ Progress lives in the browser (`localStorage`, key `levelup:progress`) and stays
 - **Session order:** due cards first (most overdue first), then new cards at random. "Practise ahead" also includes cards that aren't due yet. Due counts appear in the sidebar and on the dashboard.
 - **Scheduling ([`src/lib/srs/sm2.ts`](src/lib/srs/sm2.ts)):** SM-2, where Again/Hard/Good/Easy map to quality 1/3/4/5. Easiness starts at 2.5 and never drops below 1.3. Passing intervals go 1 day → 6 days → previous interval × easiness. Again resets the card to 10 minutes. On top of SM-2, Hard grows the interval by ×1.2 and Easy adds a ×1.3 bonus (4 days for a new card), as in Anki.
 
+## Learning paths
+
+`/paths` lists the career routes defined in [`content/paths.json`](content/paths.json), such as Senior → Staff/Principal and Senior → Solution Architect. Each path page shows its topics in order, with your status on each one. It highlights the next required step, and a Start/Continue button opens that topic. A step counts as done when you mark its topic **Learned**. Optional steps (`"optional": true`) are shown but don't count towards completion. The dashboard shows each path's progress and its next step.
+
+To add or change a path, edit `paths.json`: `id`, `title`, `description` and `steps` (`topicId`, plus an optional `note` and `optional`). The content pipeline rejects unknown topic ids.
+
 ## Themes and motion
 
 - **Themes:** seven solid-colour themes (Daylight, Midnight, Sepia, Rose, Forest, Ocean, High contrast) plus System, which follows the OS light/dark setting. Colours live only in [`src/styles/themes.css`](src/styles/themes.css), as tokens such as `--canvas`, `--fg`, `--accent` and `--muted`, and are used through Tailwind classes such as `bg-canvas`, `text-muted` and `bg-accent`. To add a theme, add a block there and an entry in [`src/lib/themes.ts`](src/lib/themes.ts). [`scripts/checks/themes-contrast.test.ts`](scripts/checks/themes-contrast.test.ts) fails if any theme misses WCAG AA contrast.
 - **Motion:** page transitions, a circular reveal when switching themes (View Transitions API), an animated sidebar accordion, a slide-out mobile drawer with swipe-to-close, and diagrams that animate in (nodes fade in, edges draw). Everything respects `prefers-reduced-motion`.
 - **Logo:** [`src/components/Logo.tsx`](src/components/Logo.tsx) uses the active theme's accent colour. [`public/favicon.svg`](public/favicon.svg) has the same geometry in the default indigo.
 
+## Performance
+
+The dashboard ships in the main bundle. Every other page is a lazily loaded route chunk (`lazy` in [`src/app/router.tsx`](src/app/router.tsx)), as are each topic's JSON, the search index with Fuse.js, and Mermaid.
+
 ## Deployment
 
-Azure Static Web Apps via GitHub Actions. This arrives in phase 5.
+[`.github/workflows/ci-deploy.yml`](.github/workflows/ci-deploy.yml) runs `npm ci`, `npm test` and `npm run build` on every push to `main` and every PR, then uploads `dist/` to Azure Static Web Apps. Each PR gets its own preview URL, which is removed when the PR closes.
+
+One-time setup:
+
+1. In the Azure portal, create a **Static Web App** (Free plan). For **Deployment source** choose **Other**, so Azure doesn't add its own workflow.
+2. Copy its **deployment token** (Overview → Manage deployment token).
+3. In GitHub, go to Settings → Secrets and variables → Actions and add it as `AZURE_STATIC_WEB_APPS_API_TOKEN`.
+
+Until that secret exists, the workflow still runs the tests and build and skips the deploy steps. [`public/staticwebapp.config.json`](public/staticwebapp.config.json) sends deep links (such as `/topics/caching`) to `index.html`, caches hashed assets for a year and never caches `index.html`.
