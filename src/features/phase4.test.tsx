@@ -4,6 +4,16 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from '@/app/router';
 import { PROGRESS_STORAGE_KEY } from '@/lib/progress/local-storage-store';
+import { loadTopic } from '@/lib/content';
+import type { Topic } from '@/lib/content/schema';
+
+// Counts come from the real Caching content, so editing that topic doesn't break these tests.
+let caching: Topic;
+beforeAll(async () => {
+  caching = (await loadTopic('caching'))!;
+});
+const cachingQuestions = () => caching.questions.length;
+const cachingFoundation = () => caching.questions.filter((q) => q.level === 'Foundation').length;
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -24,7 +34,7 @@ describe('interview mode', () => {
     const user = userEvent.setup();
     renderAt('/interview');
     await chooseOnly(user, 'Caching');
-    expect(await screen.findByRole('status')).toHaveTextContent('0 due · 6 new · 0 scheduled later');
+    expect(await screen.findByRole('status')).toHaveTextContent(`0 due · ${cachingQuestions()} new · 0 scheduled later`);
     await user.selectOptions(screen.getByRole('combobox'), '5');
     await user.click(screen.getByRole('button', { name: 'Start 5 questions' }));
 
@@ -46,7 +56,7 @@ describe('interview mode', () => {
     expect(screen.getByText(/2 reviews/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Change topics' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('0 due · 4 new · 2 scheduled later');
+    expect(await screen.findByRole('status')).toHaveTextContent(`0 due · ${cachingQuestions() - 2} new · 2 scheduled later`);
   });
 
   it('filters by level and remembers the setup', async () => {
@@ -55,7 +65,7 @@ describe('interview mode', () => {
     await chooseOnly(user, 'Caching');
     await user.click(screen.getByRole('checkbox', { name: 'Senior' }));
     await user.click(screen.getByRole('checkbox', { name: 'Architect' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('1 new'); // caching has one Foundation question
+    expect(await screen.findByRole('status')).toHaveTextContent(`0 due · ${cachingFoundation()} new`);
     first.unmount();
 
     renderAt('/interview');

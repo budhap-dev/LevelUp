@@ -64,7 +64,8 @@ describe('bookmarks and notes', () => {
     expect(screen.getByRole('button', { name: 'Bookmarked' })).toHaveAttribute('aria-pressed', 'true');
 
     await user.click(screen.getByText('What is a cache stampede and how do you prevent it?'));
-    await user.click(screen.getAllByRole('button', { name: 'Bookmark this question' })[1]!);
+    const stampede = document.getElementById('q-cache-stampede')!;
+    await user.click(within(stampede).getByRole('button', { name: 'Bookmark this question' }));
 
     await router.navigate('/bookmarks');
     const section = await screen.findByRole('region', { name: 'Caching' });
