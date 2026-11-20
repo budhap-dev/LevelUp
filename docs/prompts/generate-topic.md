@@ -68,6 +68,18 @@ RULES:
 
 ---
 
+## Upgrading a draft
+
+For a topic that's already `status: draft`, use the same prompt, but paste the existing file instead of the stub's frontmatter and add this paragraph at the end of the prompt:
+
+```text
+Here is the existing draft. Keep its sections and improve them rather than starting again. Keep every existing interview question, and keep its {#id} EXACTLY as it is, even if you reword the question. Add new questions, each with a new unique {#id}, until the mix is 4 Foundation, 6 Senior and 5 Architect (15 in total). Keep every existing cheat-sheet bullet's bold front text unchanged, and add more bullets up to 10–15. Set status to complete.
+```
+
+Why it matters: your Interview-mode review history is keyed on each question's `{#id}`, and each flashcard is identified by its front text. If either changes, that card's history resets to new.
+
+Before you save, compare the old and new files (for example with `git diff`) and check that no `{#id}` was removed or renamed.
+
 ## After generating
 
 1. Save to `content/<group>/<id>.md`.
