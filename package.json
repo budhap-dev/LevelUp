@@ -14,7 +14,8 @@
     "typecheck": "npm run content && tsc -b",
     "pretest": "npm run content -- --quiet",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "topic": "bash scripts/topic.sh"
   },
   "dependencies": {
     "fuse.js": "^7.5.0",

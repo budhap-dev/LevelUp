@@ -41,6 +41,8 @@ src/
 2. Write the content by hand or generate it with [`docs/prompts/generate-topic.md`](docs/prompts/generate-topic.md).
 3. Run `npm run content` and fix what it reports.
 
+**Guided:** `npm run topic` (or `npm run topic -- caching`) does all of this for you. It suggests the next topics, copies a ready-made prompt to your clipboard, takes the model's reply from the clipboard, checks it, sends fix requests back, protects existing question ids, then previews, tests and opens the PR.
+
 **Statuses:**
 - `stub`: no content; shown as "coming soon".
 - `draft`: missing pieces are warnings.
