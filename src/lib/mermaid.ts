@@ -5,7 +5,14 @@
 import type { Mermaid } from 'mermaid';
 
 let mermaidPromise: Promise<Mermaid> | null = null;
-const loadMermaid = () => (mermaidPromise ??= import('mermaid').then((m) => m.default));
+const loadMermaid = () =>
+  (mermaidPromise ??= import('mermaid').then(
+    (m) => m.default,
+    (error: unknown) => {
+      mermaidPromise = null; // don't cache the failure, so a later attempt can succeed
+      throw error;
+    },
+  ));
 
 let configuredTheme: string | null = null;
 let counter = 0;
@@ -128,7 +135,17 @@ export async function renderDiagram(container: HTMLElement, themeId: string, dar
   const source = (container.dataset.source ??= container.textContent ?? '');
   if (container.dataset.renderedTheme === themeId) return;
 
-  const mermaid = await loadMermaid();
+  let mermaid: Mermaid;
+  try {
+    mermaid = await loadMermaid();
+  } catch {
+    // Mermaid is cached the first time a diagram renders, so a first view while offline can't load it.
+    // Show the source for now and try again once the connection is back.
+    container.dataset.state = 'error';
+    container.textContent = `This diagram needs a connection the first time it's shown.\n\n${source}`;
+    window.addEventListener('online', () => void renderDiagram(container, themeId, dark), { once: true });
+    return;
+  }
   if (configuredTheme !== themeId) {
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVariables(dark) });
     configuredTheme = themeId;
