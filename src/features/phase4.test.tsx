@@ -34,7 +34,7 @@ describe('interview mode', () => {
     const user = userEvent.setup();
     renderAt('/interview');
     await chooseOnly(user, 'Caching');
-    expect(await screen.findByRole('status')).toHaveTextContent(`0 due · ${cachingQuestions()} new · 0 scheduled later`);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`0 due · ${cachingQuestions()} new · 0 scheduled later`));
     await user.selectOptions(screen.getByRole('combobox'), '5');
     await user.click(screen.getByRole('button', { name: 'Start 5 questions' }));
 
@@ -56,7 +56,7 @@ describe('interview mode', () => {
     expect(screen.getByText(/2 reviews/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Change topics' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(`0 due · ${cachingQuestions() - 2} new · 2 scheduled later`);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`0 due · ${cachingQuestions() - 2} new · 2 scheduled later`));
   });
 
   it('filters by level and remembers the setup', async () => {
@@ -65,7 +65,7 @@ describe('interview mode', () => {
     await chooseOnly(user, 'Caching');
     await user.click(screen.getByRole('checkbox', { name: 'Senior' }));
     await user.click(screen.getByRole('checkbox', { name: 'Architect' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(`0 due · ${cachingFoundation()} new`);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`0 due · ${cachingFoundation()} new`));
     first.unmount();
 
     renderAt('/interview');
