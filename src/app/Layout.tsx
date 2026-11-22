@@ -7,6 +7,7 @@ import { SearchButton } from '@/features/search/SearchButton';
 import { ThemeProvider } from '@/lib/theme';
 import { ProgressProvider } from '@/lib/progress/react';
 import { useMediaQuery } from '@/lib/useMediaQuery';
+import { OfflineBadge, PwaToasts } from './PwaStatus';
 import { Sidebar } from './Sidebar';
 
 /** Three bars that morph into an X. */
@@ -159,6 +160,7 @@ function Shell() {
           <Logo />
         </Link>
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <OfflineBadge />
           <SearchButton onClick={() => setSearchOpen(true)} />
           <ThemePicker />
         </div>
@@ -200,6 +202,7 @@ function Shell() {
         </main>
       </div>
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <PwaToasts />
       <ScrollRestoration
         // Every fresh page load gets the history key "default"; keying that entry by URL stops one page's
         // scroll position leaking into the next full page load, while a reload still restores its place.

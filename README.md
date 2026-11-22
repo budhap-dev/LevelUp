@@ -27,6 +27,7 @@ npm run dev        # http://localhost:5173 — recompiles content on save
 content/                 Topic Markdown, groups.json, paths.json, _template.md
 docs/prompts/            Prompt for generating topic content
 scripts/content/         Build-time pipeline: parse, validate, render to JSON (+ tests)
+scripts/pwa/             Decides which build chunks the service worker precaches
 src/
   app/                   Router, layout, sidebar, error pages
   components/            Shared UI (badges, prose, theme toggle)
@@ -100,6 +101,16 @@ To add or change a path, edit `paths.json`: `id`, `title`, `description` and `st
 
 The dashboard ships in the main bundle. Every other page is a lazily loaded route chunk (`lazy` in [`src/app/router.tsx`](src/app/router.tsx)), as are each topic's JSON, the search index with Fuse.js, and Mermaid.
 
+## Offline and install (PWA)
+
+LevelUp is an installable Progressive Web App. Use the browser's **Install** button, or **Add to Home Screen** on iOS. It works offline after the first visit.
+
+- **What's available offline:** the service worker (Workbox, via [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/)) precaches the app shell, every page and every topic, about 1.4 MB. Progress, notes and reviews are already stored on the device, so Interview mode and Flashcards work offline too.
+- **Diagrams:** Mermaid and its diagram chunks (about 6 MB) are *not* precached. They are cached the first time a diagram renders. A diagram you haven't seen before shows its source while you're offline and renders when the connection returns. [`scripts/pwa/precache-scope.ts`](scripts/pwa/precache-scope.ts) makes this split by walking the chunk graph from the entry and stopping at Mermaid.
+- **Updates:** when a new version is deployed, a toast offers **Reload**. Choosing **Later** keeps the current version until the next visit. Open tabs check for updates hourly. While the browser is offline, an **Offline** badge appears in the header.
+- **Icons:** [`public/`](public/) holds `pwa-192x192.png`, `pwa-512x512.png`, `maskable-512x512.png` and `apple-touch-icon.png`, rendered from the favicon's geometry. If you change the logo, regenerate them.
+- **Trying it locally:** the service worker is only built in production, so run `npm run build && npm run preview`.
+
 ## Deployment
 
 [`.github/workflows/ci-deploy.yml`](.github/workflows/ci-deploy.yml) runs `npm ci`, `npm test` and `npm run build` on every push to `main` and every PR, then uploads `dist/` to Azure Static Web Apps. Each PR gets its own preview URL, which is removed when the PR closes.
@@ -110,4 +121,4 @@ One-time setup:
 2. Copy its **deployment token** (Overview → Manage deployment token).
 3. In GitHub, go to Settings → Secrets and variables → Actions and add it as `AZURE_STATIC_WEB_APPS_API_TOKEN`.
 
-Until that secret exists, the workflow still runs the tests and build and skips the deploy steps. [`public/staticwebapp.config.json`](public/staticwebapp.config.json) sends deep links (such as `/topics/caching`) to `index.html`, caches hashed assets for a year and never caches `index.html`.
+Until that secret exists, the workflow still runs the tests and build and skips the deploy steps. [`public/staticwebapp.config.json`](public/staticwebapp.config.json) sends deep links (such as `/topics/caching`) to `index.html`, caches hashed assets for a year and never caches `index.html`, `sw.js` or the web manifest, so updates are picked up straight away.
