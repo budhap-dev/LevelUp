@@ -231,7 +231,8 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
     >
       <div className="flex flex-wrap items-center gap-2">
         {backButton}
-        <p aria-live="polite" className={`mr-auto text-xs ${save.state === 'error' ? 'font-medium text-accent-ink' : 'text-muted'}`}>
+        <span aria-hidden="true" className="flex-1 sm:hidden" />
+        <p aria-live="polite" className={`order-last w-full text-xs sm:order-none sm:mr-auto sm:w-auto ${save.state === 'error' ? 'font-medium text-accent-ink' : 'text-muted'}`}>
           {statusText}
           {save.state === 'error' && (
             <button type="button" onClick={() => void flush()} className="ml-2 underline underline-offset-2">
