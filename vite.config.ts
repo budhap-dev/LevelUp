@@ -1,15 +1,21 @@
 import { fileURLToPath, URL } from 'node:url';
+import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { contentPlugin } from './scripts/content/vite-plugin-content.ts';
 import { precacheScope } from './scripts/pwa/precache-scope.ts';
+import { notesApiDev } from './scripts/notes/vite-plugin-api.ts';
 
 const scope = precacheScope();
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // Expose .env.local (DATABASE_URL, NOTES_*) to the dev API middleware, as Vercel does in production.
+  Object.assign(process.env, { ...loadEnv(mode, process.cwd(), ''), ...process.env });
+  return {
   plugins: [
+    notesApiDev(),
     react(),
     tailwindcss(),
     contentPlugin(),
@@ -46,6 +52,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
         manifestTransforms: [scope.manifestTransform],
         navigateFallback: '/index.html',
+        // Attachment links open /api/... in a new tab; those must reach the network, not the app shell.
+        navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
         // Mermaid and its diagram chunks: hashed and immutable, so cache-first the first time they load.
         runtimeCaching: [
@@ -71,4 +79,5 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
   },
+};
 });

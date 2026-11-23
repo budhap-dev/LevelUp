@@ -13,6 +13,7 @@ const MAIN_LINKS = [
   { to: '/interview', label: 'Interview mode', end: false },
   { to: '/flashcards', label: 'Flashcards', end: false },
   { to: '/bookmarks', label: 'Bookmarks', end: false },
+  { to: '/notes', label: 'Notes', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
 

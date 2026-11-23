@@ -280,3 +280,51 @@ dialog.palette[open]::backdrop {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- Notes editor (TipTap) ---------- */
+.notes-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--muted);
+}
+.notes-editor .ProseMirror pre {
+  background-color: var(--code);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--fg);
+}
+.notes-editor .ProseMirror a {
+  cursor: text;
+}
+.notes-editor ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+.notes-editor ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding-left: 0;
+}
+.notes-editor ul[data-type='taskList'] li > label {
+  margin-top: 0.3em;
+  user-select: none;
+}
+.notes-editor ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+.notes-editor ul[data-type='taskList'] li > div > p {
+  margin-block: 0;
+}
+.notes-editor ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.notes-editor input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
