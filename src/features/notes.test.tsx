@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from '@/app/router';
-import { notesStore } from '@/lib/notes/store';
 import type { Note, NoteSummary } from '@/lib/notes/types';
 
 const NOTE_ID = '11111111-2222-4333-8444-555555555555';
@@ -56,24 +55,17 @@ describe('notes section', () => {
   beforeEach(() => {
     api = fakeApi();
     vi.stubGlobal('fetch', api.fetchMock);
-    notesStore.reset();
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('has its own sidebar menu and a top-bar button for new notes', async () => {
-    const user = userEvent.setup();
-    const now = new Date().toISOString();
-    api.notes.set(NOTE_ID, { id: NOTE_ID, title: 'Redis eviction', contentHtml: '', createdAt: now, updatedAt: now, attachments: [] });
+  it('has its own compact sidebar menu and a top-bar button for new notes', async () => {
     renderAt('/');
     const nav = await screen.findByRole('navigation', { name: 'Main' });
     expect(within(nav).getByRole('heading', { name: 'Notes' })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'All notes' })).toHaveAttribute('href', '/notes');
     for (const link of screen.getAllByRole('link', { name: 'New note' })) expect(link).toHaveAttribute('href', '/notes?new=1');
-    // Locked: the menu offers to unlock, then lists recent notes once unlocked.
-    await user.click(await within(nav).findByRole('link', { name: 'Unlock notes' }));
-    await user.type(await screen.findByLabelText('Passphrase'), 'open sesame{Enter}');
-    const recent = await screen.findByRole('list', { name: 'Recent notes' });
-    expect(await within(recent).findByRole('link', { name: 'Redis eviction' })).toHaveAttribute('href', `/notes?note=${NOTE_ID}`);
-    expect(within(recent).getByRole('link', { name: 'All notes' })).toHaveAttribute('href', '/notes');
+    // The menu never lists note titles, so it doesn't call the API on every page.
+    expect(api.fetchMock).not.toHaveBeenCalled();
   });
 
   it('opens a fresh note from a New note link, once', async () => {
@@ -82,8 +74,6 @@ describe('notes section', () => {
     await user.type(await screen.findByLabelText('Passphrase'), 'open sesame{Enter}');
     expect(await screen.findByLabelText('Title')).toHaveFocus();
     expect(api.calls.filter((c) => c === 'POST /api/notes')).toHaveLength(1);
-    const recent = screen.getByRole('list', { name: 'Recent notes' });
-    expect(within(recent).getByRole('link', { name: 'Untitled' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('asks for the passphrase, then shows an empty list', async () => {

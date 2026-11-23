@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { NotesApiError, notesApi } from '@/lib/notes/client';
-import { notesStore } from '@/lib/notes/store';
 import { SNIPPET_MARK_END, SNIPPET_MARK_START, type NoteSummary } from '@/lib/notes/types';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { Icon } from './icons';
@@ -21,10 +20,7 @@ export function NotesPage() {
   const check = useCallback(() => {
     setAccess('checking');
     notesApi.session().then(
-      (ok) => {
-        setAccess(ok ? 'unlocked' : 'locked');
-        if (!ok) notesStore.locked();
-      },
+      (ok) => setAccess(ok ? 'unlocked' : 'locked'),
       (e: unknown) => setAccess({ error: message(e) }),
     );
   }, []);
@@ -34,15 +30,7 @@ export function NotesPage() {
     return <p className="py-10 text-center text-sm text-muted" aria-busy="true">Opening notes…</p>;
   }
   if (access === 'locked') return <LockScreen onUnlocked={() => setAccess('unlocked')} />;
-  if (access === 'unlocked')
-    return (
-      <Workspace
-        onLocked={() => {
-          notesStore.locked();
-          setAccess('locked');
-        }}
-      />
-    );
+  if (access === 'unlocked') return <Workspace onLocked={() => setAccess('locked')} />;
   return (
     <div className="mx-auto max-w-md py-10 text-center">
       <h1 className="text-2xl font-semibold text-fg">Notes</h1>
@@ -169,7 +157,6 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
         notesApi.list(query, ctrl.signal).then(
           (list) => {
             setNotes(list);
-            if (!query) notesStore.loaded(list);
             setListError(null);
             setSearching(false);
           },
@@ -204,7 +191,6 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
         const note = await notesApi.create();
         const summary: NoteSummary = { id: note.id, title: '', snippet: '', createdAt: note.createdAt, updatedAt: note.updatedAt, attachmentCount: 0 };
         setNotes((list) => [summary, ...(list ?? [])]);
-        notesStore.upsert(summary);
         setFreshId(note.id);
         setParams({ note: note.id }, { replace });
       } catch (e) {
@@ -224,7 +210,6 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
   }, [wantsNew, location.key, createNote]);
 
   const onChanged = useCallback((patch: Partial<NoteSummary> & { id: string }) => {
-    notesStore.upsert(patch);
     setNotes((list) => {
       if (!list) return list;
       const next = list.map((n) => (n.id === patch.id ? { ...n, ...patch } : n));
@@ -234,7 +219,6 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
 
   const onDeleted = (id: string) => {
     setNotes((list) => list?.filter((n) => n.id !== id) ?? null);
-    notesStore.remove(id);
     open(null);
   };
 
