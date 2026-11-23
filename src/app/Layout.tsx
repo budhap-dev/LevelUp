@@ -162,6 +162,17 @@ function Shell() {
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <OfflineBadge />
           <SearchButton onClick={() => setSearchOpen(true)} />
+          <Link
+            to="/notes?new=1"
+            aria-label="New note"
+            title="New note"
+            className="flex h-10 items-center gap-1.5 rounded-lg text-fg-soft transition-colors hover:bg-subtle hover:text-fg max-sm:w-10 max-sm:justify-center sm:px-3"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0 sm:size-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z" />
+            </svg>
+            <span className="hidden text-sm font-medium sm:inline">Note</span>
+          </Link>
           <ThemePicker />
         </div>
         <NavigationProgress />
