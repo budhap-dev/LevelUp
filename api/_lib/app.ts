@@ -20,7 +20,8 @@ export interface AppConfig {
 
 export const LOGIN_WINDOW_MINUTES = 15;
 export const LOGIN_MAX_FAILURES = 10;
-const MAX_JSON_BYTES = 2 * 1024 * 1024;
+/** Notes can embed draw.io diagrams, so allow up to just under Vercel's 4.5 MB request limit. */
+const MAX_JSON_BYTES = 4 * 1024 * 1024;
 const MAX_TITLE = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

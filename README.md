@@ -102,7 +102,12 @@ To add or change a path, edit `paths.json`: `id`, `title`, `description` and `st
 - **Ask Claude:** for example, "add a note titled *Kafka questions* with …". Claude runs the CLI below.
 - **From the terminal:** use the CLI yourself.
 
-Each note has a title, rich text (headings, lists, checklists, quotes, code, links) and file attachments of up to 4 MB each. To attach a file, use **Attach**, drop it on the note, or paste it in. Notes save as you type. Search covers titles and bodies, finds partial words ("cach" → "caching") and highlights the matches.
+Each note has a title, rich text (headings, lists, checklists, quotes, code, links), diagrams and file attachments of up to 4 MB each. To attach a file, use **Attach**, drop it on the note, or paste it in. Notes save as you type. Search covers titles and bodies, finds partial words ("cach" → "caching") and highlights the matches.
+
+Notes can hold two kinds of diagram, both added from the editor toolbar:
+
+- **Mermaid:** a code block written in [Mermaid](https://mermaid.js.org/intro/syntax-reference.html) syntax, drawn as a diagram in the app's theme. Use **Edit code** to change it; the preview updates as you type. A ```` ```mermaid ```` fence in Markdown from the CLI becomes one of these, so Claude can add diagrams too. The Mermaid source is searchable.
+- **draw.io:** a hand-drawn diagram made in the [diagrams.net](https://www.drawio.com) editor, which opens full-screen inside the app. Save & Exit stores the diagram in the note as an SVG with the draw.io drawing embedded, so **Edit diagram** reopens it fully editable. The editor runs in your browser, loaded from diagrams.net, and needs a connection. Nothing is uploaded to diagrams.net. draw.io diagrams count towards a note's 4 MB size limit.
 
 ```bash
 npm run notes -- add --title "Kafka questions" --body "- [ ] ISR vs acks=all" [--attach diagram.png]
@@ -111,6 +116,7 @@ npm run notes -- list [search words]
 npm run notes -- show <id>
 npm run notes -- append <id> --body "More **Markdown**"
 npm run notes -- attach <id> file.pdf other.png
+npm run notes -- delete <id>...
 npm run notes -- migrate                                # create/upgrade tables
 ```
 

@@ -7,6 +7,11 @@ import type { Note, NoteSummary } from '@/lib/notes/types';
 
 const NOTE_ID = '11111111-2222-4333-8444-555555555555';
 
+vi.mock('@/lib/mermaid', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/mermaid')>()),
+  renderMermaidSvg: vi.fn(async (source: string) => `<svg data-testid="mermaid-svg"><text>${source.split('\n').length} lines</text></svg>`),
+}));
+
 /** A tiny stand-in for the Notes API: one passphrase, notes kept in memory. */
 function fakeApi() {
   let unlocked = false;
@@ -120,5 +125,50 @@ describe('notes section', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search notes' }), 'postgres');
     expect(await screen.findByText('No notes match')).toBeInTheDocument();
     expect(api.calls).toContain('GET /api/notes?q=postgres');
+  });
+
+  it('renders Mermaid diagrams and edits draw.io diagrams in the embedded editor', async () => {
+    const user = userEvent.setup();
+    const now = new Date().toISOString();
+    const oldSvg = 'data:image/svg+xml;base64,PHN2Zz5vbGQ8L3N2Zz4=';
+    const newSvg = 'data:image/svg+xml;base64,PHN2Zz5uZXc8L3N2Zz4=';
+    api.notes.set(NOTE_ID, {
+      id: NOTE_ID,
+      title: 'Architecture',
+      contentHtml: `<pre><code class="language-mermaid">flowchart LR\n  A --&gt; B</code></pre><figure data-type="drawio"><img src="${oldSvg}" alt="draw.io diagram"></figure>`,
+      createdAt: now,
+      updatedAt: now,
+      attachments: [],
+    });
+    renderAt(`/notes?note=${NOTE_ID}`);
+    await user.type(await screen.findByLabelText('Passphrase'), 'open sesame{Enter}');
+
+    // Mermaid: rendered as a diagram, source hidden until "Edit code".
+    expect(await screen.findByRole('img', { name: 'Diagram: flowchart LR' })).toContainElement(await screen.findByTestId('mermaid-svg'));
+    expect(screen.getByRole('button', { name: 'Edit code' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mermaid diagram' })).toBeInTheDocument();
+
+    // draw.io: the saved SVG shows; editing round-trips through the diagrams.net iframe.
+    expect(screen.getByRole('img', { name: 'draw.io diagram' })).toHaveAttribute('src', oldSvg);
+    await user.click(screen.getByRole('button', { name: 'Edit diagram' }));
+    const dialog = await screen.findByRole('dialog', { name: 'draw.io editor' });
+    const frame = within(dialog).getByTitle<HTMLIFrameElement>('draw.io editor');
+    expect(frame.src).toMatch(/^https:\/\/embed\.diagrams\.net\/\?embed=1&proto=json/);
+    const posted = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {});
+    const fromDrawio = (data: object, origin = 'https://embed.diagrams.net') =>
+      window.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(data), origin, source: frame.contentWindow }));
+
+    fromDrawio({ event: 'init' });
+    expect(JSON.parse(posted.mock.calls[0]![0] as string)).toMatchObject({ action: 'load', xml: oldSvg });
+    fromDrawio({ event: 'save', xml: '<mxfile/>', exit: true });
+    expect(JSON.parse(posted.mock.calls[1]![0] as string)).toMatchObject({ action: 'export', format: 'xmlsvg', xml: '<mxfile/>' });
+    // Messages from any other origin are ignored.
+    fromDrawio({ event: 'export', data: 'data:image/svg+xml;base64,ZXZpbA==' }, 'https://evil.example');
+    expect(screen.getByRole('img', { name: 'draw.io diagram' })).toHaveAttribute('src', oldSvg);
+
+    fromDrawio({ event: 'export', data: newSvg });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'draw.io editor' })).not.toBeInTheDocument());
+    expect(screen.getByRole('img', { name: 'draw.io diagram' })).toHaveAttribute('src', newSvg);
+    await waitFor(() => expect(api.notes.get(NOTE_ID)?.contentHtml).toContain(newSvg), { timeout: 3000 });
   });
 });

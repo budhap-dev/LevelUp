@@ -1,14 +1,17 @@
 // Pre-bundled copy of sanitize-html: see scripts/notes/bundle-sanitizer.ts for why.
 import sanitizeHtml from './vendor/sanitize-html.js';
 
+/** draw.io diagrams: an image embedded as a base64 SVG/PNG data URI (an <img> can't run scripts). */
+const DIAGRAM_SRC = /^data:image\/(svg\+xml|png);base64,[A-Za-z0-9+/=]+$/;
+
 /**
- * Allow-list for note HTML: exactly what the TipTap editor produces (StarterKit + task lists).
- * Everything else, including scripts, styles, event handlers and images, is dropped.
+ * Allow-list for note HTML: exactly what the TipTap editor produces (StarterKit, task lists and
+ * diagrams). Everything else, including scripts, styles, event handlers and linked images, is dropped.
  */
 const NOTE_HTML: sanitizeHtml.IOptions = {
   allowedTags: [
     'p', 'br', 'h1', 'h2', 'h3', 'h4', 'strong', 'b', 'em', 'i', 'u', 's', 'code', 'pre',
-    'blockquote', 'ul', 'ol', 'li', 'hr', 'a', 'label', 'input', 'div', 'span', 'mark',
+    'blockquote', 'ul', 'ol', 'li', 'hr', 'a', 'label', 'input', 'div', 'span', 'mark', 'figure', 'img',
   ],
   allowedAttributes: {
     a: ['href', 'target', 'rel'],
@@ -17,14 +20,20 @@ const NOTE_HTML: sanitizeHtml.IOptions = {
     li: ['data-type', 'data-checked'],
     input: ['type', 'checked', 'disabled'],
     code: ['class'],
+    figure: ['data-type'],
+    img: ['src', 'alt'],
   },
   allowedClasses: { code: [/^language-[\w+#-]+$/] },
   allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesByTag: { img: ['data'] },
   allowProtocolRelative: false,
   transformTags: {
     a: sanitizeHtml.simpleTransform('a', { target: '_blank', rel: 'noopener noreferrer nofollow' }),
   },
-  exclusiveFilter: (frame) => frame.tag === 'input' && frame.attribs.type !== 'checkbox',
+  exclusiveFilter: (frame) =>
+    (frame.tag === 'input' && frame.attribs.type !== 'checkbox') ||
+    (frame.tag === 'img' && !DIAGRAM_SRC.test(frame.attribs.src ?? '')) ||
+    (frame.tag === 'figure' && frame.attribs['data-type'] !== 'drawio'),
 };
 
 export function sanitizeNoteHtml(html: string): string {

@@ -1,9 +1,10 @@
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
 import { Icon, type IconName } from './icons';
+import { CodeBlockWithDiagrams, Drawio, DrawioDialog, insertMermaid } from './diagrams';
 
 interface Props {
   /** Initial HTML. The editor is uncontrolled: remount it (via `key`) to load a different note. */
@@ -25,8 +26,11 @@ export function RichTextEditor({ initialHtml, onChange, onFiles, label }: Props)
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        codeBlock: false,
         link: { openOnClick: false, autolink: true, defaultProtocol: 'https', HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } },
       }),
+      CodeBlockWithDiagrams,
+      Drawio,
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: 'Start writing…' }),
@@ -110,6 +114,7 @@ function Toolbar({ editor }: { editor: Editor }) {
     }),
   });
   const chain = () => editor.chain().focus();
+  const [drawing, setDrawing] = useState(false);
 
   const editLink = () => {
     const previous = editor.getAttributes('link').href as string | undefined;
@@ -142,6 +147,10 @@ function Toolbar({ editor }: { editor: Editor }) {
       <ToolButton label="Quote" icon="quote" active={s.quote} onClick={() => chain().toggleBlockquote().run()} />
       <ToolButton label="Code block" icon="codeBlock" active={s.codeBlock} onClick={() => chain().toggleCodeBlock().run()} />
       <ToolButton label="Divider line" icon="rule" onClick={() => chain().setHorizontalRule().run()} />
+      <Divider />
+      <ToolButton label="Mermaid diagram" icon="flowchart" onClick={() => insertMermaid(editor)} />
+      <ToolButton label="draw.io diagram" icon="shapes" onClick={() => setDrawing(true)} />
+      {drawing && <DrawioDialog src={null} onSave={(src) => chain().insertDrawio(src).run()} onClose={() => setDrawing(false)} />}
       <Divider />
       <ToolButton label="Undo (⌘Z)" icon="undo" disabled={!s.canUndo} onClick={() => chain().undo().run()} />
       <ToolButton label="Redo (⇧⌘Z)" icon="redo" disabled={!s.canRedo} onClick={() => chain().redo().run()} />

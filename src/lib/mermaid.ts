@@ -128,6 +128,24 @@ function animateIn(container: HTMLElement) {
 }
 
 /**
+ * Render Mermaid source to an SVG string, coloured for the given app theme.
+ * Throws when Mermaid can't be loaded (offline first view) or the source is invalid.
+ */
+export async function renderMermaidSvg(source: string, themeId: string, dark: boolean): Promise<string> {
+  const mermaid = await loadMermaid();
+  if (configuredTheme !== themeId) {
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVariables(dark) });
+    configuredTheme = themeId;
+  }
+  const id = `mmd-${++counter}`;
+  try {
+    return (await mermaid.render(id, source)).svg;
+  } finally {
+    document.getElementById(`d${id}`)?.remove(); // Mermaid leaves its scratch/error SVG in <body>
+  }
+}
+
+/**
  * Render (or re-render for a new theme) one placeholder.
  * The first render animates; theme re-renders swap in place.
  */
@@ -135,9 +153,8 @@ export async function renderDiagram(container: HTMLElement, themeId: string, dar
   const source = (container.dataset.source ??= container.textContent ?? '');
   if (container.dataset.renderedTheme === themeId) return;
 
-  let mermaid: Mermaid;
   try {
-    mermaid = await loadMermaid();
+    await loadMermaid();
   } catch {
     // Mermaid is cached the first time a diagram renders, so a first view while offline can't load it.
     // Show the source for now and try again once the connection is back.
@@ -146,23 +163,16 @@ export async function renderDiagram(container: HTMLElement, themeId: string, dar
     window.addEventListener('online', () => void renderDiagram(container, themeId, dark), { once: true });
     return;
   }
-  if (configuredTheme !== themeId) {
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVariables(dark) });
-    configuredTheme = themeId;
-  }
 
   const firstRender = !container.dataset.renderedTheme;
-  const id = `mmd-${++counter}`;
   try {
-    const { svg } = await mermaid.render(id, source);
-    container.innerHTML = svg;
+    container.innerHTML = await renderMermaidSvg(source, themeId, dark);
     container.dataset.state = 'rendered';
     container.dataset.renderedTheme = themeId;
     container.setAttribute('role', 'img');
     container.setAttribute('aria-label', `Diagram: ${source.split('\n')[0]?.trim() ?? 'diagram'}`);
     if (firstRender) animateIn(container);
   } catch (error) {
-    document.getElementById(`d${id}`)?.remove(); // Mermaid leaves its error SVG in <body>
     container.dataset.state = 'error';
     container.textContent = `Diagram could not be rendered: ${(error as Error).message}\n\n${source}`;
   }
