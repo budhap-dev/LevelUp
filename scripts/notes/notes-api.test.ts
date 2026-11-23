@@ -214,6 +214,21 @@ describe('note HTML', () => {
     );
   });
 
+  it('keeps diagrams: Mermaid code blocks and draw.io figures with an embedded image only', () => {
+    const svg = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+    expect(sanitizeNoteHtml('<pre><code class="language-mermaid">flowchart LR\n  A --&gt; B</code></pre>')).toBe(
+      '<pre><code class="language-mermaid">flowchart LR\n  A --&gt; B</code></pre>',
+    );
+    expect(sanitizeNoteHtml(`<figure data-type="drawio" onclick="x()"><img src="${svg}" alt="draw.io diagram" onerror="x()"></figure>`)).toBe(
+      `<figure data-type="drawio"><img src="${svg}" alt="draw.io diagram" /></figure>`,
+    );
+    // Linked, non-image, or script-bearing data URIs are dropped, as are other figures.
+    expect(sanitizeNoteHtml('<img src="https://tracker.example/p.gif">')).toBe('');
+    expect(sanitizeNoteHtml('<img src="data:text/html;base64,PHNjcmlwdD4=">')).toBe('');
+    expect(sanitizeNoteHtml('<img src="data:image/svg+xml,<svg onload=alert(1)>">')).toBe('');
+    expect(sanitizeNoteHtml('<figure><p>x</p></figure>')).toBe('');
+  });
+
   it('extracts searchable text with block breaks and decoded entities', () => {
     expect(htmlToText('<h1>A &amp; B</h1><p>one<br>two</p><ul><li><p>x &lt; y</p></li></ul>')).toBe('A & B\none\ntwo\nx < y');
   });
@@ -230,5 +245,10 @@ describe('note HTML', () => {
     expect(html).toMatch(/<li data-type="taskItem" data-checked="true">\s*shipped<\/li>/);
     expect(html).toMatch(/<li data-type="taskItem" data-checked="false">\s*todo<\/li>/);
     expect(html).toContain('<a href="https://neon.tech" target="_blank" rel="noopener noreferrer nofollow">docs</a>');
+  });
+
+  it('keeps ```mermaid fences as Mermaid code blocks, which the editor renders as diagrams', async () => {
+    const html = await markdownToNoteHtml('```mermaid\nflowchart LR\n  A --> B\n```');
+    expect(html).toBe('<pre><code class="language-mermaid">flowchart LR\n  A --&gt; B\n</code></pre>');
   });
 });

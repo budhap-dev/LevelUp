@@ -7,8 +7,10 @@
  *   npm run notes -- add --title "Title" [--body "markdown" | --file note.md] [--attach path]...
  *   npm run notes -- append <id> [--body "markdown" | --file more.md]
  *   npm run notes -- attach <id> <path>...
+ *   npm run notes -- delete <id>...                             delete notes (and their attachments)
  *
  * Bodies are Markdown (GFM, including `- [ ]` checklists), converted to the editor's HTML.
+ * A ```mermaid fence becomes a Mermaid diagram in the app.
  * Reads DATABASE_URL from the environment or .env.local.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -144,8 +146,13 @@ async function main() {
       await attachFiles(id, paths);
       break;
     }
+    case 'delete': {
+      if (!args.length) die('Usage: delete <id>...');
+      for (const id of args) console.log(`${(await repo.remove(id)) ? 'Deleted' : 'Not found'}  ${id}`);
+      break;
+    }
     default:
-      die('Commands: migrate | list [query] | show <id> | add --title … | append <id> … | attach <id> <path>…');
+      die('Commands: migrate | list [query] | show <id> | add --title … | append <id> … | attach <id> <path>… | delete <id>…');
   }
 }
 

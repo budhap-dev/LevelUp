@@ -190,7 +190,8 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
       try {
         const note = await notesApi.create();
         const summary: NoteSummary = { id: note.id, title: '', snippet: '', createdAt: note.createdAt, updatedAt: note.updatedAt, attachmentCount: 0 };
-        setNotes((list) => [summary, ...(list ?? [])]);
+        // The list may load concurrently and already include the new note.
+        setNotes((list) => [summary, ...(list ?? []).filter((n) => n.id !== note.id)]);
         setFreshId(note.id);
         setParams({ note: note.id }, { replace });
       } catch (e) {
