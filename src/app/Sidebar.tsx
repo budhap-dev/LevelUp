@@ -1,10 +1,13 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { NavLink, useParams } from 'react-router';
+import { Link, NavLink, useLocation, useParams } from 'react-router';
 import { groups, getTopicMeta, topicsInGroup } from '@/lib/content';
 import type { Group } from '@/lib/content/schema';
 import { useProgress } from '@/lib/progress/react';
 import { TopicStatusIcon } from '@/components/TopicStatusIcon';
 import { useDueCounts } from '@/lib/srs/useDueCounts';
+import { notesStore, useNotesState } from '@/lib/notes/store';
+
+const RECENT_NOTES = 5;
 
 const MAIN_LINKS = [
   { to: '/', label: 'Dashboard', end: true },
@@ -92,6 +95,68 @@ function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; 
   );
 }
 
+/** The sidebar's Notes menu: a new-note button, recent notes, and a link to all of them. */
+function NotesSection({ animate, index }: { animate: boolean; index: number }) {
+  const { status, notes } = useNotesState();
+  const location = useLocation();
+  const onNotes = location.pathname === '/notes';
+  const current = onNotes ? new URLSearchParams(location.search).get('note') : null;
+
+  useEffect(() => {
+    if (notesStore.get().status === 'idle') void notesStore.refresh();
+  }, []);
+
+  const recent = notes.slice(0, RECENT_NOTES);
+  return (
+    <div>
+      <div className="flex items-center justify-between pr-1 pl-3">
+        <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Notes</h2>
+        <Link
+          to="/notes?new=1"
+          aria-label="New note"
+          title="New note"
+          className="flex size-7 items-center justify-center rounded-md text-fg-soft transition-colors hover:bg-subtle hover:text-fg"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </Link>
+      </div>
+      <ul className="mt-1 space-y-0.5" aria-label="Recent notes">
+        {status === 'locked' && (
+          <Item index={index} animate={animate}>
+            <Link to="/notes" className={linkClass({ isActive: false })}>
+              <span className="flex-1">Unlock notes</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5 text-muted" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" />
+              </svg>
+            </Link>
+          </Item>
+        )}
+        {recent.map((n, i) => {
+          const active = n.id === current;
+          return (
+            <Item key={n.id} index={index + i} animate={animate}>
+              <Link to={`/notes?note=${n.id}`} aria-current={active ? 'page' : undefined} className={linkClass({ isActive: active })}>
+                <ActiveBar active={active} />
+                <span className={`flex-1 truncate ${n.title ? '' : 'italic'}`}>{n.title || 'Untitled'}</span>
+              </Link>
+            </Item>
+          );
+        })}
+        {status !== 'locked' && (
+          <Item index={index + recent.length} animate={animate}>
+            <NavLink to="/notes" end className={() => linkClass({ isActive: onNotes && !current })}>
+              <ActiveBar active={onNotes && !current} />
+              <span className="flex-1">{notes.length > RECENT_NOTES ? `All notes (${notes.length})` : 'All notes'}</span>
+            </NavLink>
+          </Item>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * @param animateKey changes each time the mobile drawer opens, replaying the stagger. 0 = no animation (desktop).
  */
@@ -140,6 +205,8 @@ export function Sidebar({ animateKey }: { animateKey: number }) {
           </Item>
         ))}
       </ul>
+
+      <NotesSection key={`notes-${animateKey}`} animate={animate} index={MAIN_LINKS.length} />
 
       <div>
         <h2 className="px-3 text-xs font-semibold tracking-wide text-muted uppercase">Topics</h2>

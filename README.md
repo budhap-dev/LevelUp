@@ -20,13 +20,16 @@ npm run dev        # http://localhost:5173 — recompiles content on save
 | `npm run build` | Content + type-check + production build into `dist/` |
 | `npm test` | Unit and component tests (Vitest) |
 | `npm run typecheck` | Content + `tsc -b` |
+| `npm run notes -- <command>` | Manage Notes from the terminal (see [Notes](#notes)) |
 
 ## Project structure
 
 ```
+api/                     Notes API: one Vercel Function (router.ts) + _lib/
 content/                 Topic Markdown, groups.json, paths.json, _template.md
 docs/prompts/            Prompt for generating topic content
 scripts/content/         Build-time pipeline: parse, validate, render to JSON (+ tests)
+scripts/notes/           Notes CLI, dev-server API middleware, API tests
 scripts/pwa/             Decides which build chunks the service worker precaches
 src/
   app/                   Router, layout, sidebar, error pages
@@ -69,7 +72,7 @@ Put `VERIFY:` in front of any claim that still needs checking. The topic page sh
 
 - **Per topic:** set Learning, Learned or Needs revision. Topics you open with content are marked Learning automatically, and the section you were reading is remembered for "continue where you left off" on the dashboard. Your status shows in the sidebar and catalogue, and you can filter the catalogue by it.
 - **Bookmarks:** bookmark a whole topic, or an individual interview question from its expanded answer. They're all listed on `/bookmarks`.
-- **Notes:** private per-topic notes at the end of each topic page. They save as you type, and anything pending is saved if you leave the page.
+- **Topic notes:** private per-topic notes at the end of each topic page, stored in this browser. These are different from the standalone [Notes](#notes) section. They save as you type, and anything pending is saved if you leave the page.
 - **Backup:** `/settings` exports everything as JSON and imports it again. You see a preview first, then choose Merge (the newest entry wins) or Replace. There's also a confirmed reset.
 
 Progress lives in the browser (`localStorage`, key `levelup:progress`) and stays in sync across tabs. The code is in [`src/lib/progress/`](src/lib/progress/):
@@ -90,6 +93,39 @@ Progress lives in the browser (`localStorage`, key `levelup:progress`) and stays
 `/paths` lists the career routes defined in [`content/paths.json`](content/paths.json), such as Senior → Staff/Principal and Senior → Solution Architect. Each path page shows its topics in order, with your status on each one. It highlights the next required step, and a Start/Continue button opens that topic. A step counts as done when you mark its topic **Learned**. Optional steps (`"optional": true`) are shown but don't count towards completion. The dashboard shows each path's progress and its next step.
 
 To add or change a path, edit `paths.json`: `id`, `title`, `description` and `steps` (`topicId`, plus an optional `note` and `optional`). The content pipeline rejects unknown topic ids.
+
+## Notes
+
+`/notes` is a personal notebook, **separate from the topics**. Use it for anything: interview prep, meeting notes, ideas, links. There are three ways to add a note:
+
+- **In the app:** use the **Note** button in the top bar, or the **+** in the sidebar's Notes menu. The Notes menu also lists your five most recent notes.
+- **Ask Claude:** for example, "add a note titled *Kafka questions* with …". Claude runs the CLI below.
+- **From the terminal:** use the CLI yourself.
+
+Each note has a title, rich text (headings, lists, checklists, quotes, code, links) and file attachments of up to 4 MB each. To attach a file, use **Attach**, drop it on the note, or paste it in. Notes save as you type. Search covers titles and bodies, finds partial words ("cach" → "caching") and highlights the matches.
+
+```bash
+npm run notes -- add --title "Kafka questions" --body "- [ ] ISR vs acks=all" [--attach diagram.png]
+npm run notes -- add --title "Retro" --file retro.md   # Markdown file
+npm run notes -- list [search words]
+npm run notes -- show <id>
+npm run notes -- append <id> --body "More **Markdown**"
+npm run notes -- attach <id> file.pdf other.png
+npm run notes -- migrate                                # create/upgrade tables
+```
+
+How it works:
+
+- **Storage:** notes live in **Neon Postgres**, created through the Vercel Marketplace and connected to the Vercel project. Attachments are stored in the database too (`bytea`). Search uses a generated `tsvector` column.
+- **API:** [`api/router.ts`](api/router.ts) handles every `/api/*` request on Vercel. `npm run dev` serves the same handler through a Vite middleware.
+- **Locking:** notes are locked behind a passphrase. A browser stays unlocked for 30 days, using a signed HttpOnly cookie. The rest of the site stays public.
+- **Environment variables:**
+  - `DATABASE_URL` is set by the Neon integration.
+  - `NOTES_PASSWORD` is the passphrase.
+  - `NOTES_SESSION_SECRET` is a random string. Change it to sign every device out.
+
+  Run `npx vercel env pull .env.local` to get them locally.
+- **Offline:** notes need a connection; they aren't cached offline.
 
 ## Themes and motion
 
