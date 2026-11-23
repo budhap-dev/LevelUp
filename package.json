@@ -7,16 +7,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run -s notes:vendor -- --quiet && vite",
     "content": "tsx scripts/content/cli.ts",
-    "build": "npm run content && tsc -b && vite build",
+    "build": "npm run content && npm run notes:vendor && tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "npm run content && tsc -b",
-    "pretest": "npm run content -- --quiet",
+    "typecheck": "npm run content && npm run notes:vendor -- --quiet && tsc -b",
+    "pretest": "npm run content -- --quiet && npm run notes:vendor -- --quiet",
     "test": "vitest run",
     "test:watch": "vitest",
     "topic": "bash scripts/topic.sh",
-    "notes": "tsx scripts/notes/cli.ts"
+    "notes": "npm run -s notes:vendor -- --quiet && tsx scripts/notes/cli.ts",
+    "notes:vendor": "tsx scripts/notes/bundle-sanitizer.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.1",
