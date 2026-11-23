@@ -98,7 +98,7 @@ To add or change a path, edit `paths.json`: `id`, `title`, `description` and `st
 
 `/notes` is a personal notebook, **separate from the topics**. Use it for anything: interview prep, meeting notes, ideas, links. There are three ways to add a note:
 
-- **In the app:** use the **Note** button in the top bar, or the **+** in the sidebar's Notes menu. The Notes menu also lists your five most recent notes.
+- **In the app:** use the **Note** button in the top bar, or the **+** in the sidebar's Notes menu. Your notes are listed on the Notes page, not in the sidebar.
 - **Ask Claude:** for example, "add a note titled *Kafka questions* with …". Claude runs the CLI below.
 - **From the terminal:** use the CLI yourself.
 
