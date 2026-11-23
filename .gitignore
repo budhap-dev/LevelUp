@@ -8,3 +8,4 @@ coverage
 src/generated/
 .vercel
 .env*
+api/_lib/vendor/

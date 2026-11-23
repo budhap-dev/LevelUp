@@ -1,4 +1,5 @@
-import sanitizeHtml from 'sanitize-html';
+// Pre-bundled copy of sanitize-html: see scripts/notes/bundle-sanitizer.ts for why.
+import sanitizeHtml from './vendor/sanitize-html.js';
 
 /**
  * Allow-list for note HTML: exactly what the TipTap editor produces (StarterKit + task lists).
