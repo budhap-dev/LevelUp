@@ -16,7 +16,7 @@ import { CodeBlock } from '@tiptap/extension-code-block';
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type Editor, type ReactNodeViewProps } from '@tiptap/react';
 import { renderMermaidSvg } from '@/lib/mermaid';
 import { useTheme } from '@/lib/theme';
-import { Icon } from './icons';
+import { Icon } from '@/components/Icon';
 
 /** Position of a just-inserted Mermaid block that should mount with its code open. */
 const openOnMount = new WeakMap<Editor, number>();

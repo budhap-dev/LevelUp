@@ -3,7 +3,7 @@ import { Link, useLocation, useSearchParams } from 'react-router';
 import { NotesApiError, notesApi } from '@/lib/notes/client';
 import { SNIPPET_MARK_END, SNIPPET_MARK_START, type NoteSummary } from '@/lib/notes/types';
 import { useMediaQuery } from '@/lib/useMediaQuery';
-import { Icon } from './icons';
+import { Icon } from '@/components/Icon';
 import { NoteEditor } from './NoteEditor';
 
 type Access = 'checking' | 'locked' | 'unlocked' | { error: string };

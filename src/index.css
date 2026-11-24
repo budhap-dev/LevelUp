@@ -264,6 +264,16 @@ dialog.palette[open]::backdrop {
   transition-delay: 40ms;
 }
 
+/* ---------- Sidebar: topics cascade in as their group opens ---------- */
+.nav-tree[data-open='true'] > li {
+  animation: nav-child-in 340ms var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * 22ms + 40ms);
+}
+@keyframes nav-child-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* ---------- Respect reduced-motion preferences everywhere ---------- */
 @media (prefers-reduced-motion: reduce) {
   *,

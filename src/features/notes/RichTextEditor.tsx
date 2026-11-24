@@ -3,7 +3,7 @@ import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/r
 import StarterKit from '@tiptap/starter-kit';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Placeholder } from '@tiptap/extensions';
-import { Icon, type IconName } from './icons';
+import { Icon, type IconName } from '@/components/Icon';
 import { CodeBlockWithDiagrams, Drawio, DrawioDialog, insertMermaid } from './diagrams';
 
 interface Props {

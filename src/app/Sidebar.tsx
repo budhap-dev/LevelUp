@@ -1,43 +1,108 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, NavLink, useParams } from 'react-router';
 import { groups, getTopicMeta, topicsInGroup } from '@/lib/content';
 import type { Group } from '@/lib/content/schema';
 import { useProgress } from '@/lib/progress/react';
-import { TopicStatusIcon } from '@/components/TopicStatusIcon';
+import { STATE_LABEL, StatusGlyph, StatusLabel } from '@/components/TopicStatusIcon';
+import { Icon, type IconName } from '@/components/Icon';
 import { useDueCounts } from '@/lib/srs/useDueCounts';
 
-const MAIN_LINKS = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/topics', label: 'All topics', end: true },
-  { to: '/paths', label: 'Learning paths', end: false },
-  { to: '/interview', label: 'Interview mode', end: false },
-  { to: '/flashcards', label: 'Flashcards', end: false },
-  { to: '/bookmarks', label: 'Bookmarks', end: false },
-  { to: '/settings', label: 'Settings', end: false },
-];
+type NavItem = { to: string; label: string; icon: IconName; end?: boolean };
 
-/** Active link: accent bar slides in from the left, background fades in. */
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `group/link relative flex items-center rounded-lg px-3 py-2 text-sm transition-colors duration-200 ${
-    isActive ? 'bg-accent-soft font-medium text-accent-ink' : 'text-fg-soft hover:bg-subtle hover:text-fg'
+const OVERVIEW: NavItem[] = [
+  { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/topics', label: 'All topics', icon: 'book', end: true },
+  { to: '/paths', label: 'Learning paths', icon: 'route' },
+];
+const PRACTICE: NavItem[] = [
+  { to: '/interview', label: 'Interview mode', icon: 'chat' },
+  { to: '/flashcards', label: 'Flashcards', icon: 'layers' },
+];
+const LIBRARY: NavItem[] = [{ to: '/bookmarks', label: 'Bookmarks', icon: 'bookmark' }];
+
+const GROUP_ICON: Record<string, IconName> = {
+  'languages-frontend': 'code',
+  'backend-apis': 'server',
+  data: 'database',
+  'cloud-devops': 'cloud',
+  'architecture-design': 'network',
+  'quality-security': 'shield',
+  ai: 'sparkles',
+  delivery: 'rocket',
+  'product-business': 'target',
+  'leadership-people': 'users',
+};
+
+/** Row look shared by links and group toggles: soft fill on hover, accent fill when active, slight press. */
+const rowClass = (active: boolean) =>
+  `group/link relative flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left text-sm transition-[background-color,color,scale] duration-200 ease-(--ease-out-expo) active:scale-[0.98] ${
+    active ? 'bg-accent-soft font-medium text-accent-ink' : 'text-fg-soft hover:bg-subtle hover:text-fg'
   }`;
 
-function ActiveBar({ active }: { active: boolean }) {
+/** Leading icon: nudges on hover, takes the accent colour when its row is active. */
+function RowIcon({ name, active }: { name: IconName; active: boolean }) {
+  return (
+    <span
+      className={`flex size-5 shrink-0 items-center justify-center transition-[color,translate,scale] duration-300 ease-(--ease-out-expo) group-hover/link:scale-110 ${
+        active ? 'text-accent-ink' : 'text-muted group-hover/link:text-fg-soft'
+      }`}
+    >
+      <Icon name={name} className="size-4.5" />
+    </span>
+  );
+}
+
+/** Accent bar that grows in from its centre on the active row. */
+function ActiveBar({ active, className = 'top-1.5 bottom-1.5 left-0 w-1' }: { active: boolean; className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`absolute top-1.5 bottom-1.5 left-0 w-1 rounded-full bg-accent transition-all duration-300 ease-(--ease-out-expo) ${
+      className={`absolute rounded-full bg-accent transition-[scale,opacity] duration-300 ease-(--ease-out-expo) ${className} ${
         active ? 'scale-y-100 opacity-100' : 'scale-y-0 opacity-0'
       }`}
     />
   );
 }
 
-/** Staggered slide-in when the mobile drawer opens. */
-function Item({ index, animate, children }: { index: number; animate: boolean; children: ReactNode }) {
+/** Staggered slide-in while the mobile drawer opens (index orders items down the whole menu). */
+function makeStagger(animate: boolean) {
+  let i = 0;
+  return (): { className?: string; style?: CSSProperties } =>
+    animate ? { className: 'animate-slide-in', style: { animationDelay: `${60 + i++ * 25}ms` } } : {};
+}
+type Anim = ReturnType<ReturnType<typeof makeStagger>>;
+
+function SectionHeading({ children, anim: s, action }: { children: ReactNode; anim: Anim; action?: ReactNode }) {
   return (
-    <li className={animate ? 'animate-slide-in' : undefined} style={animate ? { animationDelay: `${60 + index * 30}ms` } : undefined}>
-      {children}
+    <div className={`mb-1 flex h-7 items-center justify-between pr-1 pl-2.5 ${s.className ?? ''}`} style={s.style}>
+      <h2 className="text-[0.6875rem] font-semibold tracking-[0.08em] text-muted uppercase">{children}</h2>
+      {action}
+    </div>
+  );
+}
+
+function NavRow({ item, anim: s, badge, trailing }: { item: NavItem; anim: Anim; badge?: number; trailing?: ReactNode }) {
+  return (
+    <li className={`relative ${s.className ?? ''}`} style={s.style}>
+      <NavLink to={item.to} end={item.end} className={({ isActive }) => rowClass(isActive)}>
+        {({ isActive }) => (
+          <>
+            <ActiveBar active={isActive} />
+            <RowIcon name={item.icon} active={isActive} />
+            <span className="flex-1 truncate">{item.label}</span>
+            {!!badge && (
+              <>
+                {/* Real spaces so assistive tech reads "Interview mode, 3 due", not "Interview mode3due". */}{' '}
+                <span key={badge} className="animate-pop-in rounded-full bg-accent px-1.5 py-px text-xs font-semibold text-on-accent tabular-nums">
+                  {badge} <span className="sr-only">due</span>
+                </span>
+              </>
+            )}
+            {trailing && <span aria-hidden="true" className="w-6 shrink-0" />}
+          </>
+        )}
+      </NavLink>
+      {trailing}
     </li>
   );
 }
@@ -45,24 +110,25 @@ function Item({ index, animate, children }: { index: number; animate: boolean; c
 function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; onToggle: () => void }) {
   const panelId = useId();
   const progress = useProgress((d) => d.topics);
+  const { topicId } = useParams();
+  const topics = topicsInGroup(group.id);
+  const learned = topics.filter((t) => progress[t.id]?.state === 'learned').length;
+  const containsActive = topics.some((t) => t.id === topicId);
+
   return (
     <>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={onToggle}
-        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium text-fg transition-colors hover:bg-subtle"
-      >
-        {group.title}
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 20 20"
-          className={`size-4 text-muted transition-transform duration-300 ease-(--ease-out-expo) ${open ? 'rotate-90' : ''}`}
-          fill="currentColor"
-        >
-          <path d="M7.3 4.3a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4L11.6 10 7.3 5.7a1 1 0 0 1 0-1.4z" />
-        </svg>
+      <button type="button" aria-expanded={open} aria-controls={panelId} onClick={onToggle} className={rowClass(false)}>
+        <RowIcon name={GROUP_ICON[group.id] ?? 'folder'} active={containsActive} />
+        <span className={`flex-1 truncate ${containsActive ? 'font-medium text-fg' : ''}`}>{group.title}</span>
+        <span aria-hidden="true" className="text-xs text-muted tabular-nums">
+          {learned > 0 ? `${learned}/${topics.length}` : topics.length}
+        </span>
+        <span aria-hidden="true" className="flex size-4 items-center justify-center">
+          <Icon
+            name="chevron"
+            className={`size-3.5 text-muted transition-transform duration-300 ease-(--ease-out-expo) ${open ? 'rotate-90' : ''}`}
+          />
+        </span>
       </button>
       {/* grid-rows 0fr → 1fr animates the height without measuring it. */}
       <div
@@ -71,57 +137,46 @@ function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; 
         className={`grid transition-[grid-template-rows,opacity] duration-300 ease-(--ease-out-expo) ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
       >
         <div className="overflow-hidden">
-          <ul className="mt-0.5 mb-1 ml-3 space-y-0.5 border-l border-line pl-2">
-            {topicsInGroup(group.id).map((t) => (
-              <li key={t.id}>
-                <NavLink to={`/topics/${t.id}`} className={linkClass}>
-                  {({ isActive }) => (
-                    <>
-                      <ActiveBar active={isActive} />
-                      <span className={`flex-1 ${t.status === 'stub' && !isActive ? 'text-muted' : ''}`}>{t.title}</span>
-                      <TopicStatusIcon state={progress[t.id]?.state} className="size-3.5" />
-                    </>
-                  )}
-                </NavLink>
-              </li>
-            ))}
+          {/* The guide line sits under the group icon; topics hang off it. */}
+          <ul data-open={open} className="nav-tree mt-0.5 mb-1.5 ml-[calc(1.25rem-0.5px)] space-y-px border-l border-line">
+            {topics.map((t, i) => {
+              const state = progress[t.id]?.state;
+              return (
+                <li key={t.id} className="pl-2" style={{ '--i': i } as CSSProperties}>
+                  <NavLink
+                    to={`/topics/${t.id}`}
+                    className={({ isActive }) =>
+                      `group/link relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[0.8125rem] transition-colors duration-200 ${
+                        isActive ? 'bg-accent-soft font-medium text-accent-ink' : 'text-fg-soft hover:bg-subtle hover:text-fg'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {/* Over the guide line: accent when active, a faint hint on hover. */}
+                        <span
+                          aria-hidden="true"
+                          className={`absolute inset-y-1 -left-[0.6rem] w-0.5 rounded-full transition-[scale,opacity,background-color] duration-300 ease-(--ease-out-expo) ${
+                            isActive ? 'scale-y-100 bg-accent opacity-100' : 'scale-y-0 bg-muted opacity-0 group-hover/link:scale-y-100 group-hover/link:opacity-60'
+                          }`}
+                        />
+                        <span title={STATE_LABEL[state ?? 'not-started']} className="flex shrink-0">
+                          <StatusGlyph state={state} placeholder className="size-3.5" />
+                        </span>
+                        <span className={`flex-1 truncate ${t.status === 'stub' && !isActive ? 'text-muted' : ''}`}>
+                          {t.title}
+                          <StatusLabel state={state} />
+                        </span>
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>
     </>
-  );
-}
-
-/** The sidebar's Notes menu: a new-note button and a link to the Notes page (titles are listed there, not here). */
-function NotesSection({ animate, index }: { animate: boolean; index: number }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between pr-1 pl-3">
-        <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">Notes</h2>
-        <Link
-          to="/notes?new=1"
-          aria-label="New note"
-          title="New note"
-          className="flex size-7 items-center justify-center rounded-md text-fg-soft transition-colors hover:bg-subtle hover:text-fg"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </Link>
-      </div>
-      <ul className="mt-1 space-y-0.5">
-        <Item index={index} animate={animate}>
-          <NavLink to="/notes" className={linkClass}>
-            {({ isActive }) => (
-              <>
-                <ActiveBar active={isActive} />
-                <span className="flex-1">All notes</span>
-              </>
-            )}
-          </NavLink>
-        </Item>
-      </ul>
-    </div>
   );
 }
 
@@ -132,9 +187,8 @@ export function Sidebar({ animateKey }: { animateKey: number }) {
   const { topicId } = useParams();
   const activeGroup = topicId ? getTopicMeta(topicId)?.group : undefined;
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(activeGroup ? [activeGroup] : []));
-  const animate = animateKey > 0;
+  const stagger = makeStagger(animateKey > 0);
   const due = useDueCounts();
-  const dueFor: Record<string, number> = { '/interview': due.questions, '/flashcards': due.flashcards };
 
   // Reveal the group of the topic being viewed.
   useEffect(() => {
@@ -149,41 +203,84 @@ export function Sidebar({ animateKey }: { animateKey: number }) {
       return next;
     });
 
+  const newNote = (
+    <Link
+      to="/notes?new=1"
+      aria-label="New note"
+      title="New note"
+      className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted transition-[color,background-color,rotate] duration-300 ease-(--ease-out-expo) hover:rotate-90 hover:bg-surface hover:text-fg"
+    >
+      <Icon name="plus" className="size-4" />
+    </Link>
+  );
+
   return (
-    <nav aria-label="Main" className="space-y-6 p-4">
-      <ul className="space-y-0.5" key={`main-${animateKey}`}>
-        {MAIN_LINKS.map((l, i) => (
-          <Item key={l.to} index={i} animate={animate}>
-            <NavLink to={l.to} end={l.end} className={linkClass}>
-              {({ isActive }) => (
-                <>
-                  <ActiveBar active={isActive} />
-                  <span className="flex-1">{l.label}</span>
-                  {!!dueFor[l.to] && (
-                    <>
-                      {/* Real spaces so assistive tech reads "Interview mode, 3 due", not "Interview mode3due". */}{' '}
-                      <span className="rounded-full bg-accent px-1.5 py-px text-xs font-semibold text-on-accent tabular-nums">
-                        {dueFor[l.to]} <span className="sr-only">due</span>
-                      </span>
-                    </>
-                  )}
-                </>
-              )}
-            </NavLink>
-          </Item>
-        ))}
-      </ul>
-
-      <NotesSection key={`notes-${animateKey}`} animate={animate} index={MAIN_LINKS.length} />
-
-      <div>
-        <h2 className="px-3 text-xs font-semibold tracking-wide text-muted uppercase">Topics</h2>
-        <ul className="mt-2 space-y-0.5" key={`groups-${animateKey}`}>
-          {groups.map((g, i) => (
-            <Item key={g.id} index={MAIN_LINKS.length + i} animate={animate}>
-              <GroupSection group={g} open={openGroups.has(g.id)} onToggle={() => toggle(g.id)} />
-            </Item>
+    // Re-keyed per drawer opening so the stagger replays.
+    <nav key={animateKey} aria-label="Main" className="flex min-h-full flex-col">
+      <div className="flex-1 space-y-5 px-3 pt-4 pb-6">
+        <ul className="space-y-0.5">
+          {OVERVIEW.map((item) => (
+            <NavRow key={item.to} item={item} anim={stagger()} />
           ))}
+        </ul>
+
+        <section>
+          <SectionHeading anim={stagger()}>Practice</SectionHeading>
+          <ul className="space-y-0.5">
+            <NavRow item={PRACTICE[0]!} anim={stagger()} badge={due.questions} />
+            <NavRow item={PRACTICE[1]!} anim={stagger()} badge={due.flashcards} />
+          </ul>
+        </section>
+
+        <section>
+          <SectionHeading anim={stagger()}>Library</SectionHeading>
+          <ul className="space-y-0.5">
+            {LIBRARY.map((item) => (
+              <NavRow key={item.to} item={item} anim={stagger()} />
+            ))}
+            {/* Notes titles live on the Notes page, not here. */}
+            <NavRow item={{ to: '/notes', label: 'Notes', icon: 'note' }} anim={stagger()} trailing={newNote} />
+          </ul>
+        </section>
+
+        <section>
+          <SectionHeading
+            anim={stagger()}
+            action={
+              <button
+                type="button"
+                onClick={() => setOpenGroups(new Set())}
+                aria-label="Collapse all topic groups"
+                title="Collapse all"
+                tabIndex={openGroups.size ? 0 : -1}
+                aria-hidden={!openGroups.size}
+                className={`flex size-6 items-center justify-center rounded-md text-muted transition-[opacity,color,background-color] duration-200 hover:bg-subtle hover:text-fg ${
+                  openGroups.size ? 'opacity-100' : 'pointer-events-none opacity-0'
+                }`}
+              >
+                <Icon name="collapse" className="size-3.5" />
+              </button>
+            }
+          >
+            Topics
+          </SectionHeading>
+          <ul className="space-y-0.5">
+            {groups.map((g) => {
+              const s = stagger();
+              return (
+                <li key={g.id} className={s.className} style={s.style}>
+                  <GroupSection group={g} open={openGroups.has(g.id)} onToggle={() => toggle(g.id)} />
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
+
+      {/* Settings stays in reach at the bottom while the menu scrolls. */}
+      <div className="sticky bottom-0 border-t border-line bg-surface px-3 py-2">
+        <ul>
+          <NavRow item={{ to: '/settings', label: 'Settings', icon: 'settings' }} anim={stagger()} />
         </ul>
       </div>
     </nav>
