@@ -6,8 +6,8 @@ tags: [testing, quality]
 level: Senior
 estimatedMinutes: 75
 related: [ci-cd-pipelines, solid-clean-code, devsecops]
-lastReviewed: 2026-11-19
-status: draft
+lastReviewed: 2026-11-24
+status: complete
 ---
 
 ## TL;DR
@@ -285,6 +285,271 @@ Influencing leadership constructively: aligning on intent, offering a better mea
 - Blindly enforcing the mandate.
 - Dismissing it without an alternative.
 
+### What makes a good unit test? {#good-unit-test}
+
+**Level:** Foundation
+
+**Model answer:**
+A good unit test is **fast, deterministic, isolated and readable**, and it **fails for one clear reason** when behaviour breaks, and *only* then.
+
+- **Arrange, act, assert:** set up, perform one behaviour, check the outcome. Several assertions are fine if they describe one outcome.
+- **Test through the public interface.** Assert on return values, state visible to callers, or messages sent at a boundary, not on private methods or the order of internal calls. That is what lets you refactor without rewriting tests.
+- **Name the behaviour:** `rejects_orders_over_the_credit_limit` is better than `test_validate_2`. The test name is documentation.
+- **Keep it self-contained:** no shared mutable state, no dependence on test order, clock or network.
+- **Make failures useful:** the message should say what was expected and what happened.
+
+"Unit" means a unit of *behaviour*, not necessarily one class. A test that exercises three collaborating classes in memory is still a fast, isolated unit test.
+
+```ts
+it('applies a 10% discount for gold customers', () => {
+  const price = priceFor({ tier: 'gold' }, 200_00);
+  expect(price).toBe(180_00);
+});
+```
+
+**What the interviewer is looking for:**
+Behaviour over implementation, determinism, readable intent and a sensible definition of "unit".
+
+**Follow-ups:**
+- When is it right to test a private method?
+- How many assertions should a test have?
+
+**Red flags:**
+- Defining a unit strictly as "one class with everything else mocked".
+- Tests that need editing every time code is refactored.
+
+### What are stubs, mocks, fakes and spies, and when do you use each? {#test-doubles}
+
+**Level:** Foundation
+
+**Model answer:**
+They are all **test doubles**: stand-ins for a real dependency.
+- **Stub:** returns canned answers so the code under test can proceed (`getRate()` returns `1.2`). You don't assert on it.
+- **Fake:** a working, simplified implementation, such as an in-memory repository or a fake clock. It behaves realistically across many calls and is often the best choice.
+- **Mock:** pre-programmed with expectations and *verifies interactions* ("`send` was called once with this email"). Use it when the interaction *is* the behaviour, for example "an email is sent" at a system boundary.
+- **Spy:** wraps or records calls on something so you can assert afterwards. It is often a real object with recording.
+- **Dummy:** passed only to satisfy a parameter and never used.
+
+Guidelines:
+- Prefer real objects, then fakes.
+- Use stubs for queries and mocks only for commands that cross a boundary you own.
+- Over-mocking couples tests to implementation and lets them pass while the real integration is broken.
+
+**What the interviewer is looking for:**
+Accurate vocabulary (Meszaros's terms) and a principled preference order.
+
+**Follow-ups:**
+- How would you test code that sends emails?
+- What is the risk of a fake drifting from the real implementation, and how do you mitigate it?
+
+**Red flags:**
+- Calling everything a "mock" and mocking every collaborator.
+- Mocking value objects or the class under test.
+
+### What is test-driven development, and when does it help or not? {#tdd}
+
+**Level:** Foundation
+
+**Model answer:**
+TDD is a short loop: write a failing test for the next small behaviour (**red**), write the simplest code to pass it (**green**), then improve the design with the tests as a safety net (**refactor**).
+
+Benefits:
+- It forces you to define behaviour and API before implementation, which pushes towards small, decoupled units.
+- It gives you a regression suite as a by-product and very short feedback loops.
+- It works especially well for domain logic, parsers, calculations and bug fixes (write the failing test that reproduces the bug first).
+
+It helps less with exploratory spikes where you don't yet know the shape (spike, then throw away or test-drive the real version), UI layout, and glue code that is mostly framework configuration. There, integration tests written right after the code may serve better.
+
+Common misconceptions: TDD is not "100% coverage" and not "write all the tests first". It is a design technique. Outside-in TDD (starting from an acceptance test) and inside-out (starting from domain units) are both valid.
+
+**What the interviewer is looking for:**
+The cycle, especially the refactor step that people skip, and a pragmatic view of where it fits.
+
+**Follow-ups:**
+- How do you test-drive code that talks to a database?
+- How would you introduce TDD to a sceptical team?
+
+**Red flags:**
+- Dismissing it without having tried it, or treating it as a religion.
+- Skipping the refactor step entirely.
+
+### How do you test code that depends on time, randomness or external APIs? {#nondeterminism}
+
+**Level:** Senior
+
+**Model answer:**
+Make the non-determinism an **injectable dependency** and control it in tests.
+- **Time:** inject a `Clock` (or use fake timers) rather than calling `Date.now()` throughout the code. Test boundaries explicitly: month end, DST changes, leap years, time zones, expiry exactly at the cut-off.
+- **Randomness and ids:** inject the random source or id generator, or seed it. For property-based tests, record the seed so failures reproduce.
+- **External HTTP APIs:**
+  - Unit level: wrap the API in your own port (`PaymentGateway`) and use a fake.
+  - Adapter level: integration-test against a stub server (WireMock, MSW, a provider sandbox) including error cases: timeouts, 429, 500, malformed bodies.
+  - Contract level: verify the agreement (consumer-driven contracts, or recorded responses checked against the provider's schema).
+- **Concurrency and async:** await conditions or events, never `sleep`. Use deterministic schedulers where the language offers them. Run race-prone tests many times in CI to flush out flakiness.
+
+```ts
+const clock = new FakeClock('2026-03-29T00:59:00Z');
+const svc = new SessionService(clock);
+clock.advance({ minutes: 2 }); // crosses the UK clocks-forward boundary
+```
+
+**What the interviewer is looking for:**
+Dependency injection of non-determinism, testing the edge cases, layered testing of third-party integrations, and never sleeping.
+
+**Follow-ups:**
+- How do you test retry and backoff logic without slow tests?
+- What would you check in a recorded HTTP fixture to stop it going stale?
+
+**Red flags:**
+- Tests that pass or fail depending on the time of day they run.
+- Hitting real third-party production APIs from CI.
+
+### What does "testing in production" mean, and how do you do it safely? {#testing-in-production}
+
+**Level:** Senior
+
+**Model answer:**
+Pre-production environments never fully match production's data, traffic, scale or configuration, so mature teams verify *in* production, deliberately and with guardrails:
+
+- **Progressive delivery:** canary releases (1%, then 10%, then 50% of traffic) with automated analysis of SLIs against the baseline and automatic rollback.
+- **Feature flags:** deploy dark, enable for internal users, then a beta cohort, then everyone. Decoupling deploy from release makes rollback a flag flip.
+- **Synthetic monitoring:** scripted user journeys that run continuously against production, using test accounts flagged so they're excluded from analytics and billing.
+- **Shadow traffic:** mirror real requests to a new version and compare the responses without serving them to users.
+- **Chaos engineering:** inject failures (kill instances, add latency) in controlled experiments with a defined blast radius and a stop button.
+- **Observability as the oracle:** SLOs, error-budget burn and business metrics (orders per minute) decide whether a release is healthy.
+
+Safety requirements: fast rollback, small blast radius, test data that can't leak into real reports or invoices, and agreement with compliance teams on what is allowed.
+
+**What the interviewer is looking for:**
+Understanding that this complements pre-production testing rather than replacing it, plus concrete mechanisms and guardrails.
+
+**Follow-ups:**
+- What would automated canary analysis compare?
+- How do you stop synthetic orders reaching the warehouse?
+
+**Red flags:**
+- "Testing in production" meaning "we don't test".
+- Canaries with no automated health criteria.
+
+### How do you test a React frontend effectively? {#frontend-testing}
+
+**Level:** Senior
+
+**Model answer:**
+Spend most effort on **component and integration tests that use the UI the way a user does**, plus a thin layer of end-to-end tests.
+
+- **Component tests** with Testing Library: query by role and accessible name (`getByRole('button', { name: 'Place order' })`), interact with `user-event` and assert on what is visible. This also checks accessibility and survives refactors.
+- **Network:** mock at the HTTP boundary with **MSW** (Mock Service Worker), not by mocking your fetch hooks, so data-loading code is really exercised. Cover loading, empty and error states.
+- **Pure logic** (reducers, formatters, validation) gets plain unit tests.
+- **End-to-end** (Playwright): a handful of critical journeys (sign in, checkout) against a deployed environment, run in CI with traces and screenshots on failure.
+- **Visual regression** for design-system components (Storybook plus a visual diff tool), and automated **accessibility checks** (axe) in component tests and end-to-end runs.
+- **Avoid** shallow rendering and snapshot tests of whole component trees. They break on every markup change and assert nothing meaningful.
+
+**What the interviewer is looking for:**
+User-centric queries, network-level mocking, a sensible split between component and end-to-end tests, and accessibility and visual checks.
+
+**Follow-ups:**
+- How do you keep Playwright tests from becoming flaky?
+- What do you test in a custom hook?
+
+**Red flags:**
+- Asserting on component state or CSS class names.
+- Hundreds of large snapshots.
+
+### Design the test strategy for a platform of 40 microservices owned by 8 teams. {#microservices-test-strategy}
+
+**Level:** Architect
+
+**Model answer:**
+Principle: **each team can release its service independently with confidence**. So most testing must happen at the service boundary, not in a shared end-to-end environment.
+
+**Inside each service (team-owned):**
+- Unit tests on domain logic.
+- Integration tests with real dependencies in containers (Testcontainers for the database and broker).
+- Component tests that run the service in-process with its external services faked.
+
+**Between services:**
+- **Consumer-driven contract tests** (Pact or schema-based) for synchronous APIs, and **schema registry compatibility checks** for events.
+- A deploy gate (`can-i-deploy`, or compatibility checks in CI) blocks breaking changes before they merge.
+
+**End-to-end:** a small suite of critical business journeys (around 10–20 tests, not hundreds), owned jointly and run post-deploy in staging and as synthetic monitors in production. Failures route to the owning team.
+
+**Environments:** ephemeral per-PR environments for the service under change, with dependencies stubbed or pointing at shared stable versions. Avoid one fragile shared integration environment that everyone queues for.
+
+**Production verification:** canary analysis, feature flags and SLO-based release health.
+
+**Platform team support:** templates, Pact broker, test data tooling, flaky-test dashboards. Quality remains the teams' responsibility.
+
+**Measures:** change failure rate, escaped defects by type (contract, logic, config), pipeline time, flake rate.
+
+**What the interviewer is looking for:**
+Independent deployability as the goal, contracts in place of large end-to-end suites, clear ownership and production verification, with metrics to steer.
+
+**Follow-ups:**
+- How do you test a flow that spans five services asynchronously?
+- Teams say contract testing is too much overhead. How do you respond?
+
+**Red flags:**
+- A huge shared end-to-end suite as the main safety net.
+- A release train because services "must be tested together".
+
+### You must refactor a 15-year-old monolith with almost no tests. Where do you start? {#legacy-code-testing}
+
+**Level:** Architect
+
+**Model answer:**
+Don't start with "write unit tests for everything". The code wasn't designed for them, and the effort stalls. Work outward from the change you need to make.
+
+1. **Pin current behaviour with characterisation tests** at a coarse level: HTTP-level or approval (golden-master) tests that record today's outputs for a broad set of inputs, including weird ones from production logs. They assert *what it does*, bugs included.
+2. **Find seams** (Feathers' term): places where you can substitute behaviour without editing the code, such as constructor parameters, interfaces or configuration. Use safe, mechanical, tool-assisted refactorings (extract method, introduce parameter) to create them.
+3. **Cover the area being changed** with finer-grained tests as the seams appear. Follow the "boy scout" rule: every change leaves the touched code better tested.
+4. **Prioritise by risk and churn:** files that change often and break often (from git history and incident data) earn tests first. Stable, untouched code may never need them.
+5. **Add production safety nets:** feature flags, canaries, shadowing old and new paths with output comparison (a scientist-style experiment), plus better monitoring.
+6. **Strangle rather than rewrite:** new capability lives in a new module or service behind an interface, with the old path removed once traffic moves.
+
+Make the progress visible (coverage of changed lines, incident trend) and agree with product that refactoring time is part of each feature, not a separate project.
+
+**What the interviewer is looking for:**
+Characterisation tests, seams, a risk-based focus, production verification and an incremental, business-aligned plan.
+
+**Follow-ups:**
+- The code has static calls to the database everywhere. How do you create a seam?
+- How do you convince the business to fund this?
+
+**Red flags:**
+- Proposing a big-bang rewrite.
+- Mandating 80% unit coverage before any change is allowed.
+
+### Who owns quality in an engineering organisation, and what is the role of QA specialists? {#quality-ownership}
+
+**Level:** Architect
+
+**Model answer:**
+**The team that builds a service owns its quality**, including test automation, release safety and production behaviour. Quality that is handed to a separate QA gate creates queues, slow feedback and a "throw it over the wall" mindset. DORA research associates developer-owned test automation with better delivery performance.
+
+QA specialists remain valuable, but the role shifts from *gatekeeper* to *coach and multiplier*:
+- Exploratory testing and risk analysis on new features: finding the unknown unknowns that automation doesn't look for.
+- Building test tooling, frameworks and test data capabilities.
+- Teaching test design, pairing with developers on difficult areas, and reviewing test strategy in design reviews.
+- Owning specialist areas: performance, accessibility, security testing in collaboration with the security team.
+
+Organisation-level levers:
+- A definition of done that includes automated tests and observability.
+- Paved-road tooling.
+- Quality metrics: change failure rate, escaped defects, customer-reported issues and flake rate, reviewed by teams rather than used to rank them.
+- Time for engineers to fix flaky tests and reduce test debt.
+
+**What the interviewer is looking for:**
+"Built-in quality" with team ownership, a nuanced and respectful view of QA's evolving role, and organisational mechanisms.
+
+**Follow-ups:**
+- How would you move from a separate QA team to embedded quality without losing expertise?
+- What would you do if a team's escaped-defect rate keeps rising?
+
+**Red flags:**
+- "We don't need testers anymore."
+- Quality measured by the number of bugs QA finds.
+
 ## Cheat Sheet
 
 - **Test behaviour, not implementation** — assert on outcomes via public interfaces.
@@ -298,6 +563,9 @@ Influencing leadership constructively: aligning on intent, offering a better mea
 - **Coverage** — shows what's untested, not what's well tested.
 - **Flaky test** — non-deterministic result for the same code; quarantine, own, fix or delete.
 - **Shift-left and shift-right** — test early in CI *and* verify in production with canaries and SLOs.
+- **Characterisation test** — records what legacy code does today (bugs included) so you can refactor safely.
+- **Seam** — a place where behaviour can be substituted without editing the code there (Feathers).
+- **MSW** — Mock Service Worker; mocks the network so frontend data-loading code really runs in tests.
 
 ## Further Reading
 

@@ -6,8 +6,8 @@ tags: [observability, sre, slo, opentelemetry]
 level: Architect
 estimatedMinutes: 90
 related: [docker-kubernetes, dora-metrics, system-design]
-lastReviewed: 2026-11-19
-status: draft
+lastReviewed: 2026-11-24
+status: complete
 ---
 
 ## TL;DR
@@ -289,6 +289,272 @@ The operational implications of tail sampling, and tying the decision to busines
 - Assuming 100% tracing is free at scale.
 - Not knowing tail sampling requires trace-aware routing.
 
+### What are logs, metrics and traces, and how should they connect to each other? {#telemetry-signals}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Metrics** are numeric aggregates over time (request rate, p99 latency, queue depth). They are cheap to store and fast to query, which makes them ideal for dashboards and alerts. They can't tell you *which* request was slow, because detail is aggregated away and label cardinality must stay bounded.
+- **Traces** record the path of one request across services as a tree of spans with timings and attributes. They answer "where did the time go for *this* request?" They are usually sampled.
+- **Logs** are timestamped records of discrete events, ideally structured (JSON). They carry the richest detail, such as error messages and business context, and are the most expensive per byte.
+- **Profiles** (continuous profiling) show where CPU and memory go inside the code. They are increasingly treated as a fourth signal.
+
+The value is in **correlation**. Every log line carries the `trace_id` and `span_id`. Metrics link to example traces through **exemplars**. All three share resource attributes (`service.name`, `deployment.environment`, version). A typical investigation runs from alert (metric), to an exemplar trace showing the slow span, to that span's logs explaining why.
+
+**What the interviewer is looking for:**
+What each signal is good and bad at, cost awareness, and correlation by trace id as the thing that makes them "observability" rather than three silos.
+
+**Follow-ups:**
+- Why not just derive every metric from logs?
+- What are exemplars?
+
+**Red flags:**
+- "We have logs, so we're observable."
+- No mention of a shared id to join the signals.
+
+### What is OpenTelemetry, and why do organisations standardise on it? {#opentelemetry}
+
+**Level:** Foundation
+
+**Model answer:**
+OpenTelemetry (OTel) is a CNCF project that provides a vendor-neutral standard for producing and shipping telemetry:
+- **APIs and SDKs** per language for traces, metrics and logs.
+- **Auto-instrumentation** for common frameworks (HTTP servers, database clients, messaging).
+- **Semantic conventions**, which are standard attribute names such as `http.response.status_code` and `db.system`.
+- **The OTLP wire protocol.**
+- **The Collector:** a pipeline that receives, processes (batch, redact, sample, enrich) and exports telemetry to any backend.
+
+Why standardise:
+- **No vendor lock-in:** you instrument once and change backends (Grafana, Datadog, Azure Monitor, Honeycomb) by reconfiguring the Collector rather than re-instrumenting code.
+- **Consistency:** the same attribute names across teams make cross-service queries possible.
+- **Central control:** redaction of PII, sampling and routing happen in the Collector, not in 60 codebases.
+
+Status: tracing and metrics are stable in the major languages, and logs are stable in the specification with SDK maturity varying by language (VERIFY: check per-language status). Profiles are a newer signal still being stabilised (VERIFY).
+
+**What the interviewer is looking for:**
+The components (API, SDK, Collector, OTLP, semantic conventions) and the strategic reason: decoupling instrumentation from the backend.
+
+**Follow-ups:**
+- Agent or gateway Collector deployment: when do you use each?
+- How do you stop auto-instrumentation creating cost explosions?
+
+**Red flags:**
+- Thinking OpenTelemetry is a backend or a dashboard product.
+- Instrumenting directly with a vendor SDK across the estate in 2026 without a reason.
+
+### When do you use the golden signals, RED and USE? {#golden-signals}
+
+**Level:** Foundation
+
+**Model answer:**
+They are checklists for "what should I measure first?":
+- **RED** (rate, errors, duration) for **request-driven services**: APIs, gRPC services, queue consumers (messages per second, failures, processing time). It describes the experience of the service's callers.
+- **USE** (utilisation, saturation, errors) for **resources**: CPU, memory, disks, connection pools, thread pools, queues. It finds the bottleneck. Saturation, meaning work waiting such as run-queue length or pool wait time, is the signal people most often miss.
+- **The four golden signals** (latency, traffic, errors, saturation) from Google's SRE book combine both views for a user-facing system.
+
+Practical tips:
+- Measure latency as a histogram and look at percentiles. Track the latency of **failed** requests separately, because fast errors make averages look good.
+- Count errors your users experience, including "200 OK with an error body".
+- Page on symptoms (RED and SLOs). Use USE to diagnose.
+
+**What the interviewer is looking for:**
+Choosing the method by what is being measured, the saturation insight and the symptoms-versus-causes split for alerting.
+
+**Follow-ups:**
+- Why are averages misleading for latency?
+- Which saturation metrics would you watch on a Node.js service?
+
+**Red flags:**
+- Paging on CPU utilisation as a primary alert.
+- Measuring latency only as an average.
+
+### How does distributed trace context propagate between services, including through queues and async jobs? {#context-propagation}
+
+**Level:** Senior
+
+**Model answer:**
+Each request has a **trace id**, and each unit of work a **span id**. When service A calls B, A's instrumentation injects the context into the outgoing carrier. B extracts it and creates a child span with the same trace id.
+
+- **HTTP and gRPC:** the W3C Trace Context headers, `traceparent` (`00-<32-hex trace id>-<16-hex parent span id>-<flags>`) and optionally `tracestate`. **Baggage** carries user-defined key-values (tenant id, for example) across hops. Treat it as visible to everything downstream and never put secrets in it.
+- **Messaging:** inject the same context into **message headers or application properties** when publishing. On consume, extract it and start a span. For messages processed long after they were produced, or in batches, use **span links** rather than parent/child, because a batch has many parents.
+- **In-process async work** (thread pools, promises, timers) relies on context propagation in the runtime: `AsyncLocalStorage` in Node.js, `Context` in Java and Go. Hand-rolled queues and executors often drop it.
+
+Where it breaks: API gateways or proxies that strip headers, third-party SaaS, cron jobs, and legacy services on proprietary formats (B3). The fix is propagator configuration in the Collector or SDK, plus testing that a trace actually crosses each boundary.
+
+**What the interviewer is looking for:**
+`traceparent` specifics, the inject/extract model, the messaging case including span links, and the usual breakage points.
+
+**Follow-ups:**
+- How should a consumer represent a span for a batch of 500 messages?
+- Is it safe to accept `traceparent` from the public internet?
+
+**Red flags:**
+- Believing tracing works across queues "automatically" in every SDK.
+- Putting user PII in baggage.
+
+### How do you run a blameless postmortem, and how do you make sure the actions actually happen? {#postmortems}
+
+**Level:** Senior
+
+**Model answer:**
+**Trigger.** Agreed criteria, such as a SEV1 or SEV2, a large error-budget burn, a data-loss near miss, or anything customer-visible.
+
+**Process:**
+1. Build a **timeline from evidence**: chat logs, deploy history, telemetry.
+2. Describe **contributing factors**, not a single root cause. Complex failures have several.
+3. Ask *why the system allowed it*, not *who did it*. People acted reasonably given what they knew. If someone could break production with one command, that is the finding.
+4. Record what **went well**: detection, mitigation, communication.
+5. Review it in a meeting with the people involved, and publish it widely.
+
+**Making actions stick:**
+- Few, specific, prioritised actions, each with an owner and a date, tracked in the normal backlog rather than in a document.
+- Distinguish **mitigations** (a guardrail that prevents recurrence) from "be more careful".
+- Review open postmortem actions in a regular operations review. Use the **error-budget policy** to prioritise them over features when reliability is off-target.
+- Look for patterns across incidents each quarter (themes, repeat offenders, detection gaps).
+
+**What the interviewer is looking for:**
+Real blamelessness (focus on systems, psychological safety), contributing factors over root cause, and a mechanism for follow-through.
+
+**Follow-ups:**
+- An engineer's mistake clearly triggered the outage. How do you write that up?
+- How do you stop postmortems becoming a box-ticking exercise?
+
+**Red flags:**
+- "Human error" as the root cause.
+- Thirty vague action items with no owners.
+
+### What should structured logging look like in a production service? {#structured-logging}
+
+**Level:** Senior
+
+**Model answer:**
+- **Structured, not prose:** JSON with consistent keys, so logs are queryable. `{"level":"warn","msg":"payment declined","order_id":"o-9","psp":"adyen","decline_code":"05","trace_id":"…"}` rather than string interpolation.
+- **Correlation:** `trace_id`, `span_id`, request id, plus resource fields such as service, version and environment, ideally injected by the logging library from the current context.
+- **Levels used consistently:** ERROR means someone may need to act, WARN means degraded but handled, INFO covers meaningful business and lifecycle events, DEBUG is off in production unless enabled per request or per tenant.
+- **Log events, not every line of control flow.** One wide "canonical log line" per request, with all the useful fields, often beats 20 narrow lines.
+- **Never log** secrets, tokens, full card numbers or unnecessary PII. Redact centrally (in the logger and in the Collector) and test the redaction.
+- **Control cost:** sample noisy INFO, set retention tiers (hot for 7–30 days, archive beyond), and treat log volume per service as a budget with an owner.
+
+```ts
+logger.info({ orderId, amountMinor, currency, outcome: 'captured', durationMs }, 'payment processed');
+```
+
+**What the interviewer is looking for:**
+Queryability, correlation, a disciplined level policy, PII hygiene and cost control.
+
+**Follow-ups:**
+- How would you debug one tenant's issue without turning DEBUG on for everyone?
+- When is an event better recorded as a metric than as a log?
+
+**Red flags:**
+- Logging full request and response bodies by default.
+- ERROR level for expected business outcomes such as a declined card.
+
+### Design SLOs for a checkout journey that depends on five internal services and a third-party payment provider. {#journey-slos}
+
+**Level:** Architect
+
+**Model answer:**
+**Start from the user journey, not the services.** The SLI is "a checkout attempt completes successfully within 3 s", measured at the edge (API gateway or real-user monitoring), because that is what customers experience.
+
+**Define the SLIs precisely:**
+- *Availability*: good = completed orders + correctly handled user errors (declined card, invalid address); valid = all checkout attempts excluding bots.
+- *Latency*: the fraction of checkouts under 3 s, plus a looser bound such as 99% under 8 s.
+
+**Set targets from data and business tolerance.** If the payment provider's SLA is 99.95%, a 99.99% journey SLO is impossible without redundancy, because a serial chain multiplies availabilities (`0.999^5 × 0.9995 ≈ 99.45%` if every dependency only just meets 99.9%). That forces either stricter internal SLOs, or design changes: retries with idempotency keys, a second payment provider, accepting orders asynchronously and charging later.
+
+**Layer the SLOs.** One journey SLO owned jointly by the product area, plus internal per-service SLOs that are tighter than the journey's share, so each team has its own error budget and alerting.
+
+**Third parties.** Measure the provider independently (calls to them as an SLI), keep a dashboard of their contribution to burn and attribute budget consumption, so you can renegotiate or fail over with evidence.
+
+**Error-budget policy.** Agree in advance what happens when the budget is spent: freeze risky launches, prioritise reliability work, review the SLO quarterly.
+
+**What the interviewer is looking for:**
+Journey-level SLIs measured near the user, careful good/valid definitions, availability arithmetic across dependencies, ownership, and a policy with consequences.
+
+**Follow-ups:**
+- The payment provider has a 2-hour outage. Does it burn your error budget?
+- How do you handle a checkout flow that is partly asynchronous?
+
+**Red flags:**
+- One SLO per microservice with no journey view.
+- Targets copied from a competitor or set to 99.99% "because we're important".
+
+### Set up incident management for an engineering organisation of 200 people. {#incident-management}
+
+**Level:** Architect
+
+**Model answer:**
+**Severity levels** defined by customer impact, with examples. SEV1: checkout down or data loss, all hands, executive communication. SEV2: major degradation. SEV3: minor or internal. Anyone can declare an incident, and declaring one that turns out to be minor is never punished.
+
+**Roles during an incident:**
+- **Incident commander:** coordinates and decides, doesn't debug.
+- **Operations lead:** hands on keyboard.
+- **Communications lead:** status page, stakeholders, support.
+- **Scribe:** keeps the timeline.
+
+A dedicated channel and a video bridge are created automatically by the incident tool.
+
+**On-call that people can sustain:**
+- Team-owned services with primary and secondary rotations, follow-the-sun across time zones if possible.
+- Page only on actionable, SLO-based symptoms.
+- Compensation or time off in lieu; a target of a few pages per shift; review page load monthly and fix noisy alerts.
+
+**Readiness:**
+- Runbooks linked from alerts.
+- Production access pre-approved (break-glass with audit).
+- Incident training and regular game days, with wheel-of-misfortune exercises for new on-call staff.
+
+**Learning:** postmortems for SEV1 and SEV2, a weekly operations review, and tracked actions. Measure time to detect, time to mitigate and recurrence rather than MTTR averages alone.
+
+**Communication:** templated status updates at a fixed cadence (for example every 30 minutes for SEV1), and customer-facing wording agreed with support and legal.
+
+**What the interviewer is looking for:**
+Clear roles (incident commander separate from debugging), impact-based severity, humane on-call, preparation and a learning loop. Organisational design, not just tools.
+
+**Follow-ups:**
+- How do you handle an incident spanning three teams' services?
+- The same team gets paged 40 times a week. What do you do?
+
+**Red flags:**
+- The most senior engineer is always the incident commander *and* the debugger.
+- On-call with no compensation or limit on page load.
+
+### Observability spend is now 18% of cloud cost. How do you bring it down without losing the ability to debug? {#observability-cost}
+
+**Level:** Architect
+
+**Model answer:**
+**Measure first.** Break cost down by signal (logs, metrics, traces), by service and by team. Typically a handful of services and a few patterns, such as DEBUG logs in production, unbounded labels or 100% trace sampling, cause most of the spend.
+
+**Levers per signal:**
+- **Metrics:** cut cardinality (drop or aggregate `user_id`- or URL-style labels in the Collector), remove unused series (query-usage analysis), lower resolution for long retention.
+- **Logs:** apply level policies, sample repetitive INFO, drop health-check noise at the Collector, keep 7–14 days hot and archive the rest cheaply in object storage, and convert high-volume "count" logs into metrics.
+- **Traces:** tail sampling that keeps 100% of errors and slow requests and around 1–5% of normal traffic.
+
+**Governance:**
+- Show each team the cost of its own telemetry and give it a budget.
+- Default Collector pipelines with sane limits.
+- Pre-merge linting for new metrics labels.
+
+**Platform choices:**
+- Evaluate tiered or self-hosted backends (for example a Prometheus-compatible store or ClickHouse-based logs) against vendor pricing.
+- Include the engineering cost of running it yourself; it's rarely free.
+- Because instrumentation is OpenTelemetry, switching or splitting backends is a configuration change.
+
+**Guardrail:** track debugging effectiveness (time to detect and time to mitigate, postmortem notes on missing data), so cuts don't quietly degrade incident response.
+
+**What the interviewer is looking for:**
+Data-driven cost attribution, concrete per-signal techniques, team-level accountability and protecting debuggability.
+
+**Follow-ups:**
+- Which data would you never sample?
+- How would you justify the remaining spend to the CFO?
+
+**Red flags:**
+- A blanket 90% cut in retention or sampling with no analysis.
+- Turning off tracing to save money.
+
 ## Cheat Sheet
 
 - **Observability** — ask new questions of a system using correlated, high-cardinality telemetry.
@@ -304,6 +570,8 @@ The operational implications of tail sampling, and tying the decision to busines
 - **Tail sampling** — decide after the trace completes; keeps errors and outliers.
 - **OTel Collector** — receives, processes (redact, sample, batch) and exports telemetry vendor-neutrally.
 - **Toil** — manual, repetitive, automatable operational work; keep it under ~50%.
+- **traceparent** — W3C header `00-<trace id>-<parent span id>-<flags>` that carries trace context between services.
+- **Blameless postmortem** — find contributing factors in the system, not a culprit; actions get owners and dates.
 
 ## Further Reading
 
