@@ -19,12 +19,13 @@ import { splitSections } from './parse-sections.ts';
 import { parseQuestions } from './parse-questions.ts';
 import { parseCheatSheet } from './parse-cheatsheet.ts';
 import { buildSearchRecords } from './search-records.ts';
+import { TARGET_QUESTION_MIX } from '../../src/lib/content/constants.ts';
 
 /** A compiled topic plus its search records (written to separate files). */
 export type BuiltTopic = Topic & { search: SearchRecord[] };
 
 /** Question mix Prompt 2 asks for. Deviations are warnings on complete topics. */
-export const TARGET_QUESTION_MIX: Record<Level, number> = { Foundation: 4, Senior: 6, Architect: 5 };
+export { TARGET_QUESTION_MIX };
 
 export interface BuildTopicInput {
   /** Path relative to the content root, e.g. "data/caching.md". Used in messages. */
@@ -114,7 +115,14 @@ export async function buildTopic({ file, source }: BuildTopicInput, diag: Diagno
   const verifyCount = (parsed.content.match(/\bVERIFY:/g) ?? []).length;
 
   return {
-    meta: { ...meta, questionCount: questions.length, questionLevels, verifyCount },
+    meta: {
+      ...meta,
+      questionCount: questions.length,
+      questionLevels,
+      verifyCount,
+      flashcardCount: flashcards.length,
+      sectionIds: sections.map((s) => s.id),
+    },
     sections,
     questions,
     flashcards,

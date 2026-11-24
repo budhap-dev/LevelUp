@@ -34,7 +34,7 @@ const OPTIONS: IFuseOptions<SearchRecord> = {
 };
 
 /** Fuse scores are 0 (perfect) … 1; nudge topics and questions above sections and cards on ties. */
-const KIND_FACTOR: Record<SearchKind, number> = { topic: 0.8, question: 0.9, section: 1, cheat: 1 };
+const KIND_FACTOR: Record<SearchKind, number> = { topic: 0.8, glossary: 0.85, question: 0.9, section: 1, cheat: 1 };
 
 function titleRanges(matches: readonly FuseResultMatch[] | undefined): [number, number][] {
   const ranges = matches?.filter((m) => m.key === 'title').flatMap((m) => m.indices) ?? [];
@@ -85,4 +85,5 @@ export function highlight(text: string, ranges: [number, number][]): { text: str
   return parts;
 }
 
-export const hrefFor = (r: SearchRecord) => `/topics/${r.topicId}${r.anchor ? `#${r.anchor}` : ''}`;
+export const hrefFor = (r: SearchRecord) =>
+  r.kind === 'glossary' ? `/glossary#${r.anchor}` : `/topics/${r.topicId}${r.anchor ? `#${r.anchor}` : ''}`;

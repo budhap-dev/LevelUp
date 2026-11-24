@@ -30,6 +30,6 @@ const cards = build.topics.reduce((n, t) => n + t.flashcards.length, 0);
 const verify = build.manifest.topics.reduce((n, t) => n + t.verifyCount, 0);
 console.log(
   `✔ content: ${build.topics.length} topics (${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}), ` +
-    `${questions} questions, ${cards} flashcards, ${verify} VERIFY marker(s), ${warnings.length} warning(s) ` +
+    `${questions} questions, ${cards} flashcards, ${build.glossary.length} glossary terms, ${verify} VERIFY marker(s), ${warnings.length} warning(s) ` +
     `in ${Math.round(performance.now() - started)}ms`,
 );

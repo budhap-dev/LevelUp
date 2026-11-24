@@ -13,6 +13,7 @@ const topicLoaders = import.meta.glob<Topic>('/src/generated/topics/*.json', { i
 export const groups: readonly Group[] = manifest.groups;
 export const topics: readonly TopicMeta[] = manifest.topics;
 export const paths: readonly LearningPath[] = manifest.paths;
+export const glossaryCount: number = manifest.glossaryCount ?? 0;
 
 const topicById = new Map(topics.map((t) => [t.id, t]));
 const groupById = new Map(groups.map((g) => [g.id, g]));

@@ -82,6 +82,9 @@ export interface TopicMeta extends TopicFrontmatter {
   questionCount: number;
   questionLevels: Record<Level, number>;
   verifyCount: number;
+  flashcardCount: number;
+  /** Sections present in the file, in display order. */
+  sectionIds: SectionId[];
 }
 
 export interface Topic {
@@ -113,7 +116,7 @@ export const PathsFile = z.array(LearningPath);
  *   question — an interview question (anchor opens it on the topic page)
  *   cheat    — a cheat-sheet flashcard
  */
-export type SearchKind = 'topic' | 'section' | 'question' | 'cheat';
+export type SearchKind = 'topic' | 'section' | 'question' | 'cheat' | 'glossary';
 
 export interface SearchRecord {
   /** Unique across the index. */
@@ -136,4 +139,21 @@ export interface Manifest {
   groups: Group[];
   topics: TopicMeta[];
   paths: LearningPath[];
+  /** Number of glossary entries; the entries themselves load lazily (src/generated/glossary.json). */
+  glossaryCount: number;
 }
+
+/** One glossary entry (content/glossary.json). Plain text; `backticks` render as code. */
+export const GlossaryEntry = z.strictObject({
+  id: slug,
+  term: z.string().min(1),
+  /** Abbreviations and alternative names, also searchable. */
+  aka: z.array(z.string().min(1)).default([]),
+  group: slug,
+  definition: z.string().min(1),
+  details: z.array(z.string().min(1)).min(1),
+  useCases: z.array(z.string().min(1)).min(1),
+  related: z.array(slug).default([]),
+});
+export type GlossaryEntry = z.output<typeof GlossaryEntry>;
+export const GlossaryFile = z.array(GlossaryEntry);

@@ -14,12 +14,16 @@ const OVERVIEW: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/topics', label: 'All topics', icon: 'book', end: true },
   { to: '/paths', label: 'Learning paths', icon: 'route' },
+  { to: '/summary', label: 'Content summary', icon: 'summary' },
 ];
 const PRACTICE: NavItem[] = [
   { to: '/interview', label: 'Interview mode', icon: 'chat' },
   { to: '/flashcards', label: 'Flashcards', icon: 'layers' },
 ];
-const LIBRARY: NavItem[] = [{ to: '/bookmarks', label: 'Bookmarks', icon: 'bookmark' }];
+const LIBRARY: NavItem[] = [
+  { to: '/glossary', label: 'Glossary', icon: 'glossary' },
+  { to: '/bookmarks', label: 'Bookmarks', icon: 'bookmark' },
+];
 
 const GROUP_ICON: Record<string, IconName> = {
   'languages-frontend': 'code',

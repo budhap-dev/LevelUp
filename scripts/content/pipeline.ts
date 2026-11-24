@@ -1,13 +1,14 @@
 import { readdir, readFile, mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { z } from 'zod';
-import { GroupsFile, PathsFile, type Manifest, type SearchRecord, type Topic } from '../../src/lib/content/schema.ts';
+import { GlossaryFile, GroupsFile, PathsFile, type GlossaryEntry, type Manifest, type SearchRecord, type Topic } from '../../src/lib/content/schema.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { buildTopic, type BuiltTopic } from './build-topic.ts';
 
 export interface ContentBuild {
   manifest: Manifest;
   topics: Topic[];
+  glossary: GlossaryEntry[];
   search: SearchRecord[];
   diagnostics: Diagnostics;
 }
@@ -34,6 +35,10 @@ export async function buildContent(contentDir: string): Promise<ContentBuild> {
   const groups = (await readJson(path.join(contentDir, 'groups.json'), GroupsFile, 'groups.json', diag)) ?? [];
   const paths = (await readJson(path.join(contentDir, 'paths.json'), PathsFile, 'paths.json', diag)) ?? [];
   const groupIds = new Set(groups.map((g) => g.id));
+  // The glossary is optional; a missing file just means no entries.
+  const glossaryPath = path.join(contentDir, 'glossary.json');
+  const hasGlossary = await readFile(glossaryPath, 'utf8').then(() => true, () => false);
+  const glossary = hasGlossary ? ((await readJson(glossaryPath, GlossaryFile, 'glossary.json', diag)) ?? []) : [];
 
   const dupGroups = groups.filter((g, i) => groups.findIndex((x) => x.id === g.id) !== i);
   dupGroups.forEach((g) => diag.error('groups.json', `duplicate group id "${g.id}"`));
@@ -51,7 +56,7 @@ export async function buildContent(contentDir: string): Promise<ContentBuild> {
         if (f.isFile() && f.name.endsWith('.md')) files.push(`${entry.name}/${f.name}`);
         else if (f.isFile() && f.name.endsWith('.mdx')) diag.error(`${entry.name}/${f.name}`, 'use .md, not .mdx');
       }
-    } else if (entry.isFile() && !['groups.json', 'paths.json', '_template.md', 'README.md'].includes(entry.name)) {
+    } else if (entry.isFile() && !['groups.json', 'paths.json', 'glossary.json', '_template.md', 'README.md'].includes(entry.name)) {
       diag.warn(entry.name, 'unexpected file in content root (ignored)');
     }
   }
@@ -84,14 +89,36 @@ export async function buildContent(contentDir: string): Promise<ContentBuild> {
     }
   }
 
+  const seenTerms = new Map<string, string>();
+  for (const g of glossary) {
+    const termKey = g.term.toLowerCase();
+    if (seenTerms.has(g.id)) diag.error('glossary.json', `duplicate glossary id "${g.id}"`);
+    if ([...seenTerms.values()].includes(termKey)) diag.error('glossary.json', `duplicate glossary term "${g.term}"`);
+    seenTerms.set(g.id, termKey);
+    if (!groupIds.has(g.group)) diag.error('glossary.json', `"${g.id}": group "${g.group}" is not defined in groups.json`);
+    for (const r of g.related) if (!byId.has(r)) diag.error('glossary.json', `"${g.id}": related topic "${r}" does not exist`);
+  }
+  const sortedGlossary = [...glossary].sort((a, b) => a.term.localeCompare(b.term, 'en', { sensitivity: 'base' }));
+  const glossarySearch: SearchRecord[] = sortedGlossary.map((g) => ({
+    id: `glossary:${g.id}`,
+    kind: 'glossary',
+    topicId: g.related[0] ?? '',
+    topicTitle: 'Glossary',
+    title: g.aka.length ? `${g.term} (${g.aka.join(', ')})` : g.term,
+    text: g.definition,
+    tags: [],
+    anchor: g.id,
+  }));
+
   // Order topics by group order, then by file order within the group.
   const groupOrder = new Map(groups.map((g, i) => [g.id, i]));
   topics.sort((a, b) => (groupOrder.get(a.meta.group) ?? 99) - (groupOrder.get(b.meta.group) ?? 99) || a.meta.title.localeCompare(b.meta.title));
 
   return {
-    manifest: { generatedAt: new Date().toISOString(), groups, topics: topics.map((t) => t.meta), paths },
+    manifest: { generatedAt: new Date().toISOString(), groups, topics: topics.map((t) => t.meta), paths, glossaryCount: sortedGlossary.length },
     topics: topics.map(({ search: _search, ...topic }) => topic),
-    search: topics.flatMap((t) => t.search),
+    glossary: sortedGlossary,
+    search: [...topics.flatMap((t) => t.search), ...glossarySearch],
     diagnostics: diag,
   };
 }
@@ -115,6 +142,7 @@ export async function writeContent(outDir: string, build: ContentBuild) {
   }
 
   await writeIfChanged(path.join(outDir, 'search.json'), JSON.stringify(build.search));
+  await writeIfChanged(path.join(outDir, 'glossary.json'), JSON.stringify(build.glossary));
 
   const keep = new Set<string>();
   for (const topic of build.topics) {

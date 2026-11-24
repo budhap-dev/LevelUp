@@ -32,6 +32,8 @@ export const routes: RouteObject[] = [
           { path: 'paths/:pathId', lazy: async () => ({ Component: (await import('@/features/paths/PathPage')).PathPage }) },
           { path: 'bookmarks', lazy: async () => ({ Component: (await import('@/features/bookmarks/BookmarksPage')).BookmarksPage }) },
           { path: 'notes', lazy: async () => ({ Component: (await import('@/features/notes/NotesPage')).NotesPage }) },
+          { path: 'summary', lazy: async () => ({ Component: (await import('@/features/summary/SummaryPage')).SummaryPage }) },
+          { path: 'glossary', lazy: async () => ({ Component: (await import('@/features/glossary/GlossaryPage')).GlossaryPage }) },
           { path: 'settings', lazy: async () => ({ Component: (await import('@/features/settings/SettingsPage')).SettingsPage }) },
           { path: '*', element: <NotFound /> },
         ],
