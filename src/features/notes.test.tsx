@@ -66,8 +66,8 @@ describe('notes section', () => {
   it('has its own compact sidebar menu and a top-bar button for new notes', async () => {
     renderAt('/');
     const nav = await screen.findByRole('navigation', { name: 'Main' });
-    expect(within(nav).getByRole('heading', { name: 'Notes' })).toBeInTheDocument();
-    expect(within(nav).getByRole('link', { name: 'All notes' })).toHaveAttribute('href', '/notes');
+    expect(within(nav).getByRole('heading', { name: 'Library' })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'Notes' })).toHaveAttribute('href', '/notes');
     for (const link of screen.getAllByRole('link', { name: 'New note' })) expect(link).toHaveAttribute('href', '/notes?new=1');
     // The menu never lists note titles, so it doesn't call the API on every page.
     expect(api.fetchMock).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NotesApiError, formatBytes, notesApi } from '@/lib/notes/client';
 import type { AttachmentMeta, Note, NoteInput, NoteSummary } from '@/lib/notes/types';
-import { Icon } from './icons';
+import { Icon } from '@/components/Icon';
 import { RichTextEditor } from './RichTextEditor';
 
 const SAVE_DELAY_MS = 800;
