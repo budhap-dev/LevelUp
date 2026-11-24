@@ -2990,5 +2990,73 @@
       "javascript",
       "web-performance"
     ]
+  },
+  {
+    "id": "react-native-new-architecture",
+    "term": "React Native New Architecture",
+    "aka": [
+      "JSI",
+      "Fabric",
+      "TurboModules"
+    ],
+    "group": "languages-frontend",
+    "definition": "The modern React Native internals that replace the asynchronous JSON bridge with JSI (direct JS–native calls), the Fabric renderer and lazily loaded, typed TurboModules.",
+    "details": [
+      "Enables React concurrent features and synchronous layout reads.",
+      "Codegen generates type-safe native interfaces from typed specs.",
+      "Third-party libraries must support it; check before upgrading."
+    ],
+    "useCases": [
+      "Upgrading a React Native app.",
+      "Writing performant native modules."
+    ],
+    "related": [
+      "react-native"
+    ]
+  },
+  {
+    "id": "ota-update",
+    "term": "Over-the-air Update",
+    "aka": [
+      "OTA",
+      "EAS Update"
+    ],
+    "group": "languages-frontend",
+    "definition": "Shipping JavaScript and asset changes to installed mobile apps without a new app store release.",
+    "details": [
+      "Runtime versions ensure updates only reach binaries with compatible native code.",
+      "Must follow store policies — no major new features bypassing review.",
+      "Roll out gradually and keep rollback ready."
+    ],
+    "useCases": [
+      "Hotfixes for React Native apps.",
+      "Small content and UI changes between store releases."
+    ],
+    "related": [
+      "react-native",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "aria",
+    "term": "ARIA",
+    "aka": [
+      "WAI-ARIA",
+      "accessible name"
+    ],
+    "group": "languages-frontend",
+    "definition": "Attributes that add roles, states and properties to the accessibility tree when native HTML can't express a widget's semantics.",
+    "details": [
+      "First rule: don't use ARIA if a native element does the job.",
+      "ARIA changes semantics only — keyboard behaviour must still be implemented.",
+      "Follow the WAI-ARIA Authoring Practices patterns for tabs, comboboxes and menus."
+    ],
+    "useCases": [
+      "Disclosure buttons (`aria-expanded`) and live status messages.",
+      "Custom composite widgets."
+    ],
+    "related": [
+      "accessibility"
+    ]
   }
 ]
