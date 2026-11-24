@@ -1,5 +1,4 @@
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
@@ -25,16 +24,22 @@ function commitSha() {
     return 'dev';
   }
 }
-const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+/**
+ * The version shown in the app is the build's UTC date (CalVer, e.g. 2026.11.24), so every deploy visibly
+ * changes it; the commit hash beside it distinguishes several deploys on one day. package.json keeps the
+ * npm package version, which isn't user-facing.
+ */
+const builtAt = new Date();
+const buildVersion = builtAt.toISOString().slice(0, 10).replaceAll('-', '.');
 
 export default defineConfig(({ mode }) => {
   // Expose .env.local (DATABASE_URL, NOTES_*) to the dev API middleware, as Vercel does in production.
   Object.assign(process.env, { ...loadEnv(mode, process.cwd(), ''), ...process.env });
   return {
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(buildVersion),
     __APP_COMMIT__: JSON.stringify(commitSha()),
-    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+    __APP_BUILT_AT__: JSON.stringify(builtAt.toISOString()),
   },
   plugins: [
     notesApiDev(),
