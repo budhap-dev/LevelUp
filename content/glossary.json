@@ -2690,5 +2690,176 @@
     "related": [
       "reactjs"
     ]
+  },
+  {
+    "id": "strategy-pattern",
+    "term": "Strategy Pattern",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A design pattern that puts interchangeable algorithms behind one interface so the caller can choose one at runtime.",
+    "details": [
+      "Replaces growing if/else or switch chains on a type or mode.",
+      "In TypeScript a strategy is often just a function in a lookup map.",
+      "Supports the open–closed principle: add variants without editing existing ones."
+    ],
+    "useCases": [
+      "Shipping, tax or pricing rules per market.",
+      "Pluggable payment providers."
+    ],
+    "related": [
+      "design-patterns",
+      "solid-clean-code"
+    ]
+  },
+  {
+    "id": "observer-pattern",
+    "term": "Observer Pattern",
+    "aka": [
+      "publish/subscribe"
+    ],
+    "group": "architecture-design",
+    "definition": "A design pattern where a subject notifies subscribed observers of changes without knowing who they are.",
+    "details": [
+      "Always provide unsubscribe to avoid memory leaks.",
+      "Watch for cascading updates and ordering assumptions.",
+      "Pub/sub messaging is the same idea at system scale."
+    ],
+    "useCases": [
+      "UI stores and event emitters.",
+      "Reacting to domain events."
+    ],
+    "related": [
+      "design-patterns",
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "dependency-injection",
+    "term": "Dependency Injection",
+    "aka": [
+      "DI",
+      "composition root"
+    ],
+    "group": "architecture-design",
+    "definition": "Giving a component its dependencies from outside (constructor or parameters) instead of having it create or look them up.",
+    "details": [
+      "Wire dependencies once at the composition root, at application start.",
+      "Makes code testable with fakes and makes dependencies explicit.",
+      "Containers automate wiring; plain parameters are often enough."
+    ],
+    "useCases": [
+      "Swapping a real payment gateway for a fake in tests.",
+      "Choosing implementations by configuration."
+    ],
+    "related": [
+      "design-patterns",
+      "solid-clean-code"
+    ]
+  },
+  {
+    "id": "code-smell",
+    "term": "Code Smell",
+    "aka": [
+      "refactoring"
+    ],
+    "group": "architecture-design",
+    "definition": "A surface symptom in code that suggests a deeper design problem, such as a long function, a large class or primitive obsession.",
+    "details": [
+      "A smell is a prompt to look closer, not proof of a bug.",
+      "Each smell maps to known refactorings (extract function, introduce value object…).",
+      "Refactor in small steps under tests."
+    ],
+    "useCases": [
+      "Code review.",
+      "Deciding where to invest in refactoring (hotspots)."
+    ],
+    "related": [
+      "solid-clean-code"
+    ]
+  },
+  {
+    "id": "lakehouse",
+    "term": "Lakehouse",
+    "aka": [
+      "Apache Iceberg",
+      "Delta Lake",
+      "open table format"
+    ],
+    "group": "data",
+    "definition": "An analytics architecture that adds warehouse features — ACID transactions, schema evolution, time travel — to cheap object storage through open table formats.",
+    "details": [
+      "Table formats (Iceberg, Delta, Hudi) sit on top of Parquet files.",
+      "Many engines (Spark, Trino, warehouses) can read the same tables.",
+      "Needs compaction to avoid the small-files problem."
+    ],
+    "useCases": [
+      "Large-scale analytics combined with ML.",
+      "Avoiding lock-in to one warehouse engine."
+    ],
+    "related": [
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "medallion-architecture",
+    "term": "Medallion Architecture",
+    "aka": [
+      "bronze, silver, gold"
+    ],
+    "group": "data",
+    "definition": "Layering analytical data as bronze (raw as ingested), silver (cleaned and conformed) and gold (business-ready models and metrics).",
+    "details": [
+      "Keep raw data so you can reprocess after fixing logic.",
+      "Business logic and metric definitions live in gold, not in dashboards.",
+      "The same idea as dbt's staging, intermediate and mart layers."
+    ],
+    "useCases": [
+      "Structuring a warehouse or lakehouse.",
+      "Separating ingestion from business modelling."
+    ],
+    "related": [
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "data-contract",
+    "term": "Data Contract",
+    "aka": [],
+    "group": "data",
+    "definition": "An agreement between a data producer and its consumers about schema, meaning, quality, freshness and how the data may change.",
+    "details": [
+      "Defined as code and enforced in CI and at runtime.",
+      "Breaking changes need versioning and notice.",
+      "Producers are accountable for meeting the contract."
+    ],
+    "useCases": [
+      "Stopping application schema changes from breaking pipelines.",
+      "Publishing data products between domains."
+    ],
+    "related": [
+      "data-engineering-basics",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "data-mesh",
+    "term": "Data Mesh",
+    "aka": [
+      "data product"
+    ],
+    "group": "data",
+    "definition": "An approach to analytical data at scale based on domain ownership, data as a product, a self-serve data platform and federated governance.",
+    "details": [
+      "Suits large organisations where a central data team is a bottleneck.",
+      "Adds organisational overhead; small companies rarely need it.",
+      "Most teams adopt parts of it, such as data products and contracts."
+    ],
+    "useCases": [
+      "Scaling analytics across many business domains.",
+      "Clarifying ownership of key datasets."
+    ],
+    "related": [
+      "data-engineering-basics"
+    ]
   }
 ]
