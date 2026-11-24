@@ -1,3 +1,5 @@
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
@@ -10,10 +12,30 @@ import { notesApiDev } from './scripts/notes/vite-plugin-api.ts';
 
 const scope = precacheScope();
 
+/**
+ * The commit being built. Vercel CLI deploys upload no .git folder, so `npm run deploy` passes GIT_SHA as a build env;
+ * Git-connected Vercel builds set VERCEL_GIT_COMMIT_SHA; local builds ask git.
+ */
+function commitSha() {
+  const fromEnv = process.env.GIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA;
+  if (fromEnv) return fromEnv.slice(0, 7);
+  try {
+    return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'dev';
+  }
+}
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig(({ mode }) => {
   // Expose .env.local (DATABASE_URL, NOTES_*) to the dev API middleware, as Vercel does in production.
   Object.assign(process.env, { ...loadEnv(mode, process.cwd(), ''), ...process.env });
   return {
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_COMMIT__: JSON.stringify(commitSha()),
+    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     notesApiDev(),
     react(),

@@ -1,56 +1,102 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 const updateServiceWorker = vi.fn();
 let initial = { offlineReady: false, needRefresh: false };
+/** null = no service worker (dev, unsupported browsers). */
+let registration: { update: ReturnType<typeof vi.fn>; installing: unknown; waiting: unknown } | null = null;
 
 vi.mock('virtual:pwa-register/react', () => ({
-  useRegisterSW: () => ({
-    offlineReady: useState(initial.offlineReady),
-    needRefresh: useState(initial.needRefresh),
-    updateServiceWorker,
-  }),
+  useRegisterSW: (options: { onRegisteredSW?: (url: string, r: unknown) => void }) => {
+    useEffect(() => {
+      if (registration) options.onRegisteredSW?.('/sw.js', registration);
+    }, []);
+    return {
+      offlineReady: useState(initial.offlineReady),
+      needRefresh: useState(initial.needRefresh),
+      updateServiceWorker,
+    };
+  },
 }));
 
-const { OfflineBadge, PwaToasts } = await import('./PwaStatus');
+const { OfflineBadge, PwaProvider, PwaToasts } = await import('./PwaStatus');
+const { VersionFooter } = await import('./VersionFooter');
+
+const withPwa = (ui: ReactNode) => render(<PwaProvider>{ui}</PwaProvider>);
 
 describe('PwaToasts', () => {
-  beforeEach(() => updateServiceWorker.mockClear());
+  beforeEach(() => {
+    updateServiceWorker.mockClear();
+    registration = null;
+  });
 
   it('renders nothing when there is nothing to say', () => {
     initial = { offlineReady: false, needRefresh: false };
-    const { container } = render(<PwaToasts />);
-    expect(container).toBeEmptyDOMElement();
+    withPwa(<PwaToasts />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('offers to reload when a new version is waiting', async () => {
+  it('offers to reload when a new version is waiting, naming the running version', async () => {
     initial = { offlineReady: false, needRefresh: true };
-    render(<PwaToasts />);
+    withPwa(<PwaToasts />);
     expect(screen.getByRole('status')).toHaveTextContent('A new version of LevelUp is available.');
+    expect(screen.getByRole('status')).toHaveTextContent(`You're on v${__APP_VERSION__} · ${__APP_COMMIT__}`);
     await userEvent.click(screen.getByRole('button', { name: 'Reload' }));
     expect(updateServiceWorker).toHaveBeenCalledWith(true);
   });
 
-  it('lets the user postpone an update', async () => {
+  it('lets the user postpone an update; the footer keeps a Reload button', async () => {
     initial = { offlineReady: false, needRefresh: true };
-    render(<PwaToasts />);
+    withPwa(
+      <>
+        <PwaToasts />
+        <VersionFooter />
+      </>,
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Later' }));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(updateServiceWorker).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /New version ready/ }));
+    expect(updateServiceWorker).toHaveBeenCalledWith(true);
   });
 
   it('announces offline readiness and hides it after a few seconds', () => {
     vi.useFakeTimers();
     try {
       initial = { offlineReady: true, needRefresh: false };
-      render(<PwaToasts />);
+      withPwa(<PwaToasts />);
       expect(screen.getByRole('status')).toHaveTextContent('ready to use offline');
       act(() => void vi.advanceTimersByTime(6000));
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('VersionFooter', () => {
+  beforeEach(() => {
+    initial = { offlineReady: false, needRefresh: false };
+    registration = null;
+  });
+
+  it('shows the running version and commit', () => {
+    withPwa(<VersionFooter />);
+    expect(screen.getByText(`v${__APP_VERSION__} ·`, { exact: false })).toHaveTextContent(__APP_COMMIT__);
+  });
+
+  it('hides the update check without a service worker', () => {
+    withPwa(<VersionFooter />);
+    expect(screen.queryByRole('button', { name: 'Check for updates' })).not.toBeInTheDocument();
+  });
+
+  it('checks for updates on demand and reports when already up to date', async () => {
+    registration = { update: vi.fn().mockResolvedValue(undefined), installing: null, waiting: null };
+    withPwa(<VersionFooter />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Check for updates' }));
+    expect(registration.update).toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: 'Up to date' })).toBeInTheDocument();
   });
 });
 

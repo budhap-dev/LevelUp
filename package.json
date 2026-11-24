@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "topic": "bash scripts/topic.sh",
     "notes": "npm run -s notes:vendor -- --quiet && tsx scripts/notes/cli.ts",
-    "notes:vendor": "tsx scripts/notes/bundle-sanitizer.ts"
+    "notes:vendor": "tsx scripts/notes/bundle-sanitizer.ts",
+    "deploy": "npx vercel deploy --prod --yes --build-env GIT_SHA=$(git rev-parse --short=7 HEAD)"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.1",
