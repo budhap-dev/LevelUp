@@ -6,8 +6,8 @@ tags: [leadership, staff-engineer, communication]
 level: Architect
 estimatedMinutes: 45
 related: [stakeholder-management, technical-strategy, leadership]
-lastReviewed: 2026-11-19
-status: draft
+lastReviewed: 2026-11-24
+status: complete
 ---
 
 ## TL;DR
@@ -257,6 +257,273 @@ A multi-lever strategy (product thinking for internal platforms, social proof, i
 - "Get the CTO to mandate it" as the plan.
 - No enablement; expecting teams to absorb migration cost alone.
 
+### You've just joined as a Staff engineer. How do you build credibility in your first 90 days? {#building-credibility}
+
+**Level:** Foundation
+
+**Model answer:**
+Influence runs on trust, and trust is earned through **listening, competence and reliability**, in that order.
+
+- **Days 1–30: listen and map.** One-to-ones with tech leads, engineering managers, product managers and a few people on the ground. Ask "What's hardest here? What have people tried? What should I not change?" Read the incident history, ADRs and roadmaps. Build a stakeholder map: who decides, who influences, who is affected.
+- **Days 30–60: deliver something small and useful.** Fix a painful build, unblock a stuck design, write the missing runbook, pair on an incident. Visible help earns more credibility than early opinions.
+- **Days 60–90: share what you've learned and propose.** Write up your observations, including what is going well, and suggest two or three priorities, testing them first with the people affected.
+
+Throughout: do what you say you'll do, give credit generously, ask questions before giving answers, and avoid "at my last company we…" as an argument.
+
+**What the interviewer is looking for:**
+Listening before prescribing, quick tangible contributions, stakeholder mapping and reliability as the basis of trust.
+
+**Follow-ups:**
+- What would you do if you saw a serious architectural problem in week two?
+- How do you build relationships with remote teams?
+
+**Red flags:**
+- Arriving with a rewrite plan.
+- Relying on job title for authority.
+
+### What is "pre-wiring" a decision, and why does it work? {#pre-wiring}
+
+**Level:** Foundation
+
+**Model answer:**
+Pre-wiring means talking to the key stakeholders **individually before** the meeting where a decision is made. You share the proposal, hear their concerns and adjust it, so that nobody is surprised in the room.
+
+Why it works:
+- People resist surprises, especially in public. A concern raised in a group often hardens into a position because nobody wants to back down in front of their peers.
+- In one-to-ones, people share real objections ("this doubles my team's on-call") that they might not voice in a meeting. That makes your proposal better.
+- You learn who supports it, who opposes it and why, so the meeting confirms a decision rather than starting a debate.
+- Stakeholders who shaped the proposal feel ownership of it.
+
+Done well, it is not manipulation or back-room dealing. You are transparent about the proposal, you genuinely change it based on feedback, and the decision is still made openly.
+
+**What the interviewer is looking for:**
+The mechanics, the psychology behind it and the ethics of doing it transparently.
+
+**Follow-ups:**
+- What if a key stakeholder still opposes it after pre-wiring?
+- How do you pre-wire with someone more senior than you?
+
+**Red flags:**
+- Presenting major proposals cold to a large group.
+- Pre-wiring that tells different stakeholders different stories.
+
+### What makes an RFC or design document persuasive? {#persuasive-rfc}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Start with the problem and why it matters now**, in the reader's terms: incidents, cost, delivery speed, customer impact, with data. If readers don't agree on the problem, they won't agree on the solution.
+- **State goals and non-goals.** This avoids scope arguments.
+- **Present real options**, including "do nothing" and the option you don't prefer, compared on explicit criteria. Honest comparison builds trust; a straw-man alternative destroys it.
+- **Make a clear recommendation** and explain the trade-offs you accept.
+- **Address risks, migration, cost and who is affected.** "What does this mean for my team?" is every reader's first question.
+- **Put a summary at the top:** a decision-maker should get the point in 2 minutes.
+- **Keep it short,** with detail in appendices. Use diagrams for the architecture.
+- **Process:** circulate a draft to the key stakeholders first, set a comment deadline and a decision owner, and record the outcome as an ADR.
+
+**What the interviewer is looking for:**
+Problem-first framing, honest options, audience awareness and a clear path to a decision.
+
+**Follow-ups:**
+- How do you handle an RFC that gets 200 comments and no decision?
+- When is an RFC overkill?
+
+**Red flags:**
+- Documents that start with the solution.
+- No named decision-maker or deadline.
+
+### A peer team keeps missing commitments that your project depends on. How do you handle it? {#unreliable-dependency}
+
+**Level:** Senior
+
+**Model answer:**
+**Understand before escalating.** Meet their tech lead or engineering manager and ask what's going on: competing priorities, under-staffing, unclear requirements from us, technical blockers? Often our request is item 14 on their list and nobody told them it blocks a launch.
+
+**Make the dependency explicit and shared:**
+- Agree what is needed, by when and why (the business impact of the date), in writing.
+- Break it into smaller deliverables with interim checkpoints.
+- Check whether we've made it harder than it needs to be. Can we reduce what we ask for?
+
+**Offer help:** lend an engineer, write the code ourselves under their review (an "inner source" contribution), or build a temporary workaround on our side.
+
+**Reduce the dependency:** design so our project can ship without it (feature flag, interim adapter) or re-sequence the work.
+
+**Escalate cleanly if it's still stuck:** take a joint note to both managers or the shared leader with the facts, the impact, the options and the decision needed. Frame it as a priority conflict for leadership to resolve, not a complaint about the other team.
+
+**What the interviewer is looking for:**
+Curiosity first, shared understanding, offering help, engineering around the dependency, and escalating in a way that preserves the relationship.
+
+**Follow-ups:**
+- How do you avoid this in future project planning?
+- Their manager says it's simply not a priority. What next?
+
+**Red flags:**
+- Going straight to their boss.
+- Complaining in public channels.
+
+### How do you persuade product managers to invest in reliability or platform work? {#influence-product}
+
+**Level:** Senior
+
+**Model answer:**
+Speak in their currency: **outcomes, risk and speed**, not technical elegance.
+
+- **Quantify the cost of not doing it:** incidents per quarter and their customer and revenue impact, support tickets, conversion lost during slowness, hours of engineering time spent on toil or workarounds ("20% of the team's capacity goes on manual deploys").
+- **Link it to their roadmap:** "The two features you want in Q3 both touch the billing module. Refactoring it first cuts their delivery time by about half and reduces regression risk."
+- **Use error budgets:** if there are agreed SLOs, an exhausted budget is a shared, pre-agreed trigger to prioritise reliability. It is a policy, not an argument.
+- **Make it incremental:** a steady capacity allocation (for example 20% for health work) or small slices delivered alongside features, rather than "stop everything for a quarter".
+- **Report back:** show what the investment delivered (fewer incidents, faster lead time) so the next request is easier.
+- **Build the relationship:** help PMs with their goals, include them in incident reviews so they see the cost first-hand.
+
+**What the interviewer is looking for:**
+Translating technical work into business value, using data and policy mechanisms, and partnership rather than confrontation.
+
+**Follow-ups:**
+- The PM agrees but leadership overrides each quarter. What then?
+- How do you measure toil credibly?
+
+**Red flags:**
+- "Engineering should decide what engineering works on."
+- Sneaking large refactors into feature estimates without telling anyone.
+
+### What does "disagree and commit" mean in practice, and when should you not commit? {#disagree-and-commit}
+
+**Level:** Senior
+
+**Model answer:**
+Once a decision has been made through a fair process, where your view was heard and considered, you **commit fully**: you execute it well, support it publicly and don't relitigate it in corridors or slow-walk it. Organisations can't move if every decision stays open.
+
+Doing it well:
+- **Disagree clearly beforehand:** state your concern, the evidence and the risk, ideally in writing so it is on record.
+- **Agree signals for revisiting it:** "If p99 latency exceeds 500 ms after launch, we reopen the decision." This turns disagreement into a hypothesis to test.
+- **After committing,** if your concern later proves right, raise it constructively with data. Don't say "I told you so".
+
+When not to commit, and to escalate or refuse instead:
+- **Ethical or legal issues:** misleading customers, violating privacy law, ignoring safety.
+- **Serious, unacknowledged risk** of severe harm, such as data loss or a security breach, where decision-makers didn't understand the risk. Make sure they do, in writing, and escalate.
+- **A process that wasn't fair:** the decision was made without the people who carry its consequences.
+
+**What the interviewer is looking for:**
+Genuine commitment after decisions, a mechanism to revisit them, and clear lines for when escalation or refusal is justified.
+
+**Follow-ups:**
+- Tell me about a decision you disagreed with and committed to.
+- How do you tell a principled objection from ego?
+
+**Red flags:**
+- "Committing" while quietly working against the decision.
+- Never disagreeing, or treating every disagreement as an ethical line.
+
+### How do you shape technical strategy across an organisation when you have no line authority? {#shaping-strategy}
+
+**Level:** Architect
+
+**Model answer:**
+Strategy without authority is built through **diagnosis, coalition and making the right thing easy**.
+
+1. **Diagnose with evidence.** Gather data on the problems (incident themes, delivery metrics, cost, survey results) and talk to many teams. A shared, well-evidenced diagnosis is half the battle. Rumelt's "kernel" of good strategy is a diagnosis, a guiding policy and coherent actions.
+2. **Write it down.** A short strategy document: where we are, where we need to be in 2–3 years, the few guiding principles ("buy before build for non-differentiating capabilities", "event-driven integration between domains"), and what we will *stop* doing.
+3. **Build a coalition.** Co-write it with respected tech leads, pre-wire it with engineering directors, find an executive sponsor who will own the decisions it needs.
+4. **Connect it to business goals.** Show how it enables the company strategy (entering new markets, cutting unit cost, regulatory deadlines).
+5. **Make it concrete and easy:** paved roads, templates, reference implementations and ADRs that apply the principles, so teams adopt them because it's the easiest path.
+6. **Use the existing forums:** architecture reviews and planning cycles, where strategy shows up as decisions, not slides.
+7. **Measure and adjust:** track a few leading indicators and revisit the strategy every 6–12 months.
+
+**What the interviewer is looking for:**
+Evidence-based diagnosis, written strategy with trade-offs, sponsorship and coalition, and turning strategy into defaults teams want to use.
+
+**Follow-ups:**
+- How do you handle a VP whose priorities conflict with the strategy?
+- How do you know whether the strategy is working?
+
+**Red flags:**
+- Strategy as a technology wishlist.
+- Expecting teams to adopt it because the document says so.
+
+### You must lead a migration across 10 teams, none of whom report to you. How do you run it? {#cross-org-migration}
+
+**Level:** Architect
+
+**Model answer:**
+**Secure the mandate.** Get an executive sponsor to confirm that the migration is a priority with a deadline and a reason (end of support, security, cost), communicated by them, and that teams' roadmaps will include the capacity. Without that, every team rationally deprioritises it.
+
+**Minimise the cost per team.** The most influential thing you can do is make migrating cheap:
+- Tooling and codemods that automate most of the change.
+- A migration guide with worked examples, office hours and a Slack channel.
+- A central "migration squad" that does the first few migrations hands-on, or pairs with each team.
+
+**Sequence it:**
+1. Start with 1–2 friendly design-partner teams to harden the tooling and the guide.
+2. Then the bulk of teams.
+3. Then the hard cases, with custom plans.
+
+**Make progress visible:** a dashboard of migrated services per team, shared in leadership updates. Social proof and gentle peer pressure work, but celebrate progress rather than shaming.
+
+**Handle the long tail:** set dates for deprecation warnings, then a hard freeze. Offer to do the migration for teams that truly can't, and escalate genuine blockers through the sponsor.
+
+**Close properly:** turn off the old system, write a retrospective and thank people publicly.
+
+**What the interviewer is looking for:**
+Sponsorship, reducing per-team cost, design partners, visible progress, a long-tail plan, and respect for teams' competing priorities.
+
+**Follow-ups:**
+- Two teams refuse, citing roadmap pressure. What do you do?
+- How do you estimate the overall timeline with so many unknowns?
+
+**Red flags:**
+- Sending a wiki page and a deadline.
+- No executive sponsor or capacity commitment.
+
+### How do you get executives to act on a technical risk they don't understand? {#influencing-executives}
+
+**Level:** Architect
+
+**Model answer:**
+Executives decide on **business risk, cost and opportunity**. Translate the risk into that language and make the decision easy.
+
+- **Lead with impact and likelihood,** not mechanism. Not "our Postgres 11 cluster is out of support", but "we are running an unsupported database that holds all customer payments. If a critical vulnerability is published, we cannot patch it, which puts us out of PCI compliance and could stop card processing. Our auditors flag this in March."
+- **Quantify where you can:** the cost of a likely incident (revenue per hour of downtime, regulatory fines, customer churn), against the cost of the fix.
+- **Use comparisons and stories:** a recent incident at a competitor, or a near miss of our own.
+- **Offer options with trade-offs:** fix now ($X, 2 months, delays feature Y); mitigate (cheaper, partial); accept the risk (and who signs it off). Give a clear recommendation.
+- **Be brief:** one page, a 5-minute version, the decision needed and by when.
+- **Find an ally:** the CISO, CFO or a product leader who already feels the pain.
+- **If they decide to accept the risk,** record it in a risk register with an owner and a review date. That is a legitimate outcome, and it protects everyone.
+
+**What the interviewer is looking for:**
+Business framing, quantification, options with a recommendation, brevity and an explicit decision, including documented risk acceptance.
+
+**Follow-ups:**
+- They choose "accept the risk" and the incident happens. What now?
+- How do you avoid crying wolf?
+
+**Red flags:**
+- Technical jargon to an executive audience.
+- Presenting problems without options.
+
+### Two respected principal engineers disagree on a key architectural direction, and teams are paralysed. How do you resolve it? {#resolve-architect-conflict}
+
+**Level:** Architect
+
+**Model answer:**
+1. **Separate the people from the problem.** Meet each privately. Understand their reasoning, what they're optimising for and what worries them about the other option. Often they're optimising different goals, such as time to market versus long-term scalability, rather than one of them being wrong.
+2. **Make the disagreement explicit and narrow.** Write down where they agree (usually most things), the specific points of difference and the **decision criteria** that matter to the business, with weights agreed by the stakeholders.
+3. **Turn opinion into evidence:** a time-boxed spike or prototype of each option against the hardest requirement, benchmarks, or reference calls with companies that tried each approach.
+4. **Look for a reversible path:** can we build behind an interface, defer the irreversible part and decide later with real data? Two-way-door decisions should be made quickly.
+5. **Name the decider and the deadline.** If consensus doesn't come, a single decision-maker (often the senior engineering leader) decides by a set date. Both engineers present, the decision is recorded in an ADR with the dissenting view, and everyone commits.
+6. **Unblock teams meanwhile:** identify the work that's valid under either option.
+7. **Look after the relationship** afterwards. Make sure the "losing" engineer has visible ownership of something important, and that the ADR records conditions under which the decision would be revisited.
+
+**What the interviewer is looking for:**
+Understanding underlying goals, criteria-based decisions, evidence, reversibility, a clear decider and deadline, and attention to the relationship.
+
+**Follow-ups:**
+- One engineer keeps reopening the decision after it's made. What do you do?
+- What if you think both options are wrong?
+
+**Red flags:**
+- Letting it drag on to avoid conflict.
+- Deciding by seniority or volume.
+
 ## Cheat Sheet
 
 - **Influence foundations** — credibility, relationships, framing; build them before you need them.
@@ -269,6 +536,9 @@ A multi-lever strategy (product thinking for internal platforms, social proof, i
 - **Disagree and commit** — argue fully, then support the decision; record the dissent.
 - **Escalate well** — early, jointly, neutral summary, options, decision deadline.
 - **Give credit away** — it builds reciprocity and future influence.
+- **Trust equation** — (credibility + reliability + intimacy) ÷ self-orientation (Maister); lower self-interest raises trust.
+- **Executive framing** — impact, likelihood, cost, options and a recommendation on one page, with the decision needed by a date.
+- **Revisit triggers** — agree in advance the evidence that would reopen a decision, so dissent becomes a testable hypothesis.
 
 ## Further Reading
 
