@@ -91,7 +91,8 @@ describe('catalogue filters', () => {
   });
 
   it('reads filters from the URL and shows an empty state', async () => {
-    renderAt('/topics?group=ai&level=Foundation&content=1');
+    // A real tag from one group combined with another group: empty by construction, whatever content is added later.
+    renderAt('/topics?group=leadership-people&tag=kubernetes');
     expect(await screen.findByText('No topics match these filters.')).toBeInTheDocument();
   });
 });
