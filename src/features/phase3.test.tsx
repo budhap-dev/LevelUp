@@ -4,6 +4,10 @@ import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from '@/app/router';
 import { PROGRESS_STORAGE_KEY } from '@/lib/progress/local-storage-store';
+import { topics } from '@/lib/content';
+
+/** Any topic still without content; skipped once every topic is written. */
+const stub = topics.find((t) => t.status === 'stub');
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
@@ -35,12 +39,12 @@ describe('topic progress', () => {
     expect(screen.getByRole('radio', { name: 'Learned' })).toBeChecked();
   });
 
-  it('does not track progress for stub topics', async () => {
-    renderAt('/topics/javascript');
-    await screen.findByRole('heading', { level: 1, name: 'JavaScript' });
+  it.runIf(stub)('does not track progress for stub topics', async () => {
+    renderAt(`/topics/${stub!.id}`);
+    await screen.findByRole('heading', { level: 1, name: stub!.title });
     expect(screen.queryByRole('radio', { name: 'Learned' })).not.toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 400));
-    expect(stored()?.topics?.javascript).toBeUndefined();
+    expect(stored()?.topics?.[stub!.id]).toBeUndefined();
   });
 
   it('shows "continue where you left off" on the dashboard', async () => {

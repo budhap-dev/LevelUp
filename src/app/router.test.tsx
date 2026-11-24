@@ -3,6 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from './router';
+import { topics } from '@/lib/content';
+
+/** Any topic still without content; once every topic is written there is none and the stub test is skipped. */
+const stub = topics.find((t) => t.status === 'stub');
 
 const renderAt = (path: string) => render(<RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />);
 
@@ -23,8 +27,8 @@ describe('app routes', () => {
     expect(screen.getByText(/unverified claim/)).toBeInTheDocument();
   });
 
-  it('shows a placeholder for stub topics', async () => {
-    renderAt('/topics/javascript');
+  it.runIf(stub)('shows a placeholder for stub topics', async () => {
+    renderAt(`/topics/${stub!.id}`);
     expect(await screen.findByRole('heading', { name: 'No content yet' })).toBeInTheDocument();
   });
 
