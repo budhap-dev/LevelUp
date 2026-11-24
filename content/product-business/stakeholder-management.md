@@ -533,7 +533,7 @@ Anchoring on shared goals, fair representation of each view, common-scale quanti
 ## Further Reading
 
 - [Atlassian Team Playbook: DACI decision-making framework](https://www.atlassian.com/team-playbook/plays/daci) — a practical template for decision roles.
-- [Atlassian Team Playbook: Stakeholder communications](https://www.atlassian.com/team-playbook/plays/stakeholder-communications) — VERIFY: link path; planning communication by stakeholder group.
+- [Atlassian Team Playbook: Stakeholder communications](https://www.atlassian.com/team-playbook/plays/stakeholder-communications-plan) — planning communication by stakeholder group.
 - [Project Management Institute: PMBOK Guide](https://www.pmi.org/standards/pmbok) — the standard reference for stakeholder engagement in projects.
 - [Google SRE Book: Managing Incidents](https://sre.google/sre-book/managing-incidents/) — roles and communication during incidents.
-- [GOV.UK Service Manual: Agile delivery governance](https://www.gov.uk/service-manual/agile-delivery/governance-principles-for-agile-service-delivery) — VERIFY: link path; principles for proportionate, decision-focused governance.
+- [GOV.UK Service Manual: Agile delivery governance](https://www.gov.uk/service-manual/agile-delivery/governance-principles-for-agile-service-delivery) — principles for proportionate, decision-focused governance.

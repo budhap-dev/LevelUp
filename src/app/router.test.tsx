@@ -24,7 +24,8 @@ describe('app routes', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'TL;DR' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Interview Questions' })).toBeInTheDocument();
     expect(screen.getByText('What is a cache stampede and how do you prevent it?')).toBeInTheDocument();
-    expect(screen.getByText(/unverified claim/)).toBeInTheDocument();
+    // Every claim in the topic has been verified, so no "unverified claims" badge is shown.
+    expect(screen.queryByText(/unverified claim/)).not.toBeInTheDocument();
   });
 
   it.runIf(stub)('shows a placeholder for stub topics', async () => {

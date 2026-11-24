@@ -514,7 +514,7 @@ Async practices, fair meeting rotation, end-to-end ownership per location, equit
 ## Further Reading
 
 - [The Manager's Path (Camille Fournier)](https://www.oreilly.com/library/view/the-managers-path/9781491973882/) — the standard guide from tech lead to senior engineering leadership.
-- [Google re:Work: Manager guides](https://rework.withgoogle.com/subjects/managers/) — VERIFY: link path; research-based guidance including Project Oxygen findings.
+- [Google re:Work: The research behind great managers](https://rework.withgoogle.com/intl/en/guides/following-the-data-the-research-behind-great-managers) — research-based guidance including Project Oxygen findings.
 - [Radical Candor](https://www.radicalcandor.com/) — feedback that combines care and directness.
-- [Lara Hogan: Resilient Management](https://larahogan.me/resources/) — VERIFY: link path; practical tools for 1:1s, feedback and team dynamics.
+- [Lara Hogan (Wherewithall): Resources for new managers](https://resources-for-new-managers.com/) — practical tools for 1:1s, feedback and team dynamics.
 - [Team Topologies key concepts](https://teamtopologies.com/key-concepts) — designing teams around flow and cognitive load.

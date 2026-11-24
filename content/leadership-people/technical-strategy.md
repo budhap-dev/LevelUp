@@ -667,9 +667,9 @@ A balanced approach of enablement and guardrails, platform thinking, risk-tiered
 
 ## Further Reading
 
-- [Good Strategy Bad Strategy (Richard Rumelt)](https://www.goodstrategybadstrategy.com/) — VERIFY: site availability; the source of the diagnosis, guiding policy and coherent actions kernel.
+- [Good Strategy Bad Strategy (Richard Rumelt)](https://profilebooks.com/work/good-strategy-bad-strategy/) — the source of the diagnosis, guiding policy and coherent actions kernel.
 - [Writing an engineering strategy (Will Larson)](https://lethain.com/eng-strategies/) — a practical guide to writing engineering strategy from design documents.
 - [Staff Engineer: Leadership beyond the management track](https://staffeng.com/) — Larson's essays and stories on how Staff+ engineers shape direction.
 - [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar) — the original radar format, with guidance on building your own.
-- [Wardley Maps (Simon Wardley)](https://learnwardleymapping.com/) — VERIFY: canonical source; free introduction to mapping value chains and evolution.
+- [Learn Wardley Mapping (Ben Mosior)](https://learnwardleymapping.com/) — free introduction to mapping value chains and evolution.
 - [Team Topologies key concepts](https://teamtopologies.com/key-concepts) — organisational design choices that technical strategy must account for.

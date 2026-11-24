@@ -357,7 +357,7 @@ Use **idempotency keys**:
 3. Perform the operation, passing the same key downstream (payment providers support it), store the final response with the key.
 4. Keys expire after a window (e.g. 24 h).
 
-Details: scope keys per client/account; make the storage durable; handle crashes mid-operation (status remains in progress → recover by querying the downstream provider or by reconciliation). Document the behaviour for client developers. The IETF has a draft standardising the `Idempotency-Key` header (VERIFY: status).
+Details: scope keys per client/account; make the storage durable; handle crashes mid-operation (status remains in progress → recover by querying the downstream provider or by reconciliation). Document the behaviour for client developers. An IETF draft to standardise the `Idempotency-Key` header expired in 2026 without becoming an RFC, but the header remains a widely used convention (Stripe and many payment APIs use it).
 
 **What the interviewer is looking for:**
 The full protocol including in-progress and mismatched-body cases, key scoping, expiry and downstream propagation.

@@ -40,7 +40,7 @@ If no decision depends on the estimate, skip it.
 
 ### Ranges, confidence and the cone of uncertainty
 
-Early in a project, actual outcomes can plausibly range widely around the estimate — the classic "cone of uncertainty" (Boehm/McConnell) shows the range narrowing as requirements and design solidify. VERIFY: the often-quoted 0.25×–4× range at initial concept is illustrative from McConnell's work, not a law.
+Early in a project, actual outcomes can plausibly range widely around the estimate — the classic "cone of uncertainty" (Boehm/McConnell) shows the range narrowing as requirements and design solidify. The often-quoted 0.25×–4× range at initial concept comes from Boehm's data as popularised by McConnell; treat it as illustrative, not a law.
 
 Practical rules:
 - Give **ranges** with an explicit **confidence level** (P50 vs P85).
@@ -210,7 +210,7 @@ Mechanics, anti-anchoring, the conversation value and splitting/spikes.
 **Level:** Foundation
 
 **Model answer:**
-The cone of uncertainty (popularised by Barry Boehm and Steve McConnell) illustrates that estimates made early in a project — at the idea stage — have a very wide range of possible outcomes, and the range narrows as requirements, design and implementation progress and uncertainty is resolved. (The specific multipliers often quoted are illustrative, not universal — VERIFY.)
+The cone of uncertainty (popularised by Barry Boehm and Steve McConnell) illustrates that estimates made early in a project — at the idea stage — have a very wide range of possible outcomes, and the range narrows as requirements, design and implementation progress and uncertainty is resolved. (The specific multipliers often quoted are illustrative, not universal.)
 
 Implications:
 - Early estimates should be **wide ranges**, not commitments.
@@ -522,7 +522,7 @@ Purpose-driven estimation, data, probabilistic standards, smaller batches, calib
 
 ## Further Reading
 
-- [Software Estimation: Demystifying the Black Art (Steve McConnell)](https://www.microsoftpressstore.com/store/software-estimation-demystifying-the-black-art-9780735605350) — VERIFY: link path; the classic reference on estimation techniques and the cone of uncertainty.
-- [Actionable Agile Metrics for Predictability (Daniel Vacanti)](https://actionableagile.com/books/) — VERIFY: link path; flow metrics and Monte Carlo forecasting.
-- [Scrum.org: Estimation in Scrum](https://www.scrum.org/resources/blog/practical-fibonacci-beginners-guide-relative-sizing) — VERIFY: link path; relative sizing guidance.
+- [Software Estimation: Demystifying the Black Art (Steve McConnell)](https://www.microsoftpressstore.com/store/software-estimation-demystifying-the-black-art-9780735605350) — the classic reference on estimation techniques and the cone of uncertainty.
+- [Actionable Agile Metrics for Predictability (Daniel Vacanti)](https://actionableagile.com/books/) — flow metrics and Monte Carlo forecasting.
+- [Scrum.org: Estimation in Scrum](https://www.scrum.org/resources/blog/practical-fibonacci-beginners-guide-relative-sizing) — relative sizing guidance.
 - [Shape Up (Basecamp)](https://basecamp.com/shapeup) — appetite-based scoping as an alternative to estimation.

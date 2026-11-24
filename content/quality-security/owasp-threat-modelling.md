@@ -20,22 +20,22 @@ status: complete
 
 ## Core Concepts
 
-### OWASP Top 10 (2021 edition)
+### OWASP Top 10 (2025 edition)
 
 | # | Category | Typical example | Core defence |
 |---|---|---|---|
-| A01 | Broken Access Control | `/api/invoices/123` returns another customer's invoice (IDOR) | Server-side, deny-by-default, object-level checks |
-| A02 | Cryptographic Failures | Passwords hashed with SHA-1; PII sent over HTTP | TLS everywhere, Argon2id/bcrypt, managed keys |
-| A03 | Injection (incl. XSS) | `"SELECT ... WHERE id = " + id` | Parameterised queries, encoding, validation |
-| A04 | Insecure Design | No rate limit on OTP verification | Threat modelling, secure design patterns |
-| A05 | Security Misconfiguration | Debug endpoints in prod, default creds, public bucket | Hardened defaults, IaC + policy checks |
-| A06 | Vulnerable & Outdated Components | Log4Shell in a transitive dependency | SCA, SBOMs, fast patch pipeline |
-| A07 | Identification & Authentication Failures | Credential stuffing, weak session handling | MFA, rate limits, secure sessions |
-| A08 | Software & Data Integrity Failures | Unsigned updates, CI pulling unpinned scripts | Signing, pinned dependencies, protected pipelines |
-| A09 | Security Logging & Monitoring Failures | Breach undetected for months | Audit logs, alerting, incident response |
-| A10 | Server-Side Request Forgery | Fetch-URL feature reaches cloud metadata endpoint | Allow-lists, network egress controls |
+| A01 | Broken Access Control (now includes SSRF) | `/api/invoices/123` returns another customer's invoice (IDOR); a fetch-URL feature reaches the cloud metadata endpoint | Server-side, deny-by-default, object-level checks; egress allow-lists |
+| A02 | Security Misconfiguration | Debug endpoints in prod, default creds, public bucket | Hardened defaults, IaC + policy checks |
+| A03 | Software Supply Chain Failures | Log4Shell in a transitive dependency; a compromised package or build step | SCA, SBOMs, pinned and verified dependencies, protected pipelines |
+| A04 | Cryptographic Failures | Passwords hashed with SHA-1; PII sent over HTTP | TLS everywhere, Argon2id/bcrypt, managed keys |
+| A05 | Injection (incl. XSS) | `"SELECT ... WHERE id = " + id` | Parameterised queries, encoding, validation |
+| A06 | Insecure Design | No rate limit on OTP verification | Threat modelling, secure design patterns |
+| A07 | Authentication Failures | Credential stuffing, weak session handling | MFA, rate limits, secure sessions |
+| A08 | Software or Data Integrity Failures | Unsigned updates, insecure deserialisation | Signing, integrity checks, safe deserialisation |
+| A09 | Security Logging & Alerting Failures | Breach undetected for months | Audit logs, alerting, incident response |
+| A10 | Mishandling of Exceptional Conditions | An error path fails open and skips an authorisation check | Fail closed, centralised error handling, tests for error paths |
 
-VERIFY: OWASP published a 2025 edition of the Top 10 with revised categories (for example a software supply chain category); check the current list before quoting numbering. Related lists: **OWASP API Security Top 10** (2023) and **OWASP Top 10 for LLM Applications**.
+Compared with the 2021 edition, SSRF was folded into Broken Access Control, Vulnerable & Outdated Components widened into Software Supply Chain Failures, and Mishandling of Exceptional Conditions is new. Related lists: **OWASP API Security Top 10** (2023) and **OWASP Top 10 for LLM Applications**.
 
 ### Key vulnerability classes and defences
 
@@ -163,7 +163,7 @@ For each arrow crossing a boundary, ask STRIDE questions — e.g. *upload*: can 
 **Level:** Foundation
 
 **Model answer:**
-The OWASP Top 10 is a regularly updated **awareness document** listing the most critical categories of web application security risk, based on data from many organisations and community input. The 2021 edition is led by **Broken Access Control**, followed by cryptographic failures, injection, insecure design, security misconfiguration, vulnerable components, authentication failures, software/data integrity failures, logging/monitoring failures and SSRF (a 2025 edition revises this — VERIFY current list).
+The OWASP Top 10 is a regularly updated **awareness document** listing the most critical categories of web application security risk, based on data from many organisations and community input. The 2025 edition is led by **Broken Access Control** (which now includes SSRF), followed by security misconfiguration, **software supply chain failures** (new), cryptographic failures, injection, insecure design, authentication failures, software or data integrity failures, logging and alerting failures, and **mishandling of exceptional conditions** (new).
 
 Use it to:
 - Educate developers on common vulnerability classes and defences.
@@ -555,7 +555,7 @@ Incident structure, inventory via SBOM, rapid compensating controls, compromise 
 ## Cheat Sheet
 
 ### OWASP and vulnerability classes
-- **OWASP Top 10** — awareness list; 2021 led by Broken Access Control; use ASVS for testable requirements.
+- **OWASP Top 10** — awareness list; 2025 edition led by Broken Access Control, with supply chain failures new at A03; use ASVS for testable requirements.
 - **IDOR / BOLA** — missing object-level authorisation; check ownership on every access.
 - **SQL injection** — fix with parameterised queries; allow-list identifiers.
 - **XSS** — contextual output encoding, sanitise rich HTML, nonce-based CSP, HttpOnly cookies.
@@ -582,5 +582,5 @@ Incident structure, inventory via SBOM, rapid compensating controls, compromise 
 - [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/) — concise defensive guidance per vulnerability class (XSS, SSRF, CSRF, file upload…).
 - [Threat Modeling Manifesto](https://www.threatmodelingmanifesto.org/) — values and principles from leading practitioners.
 - [OWASP Threat Dragon](https://owasp.org/www-project-threat-dragon/) — free threat-modelling diagram tool.
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — VERIFY: link path; LLM-specific risks such as prompt injection.
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — LLM-specific risks such as prompt injection.
 - [SLSA framework](https://slsa.dev/) — supply-chain levels for software artefacts and provenance.

@@ -90,7 +90,7 @@ Producers and consumers deploy independently, so schemas must evolve compatibly.
 ### Platform notes
 
 - Kafka 4.0 removed ZooKeeper; clusters run in **KRaft** mode.
-- VERIFY: Kafka "share groups" (KIP-932, queue-like consumption) were early access in 4.0 and are maturing in later releases.
+- Kafka "share groups" (KIP-932, queue-like consumption with per-record acknowledgement) were early access in 4.0, a preview in 4.1 and production-ready from 4.2 (2026). They give up per-partition ordering.
 - Azure Event Hubs exposes a Kafka-compatible endpoint; Service Bus is the choice for enterprise messaging features (sessions, transactions, scheduled delivery, duplicate detection).
 
 ## How It Works
@@ -354,7 +354,7 @@ Why it hurts: with the classic **eager** protocol, every consumer gives up *all*
 Mitigations:
 - **Cooperative incremental rebalancing** (`CooperativeStickyAssignor`): only the partitions that move are revoked.
 - **Static membership** (`group.instance.id`): a restarting pod rejoins with the same identity within the session timeout and does not trigger a rebalance. This is ideal for rolling deploys on Kubernetes.
-- **The next-generation consumer protocol** (KIP-848), where the broker coordinates assignment incrementally. VERIFY: generally available for consumers from Kafka 4.0.
+- **The next-generation consumer protocol** (KIP-848), where the broker coordinates assignment incrementally. Generally available for consumers from Kafka 4.0.
 - **Keep `poll()` loops fast:** bound `max.poll.records` and move slow work off the poll thread (with care for offset commits), or raise `max.poll.interval.ms` deliberately.
 - **Commit offsets** in the partitions-revoked callback so the next owner doesn't reprocess a large batch.
 
@@ -502,7 +502,7 @@ Problem-first reasoning, keeping sync where it fits, a candid account of costs, 
 **Model answer:**
 First agree the targets. Can the business accept losing the last few seconds of events (the **RPO**, recovery point objective)? How fast must processing resume (the **RTO**, recovery time objective)? Is active-active really needed? Then choose a topology:
 
-- **Active-passive with asynchronous replication.** Mirror topics to the DR cluster with MirrorMaker 2 or Confluent Cluster Linking (VERIFY: Event Hubs offers geo-replication of data in its Premium and Dedicated tiers; older geo-disaster recovery pairing replicated metadata only). The RPO is the replication lag. On failover, producers and consumers switch bootstrap servers.
+- **Active-passive with asynchronous replication.** Mirror topics to the DR cluster with MirrorMaker 2 or Confluent Cluster Linking (on Azure, Event Hubs geo-replication, generally available since 2025 for Premium and Dedicated, replicates data and consumer offsets; the older geo-disaster recovery pairing replicates metadata only). The RPO is the replication lag. On failover, producers and consumers switch bootstrap servers.
 - **Active-active.** Each region produces to local topics (`eu.orders`, `us.orders`) and mirrors the other's. Consumers read both. There is no single global order, so per-entity ordering needs **home-region ownership** of each entity, or conflict handling with versions.
 - **Stretched cluster** across nearby availability zones or metro regions with synchronous replication (`acks=all`, `min.insync.replicas`). It gives a zero RPO but needs low latency between sites, so it doesn't work across continents.
 
@@ -549,4 +549,4 @@ RPO and RTO first, topology trade-offs, offset translation, accepting duplicates
 - [Azure Service Bus messaging overview](https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview) — queues, topics, sessions and dead-lettering.
 - [Azure Event Hubs for Apache Kafka](https://learn.microsoft.com/en-us/azure/event-hubs/azure-event-hubs-apache-kafka-overview) — using the Kafka protocol on Azure.
 - [AsyncAPI specification](https://www.asyncapi.com/docs) — documenting event-driven APIs.
-- [Transactional outbox pattern (Azure Architecture Center)](https://learn.microsoft.com/en-us/azure/architecture/databases/guide/transactional-outbox-cosmos) — VERIFY: link path; a worked outbox example on Azure.
+- [Transactional outbox pattern (Azure Architecture Center)](https://learn.microsoft.com/en-us/azure/architecture/databases/guide/transactional-out-box-cosmos) — a worked outbox example on Azure.

@@ -538,4 +538,4 @@ Stage-appropriate structures, platform + embedded model, roles and the data/MLOp
 - [scikit-learn User Guide](https://scikit-learn.org/stable/user_guide.html) — models, evaluation, pipelines and cross-validation.
 - [Attention Is All You Need (Vaswani et al., 2017)](https://arxiv.org/abs/1706.03762) — the original transformer paper.
 - [Google: Rules of Machine Learning](https://developers.google.com/machine-learning/guides/rules-of-ml) — engineering best practices for production ML.
-- [Hidden Technical Debt in Machine Learning Systems (Sculley et al., 2015)](https://papers.nips.cc/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html) — VERIFY: link path; why ML systems accumulate technical debt.
+- [Hidden Technical Debt in Machine Learning Systems (Sculley et al., 2015)](https://papers.nips.cc/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html) — why ML systems accumulate technical debt.

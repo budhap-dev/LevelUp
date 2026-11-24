@@ -524,8 +524,8 @@ Quantified trade-offs, protected capacity mechanisms, deliberate debt management
 
 ## Further Reading
 
-- [Amy Edmondson: The Fearless Organization](https://amycedmondson.com/books/) — VERIFY: link path; psychological safety research and practice.
-- [Google re:Work: Understand team effectiveness](https://rework.withgoogle.com/guides/understanding-team-effectiveness/steps/introduction/) — VERIFY: link path; Project Aristotle findings.
+- [Amy Edmondson: The Fearless Organization](https://amycedmondson.com/books/) — psychological safety research and practice.
+- [Google re:Work: Understand team effectiveness](https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness) — Project Aristotle findings.
 - [Kotter: Leading Change (8 steps)](https://www.kotterinc.com/methodology/8-steps/) — the change model used in many organisations.
 - [Will Larson: An Elegant Puzzle](https://lethain.com/elegant-puzzle/) — systems thinking for engineering leadership.
 - [Netflix culture memo](https://jobs.netflix.com/culture) — the origin of "context, not control".

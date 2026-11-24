@@ -118,7 +118,7 @@ spec:
           startupProbe: { httpGet: { path: /live, port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
           securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
           lifecycle:
-            preStop: { sleep: { seconds: 5 } }   # native sleep action (no shell needed in distroless); lets endpoints update before SIGTERM. VERIFY: GA version of PodLifecycleSleepAction
+            preStop: { sleep: { seconds: 5 } }   # native sleep action (no shell needed in distroless); lets endpoints update before SIGTERM. On by default from 1.30, stable in 1.34.
 ```
 
 ### Resources, QoS and scheduling

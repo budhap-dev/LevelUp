@@ -635,7 +635,7 @@ Aggregate-level granularity, domain-owned interfaces, separating reads from aggr
 
 - [Domain-Driven Design Reference (Eric Evans)](https://www.domainlanguage.com/ddd/reference/) — Evans's concise summary of the patterns and definitions.
 - [DDD Crew on GitHub](https://github.com/ddd-crew) — free, practical templates: bounded context canvas, context mapping, aggregate design canvas.
-- [Effective Aggregate Design (Vaughn Vernon)](https://www.dddcommunity.org/library/vernon_2011/) — VERIFY: link path; the essay series behind the small-aggregate rules.
+- [Effective Aggregate Design (Vaughn Vernon)](https://www.dddcommunity.org/library/vernon_2011/) — the essay series behind the small-aggregate rules.
 - [Microsoft: Domain analysis for microservices](https://learn.microsoft.com/en-us/azure/architecture/microservices/model/domain-analysis) — worked example of moving from domain analysis to service boundaries.
 - [Martin Fowler: Bounded Context](https://martinfowler.com/bliki/BoundedContext.html) — a short, clear explanation with examples.
 - [Team Topologies](https://teamtopologies.com/key-concepts) — team types and interaction modes that pair naturally with bounded contexts.

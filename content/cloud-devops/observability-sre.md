@@ -329,7 +329,7 @@ Why standardise:
 - **Consistency:** the same attribute names across teams make cross-service queries possible.
 - **Central control:** redaction of PII, sampling and routing happen in the Collector, not in 60 codebases.
 
-Status: tracing and metrics are stable in the major languages, and logs are stable in the specification with SDK maturity varying by language (VERIFY: check per-language status). Profiles are a newer signal still being stabilised (VERIFY).
+Status: tracing and metrics are stable in the major languages, and logs are stable in the specification with SDK maturity varying by language (check the per-language status page before relying on it). Profiles, the fourth signal, entered public alpha in 2026 and is not yet meant for critical production use.
 
 **What the interviewer is looking for:**
 The components (API, SDK, Collector, OTLP, semantic conventions) and the strategic reason: decoupling instrumentation from the backend.

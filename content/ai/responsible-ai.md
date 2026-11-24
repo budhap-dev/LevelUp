@@ -63,7 +63,7 @@ Hallucinations, harmful or biased content, prompt injection and jailbreaks, leak
 
 ### Regulation and frameworks
 
-- **EU AI Act:** risk tiers — **prohibited** practices (e.g. social scoring by public authorities, certain manipulative techniques), **high-risk** systems (e.g. employment, credit scoring, education, critical infrastructure, certain biometrics) with requirements for risk management, data governance, documentation, logging, human oversight, accuracy and robustness; **transparency** obligations (e.g. disclosing chatbots, labelling deepfakes); and obligations for **general-purpose AI** model providers. Obligations phase in from 2025 to 2027. VERIFY: exact application dates and any amendments or delays to high-risk obligations.
+- **EU AI Act:** risk tiers — **prohibited** practices (e.g. social scoring by public authorities, certain manipulative techniques), **high-risk** systems (e.g. employment, credit scoring, education, critical infrastructure, certain biometrics) with requirements for risk management, data governance, documentation, logging, human oversight, accuracy and robustness; **transparency** obligations (e.g. disclosing chatbots, labelling deepfakes); and obligations for **general-purpose AI** model providers. Obligations phase in: prohibitions and AI literacy from 2 February 2025, general-purpose AI obligations from 2 August 2025, most transparency obligations from 2 August 2026. The 2026 Digital Omnibus on AI delayed high-risk obligations to 2 December 2027 for stand-alone (Annex III) systems and 2 August 2028 for AI in regulated products (Annex I).
 - **GDPR:** lawful basis, data minimisation, rights regarding automated decision-making (Article 22), DPIAs.
 - **NIST AI Risk Management Framework:** Govern, Map, Measure, Manage.
 - **ISO/IEC 42001:** AI management system standard (certifiable).
@@ -394,7 +394,7 @@ The EU AI Act is a risk-based regulation applying to providers and deployers of 
 - **Transparency obligations:** disclose AI interaction (chatbots), label deepfakes and certain AI-generated content.
 - **General-purpose AI models:** obligations for model providers (documentation, copyright policy, training data summaries; extra duties for systemic-risk models).
 
-Obligations phase in over several years (VERIFY: current timeline and any delays). Engineering implications: inventory and classify use cases, build logging and traceability, evaluation and documentation pipelines, human-oversight features, and change management that keeps compliance evidence current — designing these in is far cheaper than retrofitting.
+Obligations phase in from 2025; the 2026 Digital Omnibus pushed high-risk obligations back to December 2027 (stand-alone systems such as hiring or credit scoring) and August 2028 (AI inside regulated products). Engineering implications: inventory and classify use cases, build logging and traceability, evaluation and documentation pipelines, human-oversight features, and change management that keeps compliance evidence current — designing these in is far cheaper than retrofitting.
 
 **What the interviewer is looking for:**
 Risk tiers, high-risk obligations, transparency, GPAI obligations, phased timing and engineering implications.
@@ -500,4 +500,4 @@ Risk-proportionate processes, platforms that accelerate safely, staged autonomy 
 - [OECD AI Principles](https://oecd.ai/en/ai-principles) — internationally adopted principles for trustworthy AI.
 - [ISO/IEC 42001](https://www.iso.org/standard/81230.html) — AI management system standard.
 - [Model Cards for Model Reporting (Mitchell et al., 2019)](https://arxiv.org/abs/1810.03993) — the original model card proposal.
-- [ICO: Guidance on AI and data protection](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/artificial-intelligence/) — VERIFY: link path; UK regulator guidance on GDPR and AI.
+- [ICO: Guidance on AI and data protection](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/artificial-intelligence/) — UK regulator guidance on GDPR and AI.

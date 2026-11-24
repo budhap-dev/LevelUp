@@ -350,7 +350,7 @@ Prototype chain lookup, class sugar mapping, and practical guidance.
 - `require`/`module.exports`, synchronous, dynamic (can require conditionally).
 - Node's original module system; still common in older packages and tooling.
 
-Interop issues: importing CJS from ESM (default vs named exports), loading ESM from CJS (historically only via dynamic `import()`; newer Node versions allow `require()` of synchronous ESM — VERIFY: version support), dual-package hazards (two copies of a library loaded), `__dirname` not available in ESM (use `import.meta.dirname`/`import.meta.url`).
+Interop issues: importing CJS from ESM (default vs named exports), loading ESM from CJS (historically only via dynamic `import()`; newer Node versions allow `require()` of synchronous ESM, unflagged in Node 22.12, 20.19 and 23+), dual-package hazards (two copies of a library loaded), `__dirname` not available in ESM (use `import.meta.dirname`/`import.meta.url`).
 
 Guidance: write ESM for new code; publish libraries with proper `exports` maps; be careful with dual packages.
 
@@ -492,7 +492,7 @@ Pragmatic comparison, constraints of edge runtimes and portability strategy.
 - **Understand the TC39 process:** proposals move through stages (0–4); stage 4 features are in the yearly ECMAScript edition. Adopt stage-4 features freely (with appropriate targets); be cautious with earlier-stage proposals (syntax may change — e.g. decorators changed significantly before standardisation).
 - **Define browser/runtime support targets** (browserslist, Node versions) and let tools transpile/polyfill (TypeScript, SWC/Babel, core-js) only where needed — over-polyfilling bloats bundles.
 - **Lint rules and codemods** to roll out new idioms (e.g. `??`, `?.`, `toSorted`, `Array.prototype.at`) consistently; automated migrations rather than manual edits.
-- **Baseline features** (web-features "Baseline" status) indicate cross-browser availability — VERIFY: terminology for Baseline "widely available".
+- **Baseline features** (web-features "Baseline" status) indicate cross-browser availability — "newly available" once a feature works in all core browsers, "widely available" 30 months after that.
 - **Monitor usage** of old patterns and deprecations; upgrade toolchains regularly.
 - **Document conventions** in the engineering handbook so new features are used consistently.
 
@@ -554,7 +554,7 @@ Workers, transfer vs copy, SharedArrayBuffer requirements, service workers' role
 ## Further Reading
 
 - [MDN JavaScript Guide](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide) — the authoritative practical reference.
-- [MDN: The event loop and concurrency model](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop) — VERIFY: link path; tasks, microtasks and the call stack.
+- [MDN: The event loop and concurrency model](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model) — tasks, microtasks and the call stack.
 - [ECMAScript specification (TC39)](https://tc39.es/ecma262/) — the language standard.
 - [TC39 proposals](https://github.com/tc39/proposals) — stages of upcoming language features.
 - [web.dev: Optimize long tasks](https://web.dev/articles/optimize-long-tasks) — yielding and main-thread responsiveness.

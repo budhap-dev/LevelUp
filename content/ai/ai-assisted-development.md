@@ -535,8 +535,8 @@ Concrete codebase properties that improve AI effectiveness and safety, framed as
 
 ## Further Reading
 
-- [DORA research: AI-assisted software development](https://dora.dev/research/ai/) — VERIFY: link path; research on AI adoption and delivery outcomes.
+- [DORA research: AI-assisted software development](https://dora.dev/ai/) — research on AI adoption and delivery outcomes.
 - [GitHub Copilot documentation](https://docs.github.com/en/copilot) — features, custom instructions and enterprise policies.
-- [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/overview) — VERIFY: link path; agentic coding workflows and repository instruction files.
+- [Claude Code documentation](https://code.claude.com/docs/en/overview) — agentic coding workflows and repository instruction files.
 - [Model Context Protocol](https://modelcontextprotocol.io/) — the open protocol for connecting AI tools to data and systems.
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — VERIFY: link path; prompt injection and other risks relevant to agents.
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — prompt injection and other risks relevant to agents.

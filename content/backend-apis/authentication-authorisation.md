@@ -36,7 +36,7 @@ Main grants today:
 - **Client credentials** — machine-to-machine; no user.
 - **Device authorisation grant** — TVs/CLIs without a browser.
 - **Refresh tokens** — obtain new access tokens without re-login; rotate on use.
-- Deprecated: implicit grant and resource owner password credentials (not in OAuth 2.1 drafts; VERIFY: OAuth 2.1 standardisation status).
+- Deprecated: implicit grant and resource owner password credentials (both dropped from OAuth 2.1, which is still an IETF Internet-Draft; the OAuth 2.0 Security Best Current Practice, RFC 9700, already advises against them).
 
 OIDC adds the **ID token** (a JWT about the authentication event: `sub`, `iss`, `aud`, `exp`, `nonce`, `auth_time`, `amr`), a UserInfo endpoint, and discovery (`/.well-known/openid-configuration`) with signing keys (JWKS). **ID tokens are for the client; access tokens are for APIs** — never send an ID token to an API as authorisation.
 
@@ -307,7 +307,7 @@ Securing them:
 Revocation strategies:
 - Revoke refresh tokens/sessions at the IdP (logout, password reset, admin action) — new access tokens stop within one access-token lifetime.
 - For immediate cut-off: **opaque tokens + introspection** (with short caching), or a **deny list** of token ids (`jti`) / a per-user "tokens issued before X are invalid" timestamp checked by APIs.
-- Push revocation events (e.g. OpenID Shared Signals / CAEP) to resource servers where supported (VERIFY: adoption varies).
+- Push revocation events (e.g. OpenID Shared Signals / CAEP) to resource servers where supported (the Shared Signals Framework, CAEP and RISC became final OpenID specifications in September 2025, but vendor support still varies).
 
 **What the interviewer is looking for:**
 Rotation with reuse detection, lifetimes, binding, and realistic revocation options with their trade-offs.
@@ -561,6 +561,6 @@ Core principles, concrete controls for users, devices, services and networks, an
 - [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html) — the OIDC specification: ID tokens, flows and claims.
 - [RFC 7636: PKCE](https://www.rfc-editor.org/rfc/rfc7636) — Proof Key for Code Exchange.
 - [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) — practical guidance on login, MFA and account recovery.
-- [NIST SP 800-63B: Digital Identity Guidelines](https://pages.nist.gov/800-63-4/sp800-63b.html) — VERIFY: current revision URL; authoritative password and authenticator guidance.
+- [NIST SP 800-63B: Digital Identity Guidelines](https://pages.nist.gov/800-63-4/sp800-63b.html) — authoritative password and authenticator guidance.
 - [Zanzibar: Google's Consistent, Global Authorization System](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/) — the paper behind relationship-based access control systems.
 - [OWASP API Security Top 10](https://owasp.org/API-Security/) — API-specific risks, led by broken object-level authorisation.

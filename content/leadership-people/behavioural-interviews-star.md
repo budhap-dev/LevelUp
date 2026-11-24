@@ -491,6 +491,6 @@ Level-appropriate scope, clear personal contribution, business impact with evide
 ## Further Reading
 
 - [Amazon Leadership Principles](https://www.amazon.jobs/content/en/our-workplace/leadership-principles) — widely used as a model for behavioural interview competencies.
-- [Google re:Work: Structured interviewing](https://rework.withgoogle.com/guides/hiring-use-structured-interviewing/steps/introduction/) — VERIFY: link path; shows how interviewers design and score behavioural questions.
+- [Google re:Work: A guide to structured interviewing](https://rework.withgoogle.com/intl/en/guides/a-guide-to-structured-interviewing-for-better-hiring-practices) — shows how interviewers design and score behavioural questions.
 - [Staff Engineer: stories and guides](https://staffeng.com/stories/) — real examples of staff-level scope useful for calibrating your stories.
-- [The STAR method (MIT Career Advising)](https://capd.mit.edu/resources/the-star-method-for-behavioral-interviews/) — VERIFY: link path; concise explanation with examples.
+- [The STAR method (MIT Career Advising)](https://capd.mit.edu/resources/the-star-method-for-behavioral-interviews/) — concise explanation with examples.

@@ -517,5 +517,5 @@ Awareness of critiques, alternative views (deep modules), and a nuanced, outcome
 - [Martin Fowler: Refactoring](https://refactoring.com/) — the catalogue of behaviour-preserving changes and code smells.
 - [Robert C. Martin: The Single Responsibility Principle](https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html) — the "reason to change" definition from its author.
 - [Sandi Metz: The Wrong Abstraction](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction) — why duplication can be cheaper than the wrong abstraction.
-- [A Philosophy of Software Design (John Ousterhout)](https://web.stanford.edu/~ouster/cgi-bin/book.php) — VERIFY: link path; deep modules and complexity.
+- [A Philosophy of Software Design (John Ousterhout)](https://web.stanford.edu/~ouster/cgi-bin/book.php) — deep modules and complexity.
 - [Google Engineering Practices: Code Review](https://google.github.io/eng-practices/review/) — what reviewers should look for and how.

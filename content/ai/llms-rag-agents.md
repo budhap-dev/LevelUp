@@ -513,7 +513,7 @@ Treat prompts, models and retrieval as **versioned, tested, observable component
   - LLM-as-judge scoring (faithfulness, relevance) calibrated against human labels.
   - Gating: a change ships only if scores don't regress beyond a tolerance.
 - **Online monitoring:**
-  - Traces of each request: retrieval results, prompts, tool calls, tokens, latency and cost (OpenTelemetry has GenAI semantic conventions; VERIFY: their maturity).
+  - Traces of each request: retrieval results, prompts, tool calls, tokens, latency and cost (OpenTelemetry has GenAI semantic conventions, still in Development status in 2026, so pin instrumentation versions because attribute names change).
   - User feedback (thumbs up or down, edits, escalations), sampled human review and drift detection on input topics.
 - **Guardrails:** input checks (prompt-injection heuristics, PII detection), output checks (policy filters, grounding checks), rate and spend limits per user and tenant, and kill switches.
 - **Release practices:** A/B tests or shadow comparisons for prompt and model changes, canaries and fast rollback.

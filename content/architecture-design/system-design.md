@@ -41,7 +41,7 @@ Estimates tell you which component breaks first. Useful anchors (orders of magni
 
 - 1 day ≈ 86,400 s ≈ **10⁵ s**. So 1M requests/day ≈ 12 req/s on average; plan for a peak of 2–10× that.
 - Main memory reference ≈ 100 ns; SSD random read ≈ 100 µs; round trip inside a data centre ≈ 0.5 ms; cross-continent round trip ≈ 100–150 ms.
-- A single well-tuned relational primary handles roughly thousands to low tens of thousands of simple writes/s. VERIFY: depends heavily on hardware, row size and durability settings.
+- A single well-tuned relational primary handles roughly thousands to low tens of thousands of simple writes/s. The real figure depends heavily on hardware, row size, indexes and durability settings, so benchmark rather than quote.
 - A cache node (Redis-class) serves on the order of 100k simple ops/s.
 
 ```ts
@@ -243,7 +243,7 @@ CAP says that when a **network partition** separates replicas, a system must cho
 
 CAP says nothing about the normal case, which is where systems spend nearly all of their time. **PACELC** adds: *Else* (no partition), choose between **latency** and **consistency**. Synchronous replication across zones gives consistency at the cost of latency. Asynchronous replication is fast but can lose recent writes on failover or serve stale reads.
 
-Examples: a single-leader relational database with synchronous standby is PC/EC. DynamoDB with eventually consistent reads leans PA/EL, but it offers strongly consistent reads per request at extra cost and latency. VERIFY: DynamoDB strongly consistent reads are served from the leader replica and cost twice the read units.
+Examples: a single-leader relational database with synchronous standby is PC/EC. DynamoDB with eventually consistent reads leans PA/EL, but it offers strongly consistent reads per request at extra cost and latency. DynamoDB serves strongly consistent reads from the partition leader, and they cost twice the read capacity of eventually consistent reads.
 
 **What the interviewer is looking for:**
 That the candidate doesn't treat CAP as "pick two of three", knows its definitions are narrow, and can apply the latency-versus-consistency trade-off to a concrete design decision.
@@ -619,4 +619,4 @@ Judgement: distinguishing reversible from irreversible decisions, tying scale to
 - [Azure Architecture Center](https://learn.microsoft.com/en-us/azure/architecture/) — reference architectures and cloud design patterns (Saga, Outbox, Throttling, Bulkhead).
 - [Amazon Builders' Library](https://aws.amazon.com/builders-library/) — first-hand articles on timeouts, retries with jitter, load shedding and static stability.
 - [Jepsen: Consistency Models](https://jepsen.io/consistency) — a precise map of consistency models and how they relate.
-- VERIFY: [Dynamo: Amazon's Highly Available Key-value Store (2007)](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) — the original paper behind consistent hashing, quorums and leaderless replication in practice.
+- [Dynamo: Amazon's Highly Available Key-value Store (2007)](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) — the original paper behind consistent hashing, quorums and leaderless replication in practice.

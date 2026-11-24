@@ -86,7 +86,7 @@ export function searchKey(params: Record<string, string>): string {
 - **Eviction** under memory pressure: Redis/Valkey offer approximated LRU and LFU (`maxmemory-policy`, e.g. `allkeys-lru`, `allkeys-lfu`, `volatile-lfu`). The default is `noeviction`, which makes writes fail when memory is full; choose `allkeys-*` for a pure cache, `volatile-*` only if the same instance also holds keys that must never be evicted (and then question why it does).
 - **TTL and eviction are different tools**: TTL is a correctness/freshness decision, eviction is a capacity decision. If eviction is doing your expiry for you, you are under-provisioned or caching the wrong things.
 - **Negative caching:** cache "not found" briefly (seconds, not minutes), so repeated lookups for missing ids, including bots enumerating ids, don't hammer the DB.
-- Since Redis 7.4 (2024), individual **hash fields can have their own TTL** (`HEXPIRE`), which helps when one hash mixes volatile and stable fields. VERIFY: Valkey added hash field expiration in Valkey 9.0 (2025).
+- Since Redis 7.4 (2024), individual **hash fields can have their own TTL** (`HEXPIRE`), which helps when one hash mixes volatile and stable fields. Valkey added hash field expiration in Valkey 9.0 (2025).
 
 ### Invalidation
 
@@ -183,7 +183,7 @@ export async function get<T>(key: string, ttlSeconds: number, load: () => Promis
 }
 ```
 
-Pub/sub is fire-and-forget: a disconnected instance misses invalidations, which is why the short L1 TTL is non-negotiable. Redis 6+ also offers **server-assisted client-side caching** (`CLIENT TRACKING`, best with RESP3): the server remembers which keys a connection read and pushes invalidation messages, either per key (default mode) or per prefix (broadcasting mode). VERIFY: node-redis v5 exposes this through a built-in client-side cache option that requires RESP3.
+Pub/sub is fire-and-forget: a disconnected instance misses invalidations, which is why the short L1 TTL is non-negotiable. Redis 6+ also offers **server-assisted client-side caching** (`CLIENT TRACKING`, best with RESP3): the server remembers which keys a connection read and pushes invalidation messages, either per key (default mode) or per prefix (broadcasting mode). node-redis v5 exposes this through a built-in client-side cache option that requires RESP3.
 
 ### HTTP and CDN caching
 
@@ -199,8 +199,8 @@ Pub/sub is fire-and-forget: a disconnected instance misses invalidations, which 
 ### Platform notes
 
 - In March 2024 Redis moved from BSD to source-available licences (RSALv2/SSPL) starting with Redis 7.4, and the Linux Foundation fork **Valkey** followed (forked from Redis 7.2.4), backed by AWS, Google, Oracle and others. Redis 8 (2025) added **AGPLv3** as a third licence option and folded the former Redis Stack modules (JSON, search, time series, probabilistic) into the core distribution.
-- Managed services have followed: AWS ElastiCache and MemoryDB and Google Cloud Memorystore offer Valkey. VERIFY: AWS prices ElastiCache for Valkey roughly 20% lower (node-based) and 33% lower (serverless) than the Redis OSS engine.
-- Azure is steering new workloads from Azure Cache for Redis to **Azure Managed Redis** (built on Redis Enterprise). VERIFY: retirement dates announced in 2025 are 31 March 2027 for the Enterprise/Enterprise Flash tiers and 30 September 2028 for Basic/Standard/Premium. Check before planning a migration.
+- Managed services have followed: AWS ElastiCache and MemoryDB and Google Cloud Memorystore offer Valkey. AWS prices ElastiCache for Valkey roughly 20% lower (node-based) and 33% lower (serverless) than the Redis OSS engine.
+- Azure is steering new workloads from Azure Cache for Redis to **Azure Managed Redis** (built on Redis Enterprise). Retirement dates are 31 March 2027 for the Enterprise/Enterprise Flash tiers and 30 September 2028 for Basic/Standard/Premium, and new Basic/Standard/Premium caches can no longer be created from October 2026.
 - Other options worth knowing: **Memcached** (simple, multi-threaded, no persistence, still excellent for pure key-value), **Dragonfly** and Microsoft's **Garnet** (Redis-protocol-compatible, multi-threaded). Protocol compatibility is rarely 100%; test your commands, Lua scripts and cluster behaviour.
 
 ## How It Works
@@ -312,7 +312,7 @@ Keying the topic by entity id preserves per-entity ordering; making invalidation
 - **Unbounded key cardinality** — caching every search query permutation evicts everything useful.
 - **Cache as source of truth** — sessions or carts only in a non-persistent cache, lost on failover.
 - **Ignoring serialisation cost** — 2 MB JSON blobs make the cache slower than the DB.
-- **Caching personalised responses as public** — one user's data served to others. Steam's December 2015 CDN misconfiguration exposed account pages to other users. VERIFY: Valve reported about 34,000 affected users.
+- **Caching personalised responses as public** — one user's data served to others. Steam's December 2015 CDN misconfiguration exposed account pages to other users. Valve reported about 34,000 affected users.
 - **Unkeyed inputs at the CDN** — a header the origin reflects but the CDN doesn't key on enables cache poisoning.
 - **No timeout on cache calls** — a slow Redis with a default multi-second client timeout turns a cache problem into a full outage. Cache calls need tight timeouts (tens of milliseconds) and a circuit breaker.
 - **`KEYS *` in production** — blocks the server; use `SCAN`.
@@ -748,8 +748,8 @@ Up-to-date platform awareness, licensing literacy and reversibility. Great answe
 ## Further Reading
 
 - [Redis documentation](https://redis.io/docs/latest/) — data types, eviction policies and client-side caching.
-- VERIFY: [Redis: client-side caching reference](https://redis.io/docs/latest/develop/reference/client-side-caching/) — how `CLIENT TRACKING` and server-pushed invalidation work.
-- VERIFY: [Redis: key eviction](https://redis.io/docs/latest/develop/reference/eviction/) — every `maxmemory-policy` and how the LRU/LFU approximations behave.
+- [Redis: client-side caching reference](https://redis.io/docs/latest/develop/reference/client-side-caching/) — how `CLIENT TRACKING` and server-pushed invalidation work.
+- [Redis: key eviction](https://redis.io/docs/latest/develop/reference/eviction/) — every `maxmemory-policy` and how the LRU/LFU approximations behave.
 - [Valkey documentation](https://valkey.io/docs/) — the open-source Redis fork.
 - [MDN: HTTP caching](https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching) — headers, freshness and validation explained.
 - [RFC 9111: HTTP Caching](https://www.rfc-editor.org/rfc/rfc9111) — the specification.
@@ -757,5 +757,5 @@ Up-to-date platform awareness, licensing literacy and reversibility. Great answe
 - [RFC 9213: Targeted HTTP Cache Control](https://www.rfc-editor.org/rfc/rfc9213) — `CDN-Cache-Control` and CDN-specific directives.
 - [Cache-Aside pattern (Azure Architecture Center)](https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside) — pattern guidance and considerations.
 - [Cloudflare Cache documentation](https://developers.cloudflare.com/cache/) — cache keys, purge by tag and edge caching rules in a major CDN.
-- VERIFY: [Azure Managed Redis documentation](https://learn.microsoft.com/en-us/azure/redis/) — the successor to Azure Cache for Redis, including migration guidance.
-- VERIFY: [Amazon ElastiCache caching strategies](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html) — lazy loading, write-through and TTL guidance from AWS.
+- [Azure Managed Redis documentation](https://learn.microsoft.com/en-us/azure/redis/) — the successor to Azure Cache for Redis, including migration guidance.
+- [Amazon ElastiCache caching strategies](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html) — lazy loading, write-through and TTL guidance from AWS.

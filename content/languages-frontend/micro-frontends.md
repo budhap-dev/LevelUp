@@ -40,7 +40,7 @@ status: complete
 
 ### Module Federation
 
-Webpack 5's Module Federation (and successors/implementations for Rspack and Vite — VERIFY: Module Federation 2.0 tooling) lets a **host** (shell) load **remote** modules from separately deployed builds at runtime via a manifest (`remoteEntry`). Dependencies such as React can be **shared** as singletons to avoid duplicate copies, with version negotiation.
+Webpack 5's Module Federation (and Module Federation 2.0, which supports webpack, Rspack and Vite and adds a JSON manifest, runtime plugins and type hints) lets a **host** (shell) load **remote** modules from separately deployed builds at runtime via a manifest (`remoteEntry`). Dependencies such as React can be **shared** as singletons to avoid duplicate copies, with version negotiation.
 
 ```js
 // shell (host) – module federation config (simplified)
@@ -502,6 +502,6 @@ Practical alternatives addressing the same pains with less complexity.
 - [Micro Frontends (Cam Jackson, martinfowler.com)](https://martinfowler.com/articles/micro-frontends.html) — the widely cited introduction with integration approaches.
 - [micro-frontends.org (Michael Geers)](https://micro-frontends.org/) — techniques and principles for micro-frontends.
 - [webpack: Module Federation](https://webpack.js.org/concepts/module-federation/) — concepts and configuration.
-- [Module Federation documentation](https://module-federation.io/) — VERIFY: link path; Module Federation 2.0 and bundler support.
+- [Module Federation documentation](https://module-federation.io/) — Module Federation 2.0 and bundler support.
 - [single-spa documentation](https://single-spa.js.org/docs/getting-started-overview) — runtime orchestration of micro-frontends.
 - [Team Topologies](https://teamtopologies.com/key-concepts) — aligning teams and boundaries.

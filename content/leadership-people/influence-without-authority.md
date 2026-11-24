@@ -545,5 +545,5 @@ Understanding underlying goals, criteria-based decisions, evidence, reversibilit
 - [StaffEng guides](https://staffeng.com/guides/) — Will Larson's guides on operating as a Staff+ engineer.
 - *The Staff Engineer's Path*, Tanya Reilly (O'Reilly) — big-picture thinking, execution and levelling up others.
 - *Influence Without Authority*, Allan R. Cohen & David L. Bradford — the reciprocity ("currencies") model.
-- [Google re:Work: psychological safety](https://rework.withgoogle.com/guides/understanding-team-effectiveness/) — VERIFY: link path; research on what makes teams effective.
+- [Google re:Work: psychological safety](https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness) — research on what makes teams effective.
 - [Amazon leadership principles](https://www.amazon.jobs/content/en/our-workplace/leadership-principles) — origin of "disagree and commit".

@@ -98,7 +98,7 @@ export const log = (msg: string, extra = {}) =>
 
 ### Runtime landscape (2026)
 
-- **LTS lines:** even-numbered releases become LTS (Active then Maintenance, about 30 months total). VERIFY: Node 22 and 24 are the current LTS lines; Node 20 reached end of life in April 2026.
+- **LTS lines:** up to Node 26, even-numbered releases became LTS (Active then Maintenance, about 30 months). From Node 27 there is one major release a year (alpha, then Current in April, LTS in October) and every major becomes LTS. As of late 2026, Node 26, 24 and 22 are the supported LTS lines; Node 20 reached end of life in April 2026.
 - Built-ins reduce dependencies: `fetch` (undici), test runner (`node:test`), watch mode, `.env` loading (`--env-file`), permission model, and TypeScript type stripping (see the TypeScript topic).
 - Alternatives: Deno and Bun offer different trade-offs (built-in TS, tooling, performance) with increasing Node compatibility.
 
@@ -445,7 +445,7 @@ Criteria-based comparison and emphasis on paved-road consistency.
 - **SSRF** from URL-fetching features.
 - **Path traversal** in file serving.
 - **Secrets handling** and environment leakage in logs.
-- **Runtime hardening:** run as non-root, least-privilege credentials, the Node permission model for restricting file/network/child process access where suitable (VERIFY: stability status by version), security headers (Helmet).
+- **Runtime hardening:** run as non-root, least-privilege credentials, the Node permission model for restricting file/network/child process access where suitable (`--permission`, stable since Node 23.5 and 22.13), security headers (Helmet).
 
 **What the interviewer is looking for:**
 Node-specific risks (supply chain, prototype pollution, ReDoS, NoSQL injection, vm misconceptions) with concrete mitigations.
@@ -509,7 +509,7 @@ Main-thread hygiene, connection reuse, bounded concurrency and load shedding, ca
 **Level:** Architect
 
 **Model answer:**
-- **Use LTS releases only** in production (even-numbered majors once they enter Active LTS); plan upgrades well before End of Life — LTS lines get about 30 months of support. Track the official release schedule.
+- **Use LTS releases only** in production (a major once it enters Active LTS; before Node 27 only even-numbered majors did); plan upgrades well before End of Life — LTS lines get about 30 months of support. Track the official release schedule.
 - **Standardise via paved road:** base images, CI templates and `engines` fields pin supported versions; Renovate/Dependabot open upgrade PRs across repositories.
 - **Test upgrades:** run test suites on the next LTS in CI early (matrix builds), watch deprecation warnings, check native modules (node-gyp addons) and dependencies for compatibility.
 - **Roll out progressively:** non-critical services first, then canaries for critical ones; monitor latency, memory and error rates (V8 and GC changes can shift behaviour).
@@ -546,7 +546,7 @@ LTS discipline, automation, early testing, progressive rollout, fleet visibility
 - **Memory leaks** — compare heap snapshots and follow retainer paths.
 
 ### Ecosystem and security
-- **LTS** — even-numbered majors; about 30 months of support; upgrade before EOL.
+- **LTS** — even-numbered majors up to 26, every major from 27 (one per year); about 30 months of LTS; upgrade before EOL.
 - **Prototype pollution** — untrusted merges altering `Object.prototype`; validate and use safe maps.
 - **`vm` is not a sandbox** — never run untrusted code with it.
 

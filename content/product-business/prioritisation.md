@@ -545,5 +545,5 @@ Deciding priorities before planning, outcome-level commitments, explicit depende
 - [Intercom: RICE prioritisation](https://www.intercom.com/blog/rice-simple-prioritization-for-product-managers/) — the original RICE write-up.
 - [SAFe: Weighted Shortest Job First](https://framework.scaledagile.com/wsjf) — WSJF as defined in SAFe.
 - [Black Swan Farming: Cost of Delay](https://blackswanfarming.com/cost-of-delay/) — Joshua Arnold's practical guide to CoD and CD3.
-- [Agile Business Consortium: MoSCoW prioritisation](https://www.agilebusiness.org/dsdm-project-framework/moscow-prioririsation.html) — VERIFY: link path; the DSDM definition of MoSCoW.
+- [Agile Business Consortium: MoSCoW prioritisation](https://www.agilebusiness.org/resource/what-is-moscow-prioritization/) — the DSDM definition of MoSCoW.
 - *The Principles of Product Development Flow*, Donald Reinertsen — the economic foundation of Cost of Delay.

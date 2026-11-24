@@ -387,7 +387,7 @@ Concrete budgets, CI automation, RUM alerts, ownership and process.
 Third parties (analytics, ads, A/B testing, chat, tag managers) often dominate main-thread time and add security and privacy risk.
 - **Inventory and ownership:** list every script, its owner, purpose, cost (bytes, main-thread time, requests) and data collected.
 - **Approval process:** new scripts need a business case, performance and security review, consent integration, and a budget.
-- **Loading strategy:** load after main content and interaction where possible (defer, `requestIdleCallback`, on user action — e.g. load chat widget on click via a facade), avoid synchronous scripts, use `async`, and consider moving to Web Workers (e.g. Partytown-style approaches — VERIFY: maturity) or server-side tagging.
+- **Loading strategy:** load after main content and interaction where possible (defer, `requestIdleCallback`, on user action — e.g. load chat widget on click via a facade), avoid synchronous scripts, use `async`, and consider moving to Web Workers (e.g. Partytown, which is still beta and can break scripts that need synchronous DOM access) or server-side tagging.
 - **Facades:** lightweight placeholders for heavy embeds (video players, maps, chat) that load the real thing on interaction.
 - **Security:** CSP allow-lists, Subresource Integrity where versions are fixed, sandboxed iframes, minimal data sharing.
 - **Measure continuously** with RUM attribution and periodic audits; remove unused scripts.

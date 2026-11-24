@@ -317,7 +317,7 @@ Mechanics, current-state and history modelling, edge cases and operational risks
 - Partition by columns used in filters, commonly date (`event_date`) — enabling partition pruning.
 - Avoid over-partitioning (millions of tiny files) — **small files** kill performance; compact regularly.
 - Clustering/sorting (Z-ordering, clustering keys) co-locate related rows for better skipping.
-- Choose file sizes in the hundreds-of-MB range for typical engines (VERIFY: engine-specific recommendations).
+- Choose file sizes in the hundreds-of-MB range for typical engines (for example Apache Iceberg's default target file size is 512 MB, and Delta Lake's `OPTIMIZE` aims for about 1 GB).
 
 **What the interviewer is looking for:**
 Columnar benefits, table formats, partition pruning and the small-files problem.

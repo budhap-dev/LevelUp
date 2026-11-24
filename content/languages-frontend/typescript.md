@@ -105,9 +105,9 @@ type RouteName = keyof typeof routes; // 'home' | 'topic', not string
 
 ### Erasable syntax and the changing toolchain
 
-Node.js can execute TypeScript directly by **stripping** type annotations. VERIFY: type stripping is enabled by default from Node.js 23.6 and was backported to 22.18. Stripping cannot handle syntax that generates runtime code: `enum`, `namespace` with values, and constructor parameter properties. TypeScript 5.8 added `--erasableSyntaxOnly` to forbid those constructs. Prefer union literal types or `as const` objects over `enum`.
+Node.js can execute TypeScript directly by **stripping** type annotations. Type stripping is enabled by default from Node.js 23.6 and was backported to 22.18. Stripping cannot handle syntax that generates runtime code: `enum`, `namespace` with values, and constructor parameter properties. TypeScript 5.8 added `--erasableSyntaxOnly` to forbid those constructs. Prefer union literal types or `as const` objects over `enum`.
 
-TypeScript 7 is the native port of the compiler and language service, giving large speed-ups on big codebases. VERIFY: TypeScript 7 removes several long-deprecated options (for example `target: ES5` and `moduleResolution: node10`). Check your `tsconfig` against the release notes before upgrading.
+TypeScript 7 is the native port of the compiler and language service, giving large speed-ups on big codebases. TypeScript 7 removes options that 6.0 deprecated (for example `target: ES5` and `moduleResolution: node10`). Check your `tsconfig` against the release notes before upgrading.
 
 ## How It Works
 
@@ -284,7 +284,7 @@ Then:
 - **Simplify hot types**: huge unions, deep conditional types, and generic-heavy libraries (some ORMs and form libs) often dominate check time.
 - **Remove barrel files** that force loading entire packages.
 - **Cache** `tsbuildinfo` in CI.
-- **Evaluate the TypeScript 7 native compiler.** VERIFY: Microsoft reports roughly 10x faster full builds on large projects.
+- **Evaluate the TypeScript 7 native compiler.** Microsoft reported roughly 10x faster full builds on large projects such as VS Code.
 
 **What the interviewer is looking for:**
 Measure before optimising; knowing the levers at the architecture level (package boundaries) rather than only compiler flags.
@@ -523,7 +523,7 @@ Inference-friendly design, variance thinking (accept wide, return narrow), types
 **Level:** Architect
 
 **Model answer:**
-Recent Node.js versions can execute `.ts` files directly by **type stripping**: removing type annotations without type-checking (VERIFY: unflagged from Node 23.6 and backported to the 22.x line). Deno and Bun run TypeScript natively too.
+Recent Node.js versions can execute `.ts` files directly by **type stripping**: removing type annotations without type-checking (unflagged from Node 23.6 and backported to 22.18). Deno and Bun run TypeScript natively too.
 
 What changes:
 - Only **erasable syntax** works. Enums, namespaces with runtime code, parameter properties (`constructor(private x)`) and legacy decorators need transformation. TypeScript's **`erasableSyntaxOnly`** flag (5.8) makes the compiler reject them, keeping code strippable.
