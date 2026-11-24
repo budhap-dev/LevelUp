@@ -6,8 +6,8 @@ tags: [rice, wsjf, moscow]
 level: Senior
 estimatedMinutes: 45
 related: [product-management, estimation, technical-strategy]
-lastReviewed: 2026-11-19
-status: draft
+lastReviewed: 2026-11-24
+status: complete
 ---
 
 ## TL;DR
@@ -247,6 +247,283 @@ Escalating to the right level with data rather than taking sides, protecting tea
 - Siding with the most senior or loudest VP.
 - Deciding alone without involving the accountable leader.
 
+### What is the Kano model, and how does it change what you build? {#kano}
+
+**Level:** Foundation
+
+**Model answer:**
+Kano (Noriaki Kano, 1984) classifies features by how their presence or absence affects customer satisfaction:
+
+- **Basic (must-be):** expected. Absence causes strong dissatisfaction, and presence gives no delight. Examples are a login that works, data not being lost, an invoice that's correct. You can't win on these, only lose.
+- **Performance (one-dimensional):** more is better, roughly linearly. Faster search, lower price, more storage.
+- **Delighters (attractive):** unexpected features that create outsized satisfaction, and whose absence nobody minds. They decay over time into performance features, then basic ones. Yesterday's delighter (mobile check deposit) is today's expectation.
+- **Indifferent and reverse:** nobody cares, or some users actively dislike it.
+
+How it's used: survey users with paired questions ("How would you feel if the product had X?" and "…did not have X?") to classify features. For prioritisation, it means getting basics to "good enough" first, investing in the performance features where you compete, and choosing a few delighters for differentiation, while accepting that today's delighters are tomorrow's table stakes.
+
+**What the interviewer is looking for:**
+The categories, the asymmetry of basic features and decay over time, plus a practical prioritisation implication.
+
+**Follow-ups:**
+- Is reliability a basic or a performance feature?
+- How do you find delighters?
+
+**Red flags:**
+- Spending a quarter on delighters while basics are broken.
+- Treating Kano as a scoring formula.
+
+### How do you use an impact versus effort matrix, and what are its limits? {#impact-effort}
+
+**Level:** Foundation
+
+**Model answer:**
+Plot candidates on a 2×2 grid: impact (value) against effort (cost).
+- **High impact, low effort:** quick wins. Do them first.
+- **High impact, high effort:** big bets. Plan them deliberately.
+- **Low impact, low effort:** fill-ins.
+- **Low impact, high effort:** money pits. Drop them.
+
+It's useful for a fast, visual conversation with stakeholders, and for spotting obvious winners and losers in a long list.
+
+Limits:
+- **Estimates are guesses,** usually optimistic on impact and effort alike. It ignores confidence, which RICE adds.
+- **It ignores time sensitivity:** a medium-impact item with a regulatory deadline beats a high-impact item that can wait. Cost of Delay handles that.
+- **Dependencies and sequencing:** some low-impact work enables high-impact work later (platform foundations).
+- **Gaming:** whoever argues loudest gets "high impact".
+- **Consistency:** "impact" needs a defined measure (revenue, retention, cost saved), or every item is high impact to its sponsor.
+
+Use it as a conversation starter, then apply a more rigorous method to the shortlist.
+
+**What the interviewer is looking for:**
+How to use it, plus a clear-eyed view of what it misses: confidence, urgency and dependencies.
+
+**Follow-ups:**
+- How would you make "impact" comparable across items?
+- Where do tech debt items usually land on this grid, and is that fair?
+
+**Red flags:**
+- Treating the grid output as the final decision.
+- No shared definition of impact.
+
+### How do you say no to a stakeholder's request without damaging the relationship? {#saying-no}
+
+**Level:** Foundation
+
+**Model answer:**
+"No" is really "not now, because…", grounded in shared priorities.
+
+1. **Understand the request fully.** What problem are they trying to solve, by when and what happens if it isn't solved? Often there's a cheaper way to meet the underlying need: a workaround, an existing feature, or a smaller slice.
+2. **Make the trade-off visible.** "We can do this, and it means delaying X, which we committed to the sales team for March. Which matters more?" Let the priority decision sit with whoever owns it, against agreed goals.
+3. **Explain the reasoning** in terms of the shared objectives and the agreed prioritisation method, not personal preference.
+4. **Offer alternatives:** a smaller version, a later date, a self-service option, a pointer to another team.
+5. **Close the loop:** record it in the backlog with the reason and when it'll be revisited, and actually revisit it.
+
+The relationship survives "no" when people feel heard, understand why and see consistency: the same rules for everyone, including senior people.
+
+**What the interviewer is looking for:**
+Curiosity about the underlying need, explicit trade-offs, transparent criteria, alternatives and follow-through.
+
+**Follow-ups:**
+- The stakeholder goes over your head to your manager. What do you do?
+- How do you handle a request from the CEO?
+
+**Red flags:**
+- Saying yes to everything, then missing commitments.
+- A flat "no" with no explanation or alternative.
+
+### What is an outcome-based roadmap, and why do many teams prefer it to a feature roadmap? {#outcome-roadmaps}
+
+**Level:** Senior
+
+**Model answer:**
+A **feature roadmap** lists outputs with dates: "Q2: bulk export, SSO, dark mode." An **outcome roadmap** lists the problems to solve and the measurable results sought: "Q2: reduce onboarding time-to-value from 14 to 5 days (activation rate from 40% to 55%)", with candidate solutions under each, held loosely.
+
+Why prefer outcomes:
+- **It focuses on value:** shipping a feature that moves nothing is visible as failure, not success.
+- **It gives teams room** to discover the best solution and change course as they learn.
+- **It resists stakeholder lists:** requests are evaluated against the outcome they would move.
+- **It's honest about uncertainty:** commit to the problem, not to a specific solution 9 months out.
+
+Common shape: **Now / Next / Later** columns, with detail and confidence decreasing to the right, and no fixed dates for Later.
+
+Tools: Teresa Torres's **opportunity solution tree** connects a target outcome, through customer opportunities (needs and pain points) discovered in research, to candidate solutions and experiments to test them.
+
+Caveats: some commitments really are date-bound (contracts, regulation, marketing launches) and should appear as such. Sales teams still need something concrete to talk about. Outcome roadmaps need good product analytics, or the outcomes can't be measured.
+
+**What the interviewer is looking for:**
+The distinction, the benefits, practical formats, and realism about the date-driven commitments that remain.
+
+**Follow-ups:**
+- Sales needs dates to close deals. How do you reconcile that?
+- How do you choose the right outcome metric?
+
+**Red flags:**
+- Outcome language as a label on a feature list.
+- Outcomes that can't be measured.
+
+### How do you prioritise bugs against each other and against feature work? {#bug-prioritisation}
+
+**Level:** Senior
+
+**Model answer:**
+Separate **severity** (technical impact: data loss, crash, cosmetic) from **priority** (how soon to fix, which also depends on frequency, number of users affected, revenue or compliance exposure and workarounds). A severe crash in a feature used by 3 internal users can be low priority. A cosmetic typo on the pricing page can be high.
+
+A workable policy:
+- **P0 (now):** security vulnerabilities, data loss or corruption, outages and payment failures. Interrupt work and handle it as an incident.
+- **P1 (this sprint):** major functionality broken for many users with no workaround.
+- **P2 (scheduled):** batch these into the normal backlog and fix steadily.
+- **P3 (maybe never):** close them explicitly ("won't fix") rather than letting them rot. An honest backlog is more useful than a big one.
+
+Against features:
+- Reserve capacity for quality (for example 15–20%), or use an error budget or bug-count threshold that triggers a quality focus.
+- **Fix bugs in code you're already changing.**
+- Watch trends: a rising bug inflow is a signal about engineering practices, not just a backlog problem.
+
+**What the interviewer is looking for:**
+Severity versus priority, a clear tiered policy, explicitly closing low-value bugs and a capacity mechanism.
+
+**Follow-ups:**
+- Your backlog has 1,400 open bugs. What do you do?
+- Who decides priority: QA, product or engineering?
+
+**Red flags:**
+- Treating every bug as more important than every feature, or the reverse.
+- Never closing bugs.
+
+### How do you prioritise when you don't know which ideas will work? {#prioritising-under-uncertainty}
+
+**Level:** Senior
+
+**Model answer:**
+When value is uncertain, **prioritise learning**, and treat roadmap items as bets.
+
+- **Make the riskiest assumptions explicit** for each idea: value (will customers want it?), usability, feasibility and viability (Marty Cagan's four risks). Rank them by impact if wrong multiplied by how uncertain we are.
+- **Run the cheapest test that reduces the biggest risk:** customer interviews, fake-door tests, prototypes, concierge or Wizard-of-Oz versions, technical spikes. Days, not quarters.
+- **Size bets by confidence:** small investments to learn, bigger ones once evidence accumulates (Shape Up calls this "appetite": fix the time and vary the scope).
+- **Use a portfolio:** most capacity on high-confidence improvements, some on medium bets, a little on exploratory ones.
+- **Agree kill criteria up front:** "If fewer than 5% of trial users activate the feature in 4 weeks, we stop." This avoids the sunk-cost trap.
+- **Use RICE with honest confidence scores,** which pushes uncertain items down until they're de-risked.
+
+**What the interviewer is looking for:**
+Assumption mapping, cheap experiments, staged investment, portfolio thinking and pre-agreed stop criteria.
+
+**Follow-ups:**
+- Describe a fake-door test and its ethical limits.
+- How do you stop a team falling in love with a failing bet?
+
+**Red flags:**
+- Committing a full quarter to an untested idea because a senior person likes it.
+- "We'll know if it works when we launch."
+
+### How would you allocate engineering capacity across 15 teams and competing investment themes? {#portfolio-allocation}
+
+**Level:** Architect
+
+**Model answer:**
+Move the decision from individual items to **investment allocation**, then let teams prioritise within it.
+
+1. **Define investment categories** that reflect strategy. For example: growth bets, core product improvements, platform and technical health, operational and compliance work (KTLO), and unplanned work.
+2. **Measure the current split** from actual work data. Teams often find that "KTLO and unplanned" consumes 40%+ when leadership believes it's 15%. That alone reframes the conversation.
+3. **Set target allocations with leadership,** tied to strategy. For example, 50% growth, 25% core, 15% platform, 10% KTLO, with explicit reasoning ("we're scaling: platform rises to 20% for two quarters").
+4. **Fund durable teams,** not projects. Teams own outcomes in their area. Cross-team initiatives get explicit capacity reservations.
+5. **Prioritise inside each category** with an appropriate method (Cost of Delay for time-critical bets, error budgets for reliability).
+6. **Review quarterly:** compare planned and actual allocation, the outcomes delivered and lessons learned, then adjust.
+
+Watch for dependency hotspots: if 8 teams' bets all need the identity team, its capacity is the real constraint. Plan around that bottleneck (Theory of Constraints) rather than optimising each team locally.
+
+**What the interviewer is looking for:**
+Allocation-level thinking, measuring the real baseline, linking to strategy, stable teams and handling cross-team bottlenecks.
+
+**Follow-ups:**
+- How do you stop KTLO quietly eating the growth budget?
+- What do you do when one theme's sponsor wants more than their allocation?
+
+**Red flags:**
+- Ranking 300 items in one global list.
+- Re-allocating people between projects every quarter.
+
+### As an architect, how do you get platform and enabling work prioritised alongside product features? {#platform-vs-product}
+
+**Level:** Architect
+
+**Model answer:**
+**Tie it to product outcomes.** Platform work wins when it is clearly the fastest path to things the business already wants: "Multi-region support is a prerequisite for the two enterprise deals in Q3", or "The new deployment pipeline cuts lead time from 9 days to 1, so the roadmap ships faster."
+
+Mechanisms that help:
+- **Quantified cost of delay** for platform work: incidents, toil hours, slower feature delivery, security exposure. Compare it with features on the same scale.
+- **A capacity allocation** agreed at leadership level, so platform work doesn't have to win item-by-item fights every sprint.
+- **Thin slices delivered with features:** build the platform capability while delivering the first feature that needs it, rather than a 6-month invisible project.
+- **A platform product manager** or owner who manages internal customers, adoption and a roadmap with measurable outcomes.
+- **Visible results:** report what the last platform investment enabled, which makes the next one easier to fund.
+- **Error budgets and SLOs,** which turn reliability investment into a pre-agreed rule rather than a negotiation.
+
+**What the interviewer is looking for:**
+Business-linked framing, Cost of Delay applied to enabling work, structural mechanisms (allocation, platform product management) and incremental delivery.
+
+**Follow-ups:**
+- Give an example of a platform investment you justified and what happened.
+- How do you prevent platform teams building things nobody uses?
+
+**Red flags:**
+- "The business doesn't understand technical debt."
+- Big-bang platform projects with no customer until month 9.
+
+### Your largest customer threatens to leave unless you build a custom feature. How do you decide? {#big-customer-request}
+
+**Level:** Architect
+
+**Model answer:**
+**Understand the real need.** Talk to the customer (with account management). What problem are they solving, what is the deadline driving it and what would they accept? The request is often one implementation of a need others share, or one that can be met with configuration, an API or a workaround.
+
+**Quantify both sides:**
+- *Value:* their revenue and margin, renewal date, likelihood of actually churning, strategic value (logo, reference, market entry), and whether other customers or prospects need the same thing.
+- *Cost:* build effort, opportunity cost (what we delay), **ongoing** maintenance, support and the complexity a one-off adds to the product for everyone.
+
+**Options:**
+1. Generalise it into a product feature that benefits many customers, possibly re-sequencing the roadmap. This is the best outcome when the need is shared.
+2. Meet the need with extensibility (APIs, webhooks, configuration) so they or partners build the specific part.
+3. Build it as a paid custom engagement with clear boundaries, if strategically justified, isolated from the core.
+4. Decline, with alternatives and a timeline, accepting the churn risk if the economics don't work.
+
+**Decide transparently** with product leadership and sales, document the reasoning, and watch the pattern. If several "must-have custom features" appear each quarter, it may signal a product-market gap or a sales process problem.
+
+**What the interviewer is looking for:**
+Probing the underlying need, full cost including maintenance, creative options (generalise, extend, isolate) and business-level decision making.
+
+**Follow-ups:**
+- Sales already promised the feature. What now?
+- How would you keep custom features from fragmenting the codebase?
+
+**Red flags:**
+- Agreeing immediately because the customer is big.
+- Refusing without understanding the account economics.
+
+### Quarterly planning takes four weeks and nobody trusts the result. Redesign the process. {#planning-process}
+
+**Level:** Architect
+
+**Model answer:**
+Diagnose first. Common causes are planning in too much detail, too many dependencies discovered too late, priorities that aren't decided before teams estimate, and plans that change anyway in week 3.
+
+A leaner design:
+1. **Strategy and allocation first (leadership, 1 week before):** company goals, investment allocation by theme, and a short list of the top cross-team bets. Decided and published *before* teams plan.
+2. **Teams plan outcomes, not tasks (2–3 days):** each team proposes 2–4 outcomes with rough sizing (t-shirt sizes), confidence and dependencies. No story-level estimation for the whole quarter.
+3. **One dependency session (a day):** teams with cross-team needs negotiate in the room, and leadership resolves conflicts immediately against the published priorities.
+4. **Commit at the right level:** a few committed outcomes (high confidence), the rest as targets or stretch. Keep capacity buffers (around 20%) for unplanned work.
+5. **Make change cheap:** monthly check-ins on progress and priority changes, so the plan adapts without a full re-plan.
+6. **Measure the process itself:** time spent, predictability (outcomes achieved against committed), and how often priorities changed mid-quarter.
+
+**What the interviewer is looking for:**
+Deciding priorities before planning, outcome-level commitments, explicit dependency handling, buffers, lightweight replanning and measuring the process.
+
+**Follow-ups:**
+- How do you handle a team that consistently over-commits?
+- How does this work with fixed-date external commitments?
+
+**Red flags:**
+- More detailed estimation to "improve accuracy".
+- Planning bottom-up with no strategic guidance.
+
 ## Cheat Sheet
 
 - **MoSCoW** — Must / Should / Could / Won't (this time); scope a fixed-date release; cap Musts at ~60%.
@@ -259,6 +536,9 @@ Escalating to the right level with data rather than taking sides, protecting tea
 - **HiPPO** — Highest Paid Person's Opinion; counter with explicit inputs and process.
 - **Tech debt currency** — express in cost, risk, speed and opportunity; prioritise hotspots.
 - **Say no explicitly** — publish the "not now" list with reasons and a revisit date.
+- **Severity vs priority** — severity is technical impact; priority is how soon to fix, given reach, revenue and workarounds.
+- **Outcome roadmap** — Now / Next / Later problems with target metrics; solutions held loosely.
+- **Opportunity solution tree** — outcome → customer opportunities → solutions → experiments (Teresa Torres).
 
 ## Further Reading
 
