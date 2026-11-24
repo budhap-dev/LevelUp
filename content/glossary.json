@@ -2861,5 +2861,134 @@
     "related": [
       "data-engineering-basics"
     ]
+  },
+  {
+    "id": "hydration",
+    "term": "Hydration",
+    "aka": [
+      "SSR"
+    ],
+    "group": "languages-frontend",
+    "definition": "Attaching event handlers and state to server-rendered HTML in the browser by re-running the components on the client.",
+    "details": [
+      "Until hydration finishes, the page can look ready but not respond.",
+      "Server and client must render the same output, or you get hydration mismatches (watch dates, random values, `window`).",
+      "Streaming and selective hydration reduce the cost."
+    ],
+    "useCases": [
+      "Server-side rendered React pages.",
+      "Diagnosing slow interactivity after a fast first paint."
+    ],
+    "related": [
+      "reactjs",
+      "web-performance"
+    ]
+  },
+  {
+    "id": "react-server-components",
+    "term": "React Server Components",
+    "aka": [
+      "RSC",
+      "Server Actions"
+    ],
+    "group": "languages-frontend",
+    "definition": "React components that run only on the server, read data directly and send serialised UI to the client without shipping their code.",
+    "details": [
+      "Client Components (`'use client'`) handle interactivity; props crossing the boundary must be serialisable.",
+      "Server Actions/Functions are public endpoints — validate and authorise every call.",
+      "Reduce client JavaScript and request waterfalls."
+    ],
+    "useCases": [
+      "Data-heavy pages in Next.js-style frameworks.",
+      "Keeping secrets and heavy libraries off the client."
+    ],
+    "related": [
+      "reactjs"
+    ]
+  },
+  {
+    "id": "suspense",
+    "term": "Suspense",
+    "aka": [
+      "transition",
+      "useTransition"
+    ],
+    "group": "languages-frontend",
+    "definition": "A React mechanism that shows a fallback while part of the UI waits for code or data, and enables streaming server rendering.",
+    "details": [
+      "Place boundaries around meaningful UI regions, paired with error boundaries.",
+      "Transitions keep the old UI visible during non-urgent updates instead of flashing fallbacks.",
+      "Data must come from Suspense-enabled sources (frameworks, libraries, `use()`)."
+    ],
+    "useCases": [
+      "Lazy-loaded routes and widgets.",
+      "Streaming dashboards section by section."
+    ],
+    "related": [
+      "reactjs"
+    ]
+  },
+  {
+    "id": "optimistic-update",
+    "term": "Optimistic Update",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "Updating the UI immediately as if a mutation succeeded, then confirming with the server or rolling back on failure.",
+    "details": [
+      "Snapshot, apply, send with an idempotency key, then confirm or roll back.",
+      "Cancel in-flight refetches that could overwrite the optimistic state.",
+      "Avoid for risky actions such as payments."
+    ],
+    "useCases": [
+      "Likes, toggles, reordering and comments.",
+      "Responsive UIs on slow networks."
+    ],
+    "related": [
+      "state-management",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "crdt",
+    "term": "CRDT",
+    "aka": [
+      "Conflict-free Replicated Data Type"
+    ],
+    "group": "languages-frontend",
+    "definition": "A data structure that lets replicas be edited independently and concurrently and then merged automatically without conflicts.",
+    "details": [
+      "Libraries include Yjs and Automerge.",
+      "Powers offline-first apps and real-time collaborative editing.",
+      "Trade-offs: metadata overhead and limited fit for strict business invariants."
+    ],
+    "useCases": [
+      "Collaborative documents and whiteboards.",
+      "Offline-first mobile and web apps."
+    ],
+    "related": [
+      "state-management"
+    ]
+  },
+  {
+    "id": "web-worker",
+    "term": "Web Worker",
+    "aka": [
+      "worker thread"
+    ],
+    "group": "languages-frontend",
+    "definition": "A background thread in the browser (or Node worker thread) that runs JavaScript in parallel with the main thread, communicating by messages.",
+    "details": [
+      "Keeps the main thread free for input and rendering.",
+      "Data is copied (structured clone) unless transferred (ArrayBuffers).",
+      "Shared memory needs SharedArrayBuffer and cross-origin isolation."
+    ],
+    "useCases": [
+      "Parsing large files, image processing, heavy filtering.",
+      "Improving INP on data-heavy pages."
+    ],
+    "related": [
+      "javascript",
+      "web-performance"
+    ]
   }
 ]
