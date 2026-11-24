@@ -7,7 +7,7 @@ import { SearchButton } from '@/features/search/SearchButton';
 import { ThemeProvider } from '@/lib/theme';
 import { ProgressProvider } from '@/lib/progress/react';
 import { useMediaQuery } from '@/lib/useMediaQuery';
-import { OfflineBadge, PwaToasts } from './PwaStatus';
+import { OfflineBadge, PwaProvider, PwaToasts } from './PwaStatus';
 import { Sidebar } from './Sidebar';
 
 /** Three bars that morph into an X. */
@@ -40,7 +40,9 @@ export function Layout() {
   return (
     <ThemeProvider>
       <ProgressProvider>
-        <Shell />
+        <PwaProvider>
+          <Shell />
+        </PwaProvider>
       </ProgressProvider>
     </ThemeProvider>
   );

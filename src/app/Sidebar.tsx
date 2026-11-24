@@ -6,6 +6,7 @@ import { useProgress } from '@/lib/progress/react';
 import { STATE_LABEL, StatusGlyph, StatusLabel } from '@/components/TopicStatusIcon';
 import { Icon, type IconName } from '@/components/Icon';
 import { useDueCounts } from '@/lib/srs/useDueCounts';
+import { VersionFooter } from './VersionFooter';
 
 type NavItem = { to: string; label: string; icon: IconName; end?: boolean };
 
@@ -277,12 +278,13 @@ export function Sidebar({ animateKey }: { animateKey: number }) {
         </section>
       </div>
 
-      {/* Settings stays in reach at the bottom while the menu scrolls. */}
-      <div className="sticky bottom-0 border-t border-line bg-surface px-3 py-2">
+      {/* Settings and the version stay in reach at the bottom while the menu scrolls. */}
+      <footer className="sticky bottom-0 border-t border-line bg-surface px-3 pt-2 pb-2.5">
         <ul>
           <NavRow item={{ to: '/settings', label: 'Settings', icon: 'settings' }} anim={stagger()} />
         </ul>
-      </div>
+        <VersionFooter />
+      </footer>
     </nav>
   );
 }
