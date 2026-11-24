@@ -6,8 +6,8 @@ tags: [metrics, delivery, devops]
 level: Senior
 estimatedMinutes: 45
 related: [ci-cd-pipelines, observability-sre, agile-scrum-kanban-safe]
-lastReviewed: 2026-11-19
-status: draft
+lastReviewed: 2026-11-24
+status: complete
 ---
 
 ## TL;DR
@@ -246,6 +246,303 @@ Systems thinking, data definitions, context segmentation, linking metrics to cap
 - Building the leaderboard as asked.
 - Proposing metrics with no plan for acting on them.
 
+### Why measure software delivery performance at all? What did the DORA research show? {#why-dora}
+
+**Level:** Foundation
+
+**Model answer:**
+DORA (DevOps Research and Assessment) has surveyed tens of thousands of professionals since 2014, with the results published in the yearly *State of DevOps* reports and the book *Accelerate* (Forsgren, Humble and Kim, 2018). The core findings:
+
+- A small set of **outcome metrics** (throughput: deployment frequency and lead time; stability: change failure rate and recovery time) reliably separates high-performing teams from low-performing ones.
+- **Throughput and stability go together.** High performers are both faster and more stable, so you don't have to trade one for the other.
+- Software delivery performance predicts **organisational performance** (profitability, market share, goals met) and is associated with lower burnout.
+- It is driven by **capabilities** you can invest in: continuous integration, trunk-based development, test and deployment automation, loosely coupled architecture, and a generative culture.
+
+So measuring isn't about scoring teams. It tells you whether investments in those capabilities are working, using signals that are hard to fake when they are measured from systems.
+
+**What the interviewer is looking for:**
+Knowing where the metrics come from, the throughput-plus-stability finding and the link to capabilities.
+
+**Follow-ups:**
+- What does the research say about change approval boards?
+- Why are these metrics outcome metrics rather than activity metrics?
+
+**Red flags:**
+- Treating DORA metrics as a team leaderboard.
+- Not knowing that speed and stability correlate positively.
+
+### Why do small batches matter so much in delivery performance? {#small-batches}
+
+**Level:** Foundation
+
+**Model answer:**
+Deployment frequency is largely a proxy for **batch size**. Smaller changes, deployed more often, improve everything else:
+
+- **Lower risk per change:** a 50-line deploy has fewer ways to fail, and when it does, the cause is obvious.
+- **Faster recovery:** rolling back or fixing forward one small change is quick. A big release often has to be untangled.
+- **Faster feedback:** you learn from users and production within hours rather than at the end of a quarter.
+- **Less work in progress and fewer merge conflicts:** long-lived branches and big integration phases disappear.
+- **Less coordination:** small independent changes don't need release meetings.
+
+Enablers: trunk-based development with short-lived branches (or none), feature flags so unfinished work can ship dark, automated tests and pipelines, and an architecture that lets services deploy independently.
+
+**What the interviewer is looking for:**
+The batch-size reasoning behind deployment frequency and the practices that make small batches safe.
+
+**Follow-ups:**
+- How do feature flags help, and what is their cost?
+- How would you shrink the batch size of a mobile app release?
+
+**Red flags:**
+- "We deploy rarely so each deploy can be tested thoroughly."
+- Equating feature flags with permanent configuration.
+
+### What counts as a "failure" for change failure rate? {#change-failure-definition}
+
+**Level:** Foundation
+
+**Model answer:**
+Change failure rate is the percentage of deployments to production that cause degraded service and **need remediation**: a rollback, a hotfix, a forward-fix, a patch or a feature-flag kill switch.
+
+Decisions to make explicit:
+- **Count** incidents linked to a deployment, rollbacks (manual or automatic), and emergency fixes deployed within a short window because of the previous deploy.
+- **Usually exclude** failures caught *before* production (a failed pipeline is the system working), and production incidents not caused by a change, such as a cloud outage. Track those separately.
+- **Grey areas:** bugs found weeks later. Many teams count only issues detected within a window. Whatever you pick, apply it consistently and document it.
+- **Attribution:** link incidents to the deployment that caused them (deploy markers, incident tooling fields). Without this, the metric is guesswork.
+
+DORA's newer **rework rate** complements it by counting unplanned deployments made to fix user-facing bugs.
+
+**What the interviewer is looking for:**
+A precise, consistent definition and awareness of the attribution problem.
+
+**Follow-ups:**
+- Your automatic canary rollback caught a bad release at 1% traffic. Is that a change failure?
+- How do you collect this data without manual tagging?
+
+**Red flags:**
+- Counting failed CI builds as change failures.
+- Defining it so loosely that it is always 0%.
+
+### How would you collect DORA metrics automatically across 30 teams with different tooling? {#collecting-metrics}
+
+**Level:** Senior
+
+**Model answer:**
+Derive them from **system events, not surveys or spreadsheets**:
+
+- **Deployments:** emit a deployment event from every pipeline (or GitOps controller) with service, version, environment, commit SHAs and timestamp. Standardise this with a shared pipeline step or a webhook to a small "delivery events" service.
+- **Lead time:** for each deployed commit, the time from commit (or PR merge, if that's your definition, stated clearly) to the production deployment event. Use git history to map the commits included between two deploys.
+- **Change failures and recovery:** link incidents and rollbacks to deployments, using incident-tool fields, automatic rollbacks reported by the deployment system, or hotfix labels. Recovery time runs from the failed deploy (or detection) to restoration.
+- **Normalise** into one store (a warehouse table), report p50 and p90 per service and team, and show trends over time.
+
+Tools: the open-source Four Keys project from Google (now archived, VERIFY) showed the pattern. Commercial platforms (LinearB, Sleuth, GitLab and Azure DevOps analytics, internal developer portals such as Backstage plugins) offer it ready-made.
+
+Make it trustworthy: publish the definitions, let teams see the raw events behind their numbers, and fix data-quality issues before anyone draws conclusions.
+
+**What the interviewer is looking for:**
+An event-driven, automated approach, clear definitions, linking incidents to deploys and attention to data quality.
+
+**Follow-ups:**
+- How do you handle a monorepo where one commit deploys 12 services?
+- What would you do about teams that deploy by hand?
+
+**Red flags:**
+- Manual monthly spreadsheets.
+- Using Jira ticket timestamps as lead time.
+
+### How do DORA metrics apply to mobile apps or heavily regulated environments? {#dora-in-constraints}
+
+**Level:** Senior
+
+**Model answer:**
+The principles hold, but the measurement points and targets need adapting. **Don't compare these teams to web services.**
+
+**Mobile:**
+- App store review and user upgrade adoption add delays outside the team's control. Measure **lead time to release candidate** (or to store submission) separately from store and adoption latency.
+- Deployment frequency becomes release cadence. Weekly release trains are good for mobile.
+- Feature flags and remote config give continuous *delivery of behaviour* between binaries.
+- Track change failure through crash-free sessions, hotfix releases and server-side kill switches.
+
+**Regulated (finance, health):**
+- Replace manual change boards with **automated, auditable controls**: peer review enforced in git, pipeline evidence (tests, scans, approvals) attached to each release, segregation of duties via the pipeline rather than manual handoffs.
+- DORA research found heavyweight external change approval correlates with worse performance, not better stability.
+- Some steps may legitimately remain, such as validation for medical device software. Measure them explicitly so you can see their cost.
+
+**Embedded and firmware:** use hardware-in-the-loop test automation, and measure lead time to a validated build.
+
+**What the interviewer is looking for:**
+Adapting definitions to context, separating what's controllable from what isn't, and turning compliance into automated evidence.
+
+**Follow-ups:**
+- An auditor insists on a change advisory board approval for every deploy. How do you negotiate?
+- What does recovery time mean for a mobile app bug?
+
+**Red flags:**
+- "DORA doesn't apply to us."
+- Ranking a mobile team against a web team on deployment frequency.
+
+### A team deploys once a month with a 3-week lead time. How do you diagnose and improve it? {#improving-deploy-frequency}
+
+**Level:** Senior
+
+**Model answer:**
+**Map the value stream first.** Pick recent changes and trace where the time went from commit to production: code review wait, CI duration and failures, test environment queues, manual QA cycles, release approval, the deployment window. Most of the lead time is usually **waiting**, not working.
+
+Typical findings and fixes:
+- **Long-lived feature branches** → trunk-based development with feature flags.
+- **Manual regression testing** → automate the critical paths and move QA to exploratory testing.
+- **Shared, contended test environment** → ephemeral environments per PR or per service.
+- **Change board or release-window approval** → automated controls and a standard-change classification for low-risk deploys.
+- **Slow or flaky CI** → parallelise, cache and quarantine flaky tests. Target under 10–15 minutes.
+- **Coupled deployments with other teams** → contract tests, backward-compatible APIs and independent deploys.
+- **Fear from past incidents** → canaries, automated rollback and better observability, so the risk per deploy is genuinely lower.
+
+Run it as a series of experiments: fix the biggest wait, measure again and repeat. Celebrate stability alongside speed so the team sees that more frequent deploys are *safer*.
+
+**What the interviewer is looking for:**
+Value-stream thinking, wait time as the main target, concrete capability fixes and an iterative, measured approach.
+
+**Follow-ups:**
+- The team says the business won't accept more frequent releases. What do you do?
+- Which single change usually gives the biggest improvement?
+
+**Red flags:**
+- "Tell them to deploy more often."
+- Adding metrics dashboards without changing any practice.
+
+### How do DORA, SPACE and DevEx fit together in a developer productivity programme? {#space-devex}
+
+**Level:** Architect
+
+**Model answer:**
+They answer different questions and work best together:
+
+- **DORA:** "How well does our system *deliver* software?" These are outcome metrics for the delivery pipeline: throughput and stability. They are objective and system-derived, but blind to developer experience and to work that isn't deployments.
+- **SPACE** (Forsgren, Storey et al., 2021): a framework, not a metric set. Productivity is multidimensional: **S**atisfaction and well-being, **P**erformance (outcomes), **A**ctivity, **C**ommunication and collaboration, **E**fficiency and flow. Pick metrics from several dimensions, mixing system data with perception data, and never rely on activity counts alone.
+- **DevEx** (Noda, Storey, Forsgren, Greiler, 2023): focuses on developers' lived experience through three dimensions: **feedback loops** (how fast builds, tests and reviews respond), **cognitive load**, and **flow state** (uninterrupted focus time). It is measured mainly through regular surveys, with system data as support.
+
+A programme design:
+1. DORA from system telemetry as the delivery baseline.
+2. A quarterly DevEx survey for friction, such as "How often do flaky tests block you?" or "How easy is it to understand the codebase?"
+3. Targeted system metrics for the friction points found (CI duration, review wait time, environment provisioning time).
+4. Business outcomes that the platform and product work should move.
+
+Use the combination to choose platform investments, then check whether they changed both perception and system metrics.
+
+**What the interviewer is looking for:**
+What each framework is for, combining perception and system data, and turning measurement into investment decisions.
+
+**Follow-ups:**
+- Survey scores and system metrics disagree. Which do you trust?
+- How do you keep survey participation high?
+
+**Red flags:**
+- Measuring productivity by commits, lines of code or story points.
+- Treating SPACE as five metrics to put on a dashboard.
+
+### How would you show the impact of a platform engineering team to the executive team? {#platform-roi}
+
+**Level:** Architect
+
+**Model answer:**
+Treat the platform as a **product** with internal customers and outcomes. Before building anything, agree what success looks like and baseline it.
+
+**Adoption:** the share of services on the golden-path templates, the pipeline, the observability stack. Track adoption by choice, not by mandate, as a signal of product fit.
+
+**Developer outcomes** (before and after, for adopting teams):
+- Lead time, deployment frequency and change failure rate for adopters against non-adopters.
+- Time to first deploy for a new service (for example from 3 weeks to 1 day) and onboarding time to first PR.
+- CI duration and flake rate; DevEx survey friction scores on the areas the platform targets.
+
+**Business translation:**
+- Engineering hours saved per month multiplied by loaded cost. Be honest and conservative, and show the assumptions.
+- Incidents avoided or shortened (security patching time across the fleet, recovery time).
+- Cloud cost savings from standardised right-sizing.
+- Risk reduction: time to patch a critical CVE across all services, audit evidence produced automatically.
+
+**Narrative:** one page each quarter: two or three headline outcomes, one customer story ("the payments team launched X in 2 weeks instead of 2 months") and the next bets. Include what didn't work.
+
+**What the interviewer is looking for:**
+Product thinking, baselines, adoption as a signal, credible translation into money and risk, and executive-level storytelling.
+
+**Follow-ups:**
+- Adoption is stuck at 30%. What does that tell you?
+- How do you separate the platform's effect from other changes happening at the same time?
+
+**Red flags:**
+- Reporting only outputs ("we shipped 14 features of the platform").
+- Mandating adoption and calling it success.
+
+### The CEO asks for a metric to identify the least productive developers. How do you respond? {#developer-productivity}
+
+**Level:** Architect
+
+**Model answer:**
+Take the underlying concern seriously. Usually it is "are we getting value for our engineering spend?" or "where are we slow?". Then redirect firmly away from individual metrics.
+
+**Why individual output metrics fail:**
+- Software is a team sport. The people who unblock others, review, mentor and do architecture often produce fewer commits.
+- Every individual activity metric (commits, PRs, lines, story points) is trivially gamed, and Goodhart's law applies immediately.
+- It destroys collaboration and trust, and your best people leave first.
+- It conflates performance management (a manager's job, based on observed impact) with system improvement.
+
+**What to offer instead:**
+1. **Team and system-level delivery metrics** (DORA, flow metrics) to find bottlenecks.
+2. **DevEx surveys** to find friction that wastes engineering time.
+3. **Investment allocation:** what share of capacity goes to new features, maintenance, unplanned work and toil, and how that maps to strategy.
+4. **Outcome reviews:** for major initiatives, the business result against cost.
+5. For individual performance, **manager-led assessment** against clear role expectations, with evidence of impact, not activity counts.
+
+Close with a concrete proposal and timeline, so the CEO gets an answer to the real question.
+
+**What the interviewer is looking for:**
+Respectful pushback grounded in evidence, understanding of the CEO's real need and a constructive alternative. Leadership and influence, not just metrics knowledge.
+
+**Follow-ups:**
+- The CEO insists. What do you do next?
+- How do you deal with a genuinely underperforming engineer?
+
+**Red flags:**
+- Building the requested leaderboard.
+- Refusing without offering an alternative.
+
+### Your organisation releases on a 6-week train with a 2-week hardening phase. Plan the move to continuous delivery. {#release-train-to-cd}
+
+**Level:** Architect
+
+**Model answer:**
+**Understand why the train exists.** Usually it is fear and coupling: manual regression testing, shared databases, coordinated releases between teams, a change board, and contractual release notes. The plan has to remove those reasons, not just the calendar.
+
+**Phase 0 (baseline, about 1 month):** DORA metrics, a value-stream map, an inventory of cross-team couplings, and failure data from the last few releases. Agree goals with the business, for example "any team can safely release any working day within 12 months".
+
+**Phase 1 (technical foundations):**
+- Trunk-based development and feature flags, so incomplete work no longer blocks a release.
+- Automated regression suites for the critical journeys. Hardening moves into each change's pipeline.
+- One deployment pipeline per service with automated evidence for audit.
+- Observability and canary deploys with automatic rollback.
+
+**Phase 2 (decouple):**
+- Break coordinated releases using backward-compatible APIs and contract tests.
+- Expand-and-contract database migrations.
+- Pilot one or two volunteer teams releasing off-train, then share their results.
+
+**Phase 3 (process):**
+- Redefine the change board as standard changes (pre-approved, low-risk, automated evidence) versus exceptional changes.
+- Shrink the train: 6 weeks, then 2, then on demand. Keep the train as an optional bus for teams not yet ready.
+
+**People:** QA shifts towards automation and exploratory testing, release managers become platform or delivery coaches, and executives get a regular readout on outcomes. Throughout, measure change failure rate and recovery time to show that stability improves rather than suffers.
+
+**What the interviewer is looking for:**
+Diagnosing the causes, incremental phases, technical and organisational change together, compliance handled through automation, and evidence-based communication.
+
+**Follow-ups:**
+- One legacy team can't get off the train for a year. How do you prevent them blocking everyone?
+- How do you handle customer-facing release notes without a release train?
+
+**Red flags:**
+- "Just deploy every day from next month."
+- Ignoring the human roles that the train currently employs.
+
 ## Cheat Sheet
 
 - **Deployment frequency** — how often you deploy to production; a proxy for batch size.
@@ -258,6 +555,9 @@ Systems thinking, data definitions, context segmentation, linking metrics to cap
 - **Capabilities** — trunk-based dev, CI, test & deploy automation, loose coupling, generative culture.
 - **SPACE** — Satisfaction, Performance, Activity, Communication, Efficiency.
 - **Use** — team-owned improvement signals; never individual performance ratings.
+- **Value stream map** — trace a change from commit to production; most lead time is waiting, not working.
+- **DevEx** — feedback loops, cognitive load and flow state; measured mainly with developer surveys.
+- **Batch size** — deployment frequency is mostly a proxy for it; smaller batches mean lower risk and faster recovery.
 
 ## Further Reading
 

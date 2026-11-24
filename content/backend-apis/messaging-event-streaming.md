@@ -6,8 +6,8 @@ tags: [kafka, service-bus, events, async]
 level: Architect
 estimatedMinutes: 90
 related: [architecture-patterns, system-design, domain-driven-design, observability-sre]
-lastReviewed: 2026-11-19
-status: draft
+lastReviewed: 2026-11-24
+status: complete
 ---
 
 ## TL;DR
@@ -271,6 +271,260 @@ Governance that scales socially as well as technically: automation over review b
 - "We'll just coordinate releases."
 - A central architecture team manually approving every schema change.
 
+### What are at-most-once, at-least-once and exactly-once delivery, and which should you design for? {#delivery-semantics}
+
+**Level:** Foundation
+
+**Model answer:**
+The difference is *when the consumer acknowledges* relative to doing the work.
+
+- **At-most-once:** acknowledge (or commit the offset) first, then process. A crash mid-processing loses the message. Acceptable only for data where loss is cheap, such as metrics samples or presence pings.
+- **At-least-once:** process first, then acknowledge. A crash after the side effect but before the ack causes redelivery, so the same message is processed twice.
+- **Exactly-once:** the effect of each message is applied once. Brokers can only provide this inside their own boundary (Kafka transactions for read-process-write between Kafka topics). Anywhere else it is built from at-least-once delivery plus idempotent processing.
+
+Design for **at-least-once with idempotent consumers**. It is the default in Service Bus (peek-lock), SQS and Kafka with manual offset commits, and it fails safe: duplicates are detectable, lost messages are not.
+
+**What the interviewer is looking for:**
+The candidate ties each semantic to ack timing, picks at-least-once as the default and immediately mentions idempotency.
+
+**Follow-ups:**
+- Where does Kafka's `enable.auto.commit=true` put you on this spectrum?
+- Name three ways to make a consumer idempotent.
+
+**Red flags:**
+- Believing a broker setting alone gives exactly-once side effects in a database or third-party API.
+- Choosing at-most-once for business events "for performance".
+
+### What is consumer lag, and how do you monitor and act on it? {#consumer-lag}
+
+**Level:** Foundation
+
+**Model answer:**
+Consumer lag is how far a consumer group is behind the head of the stream. Per partition, it is the latest offset minus the group's committed offset. Summed across partitions it says how much work is queued. Lag converted to **time** ("the oldest unprocessed message is 4 minutes old") is what matters to users, because 100k messages may be 2 seconds or 2 hours of work depending on throughput.
+
+Monitor:
+- Lag in messages *and* estimated seconds, per partition, so one stuck partition isn't hidden by healthy ones.
+- The trend. Steadily growing lag means consumption is slower than production, and scaling or optimisation is needed.
+- The equivalent for queues: active message count and the age of the oldest message.
+
+Act on it by scaling consumers (up to the partition count), fixing slow handlers (batching, removing per-message remote calls), finding hot partitions, or applying backpressure upstream.
+
+**What the interviewer is looking for:**
+Lag as offset difference, the time view, per-partition granularity and the partition-count ceiling on scaling.
+
+**Follow-ups:**
+- Lag is growing on one partition only. What do you suspect?
+- How would you autoscale consumers on lag (for example KEDA)?
+
+**Red flags:**
+- Only monitoring broker CPU and memory.
+- Thinking adding consumers beyond the partition count increases throughput.
+
+### What is the difference between an event, a command and a query in a message-driven system? {#event-vs-command}
+
+**Level:** Foundation
+
+**Model answer:**
+- A **command** asks one specific receiver to do something: `ReserveStock`, `SendInvoice`. It is named in the imperative, has exactly one handler, can be rejected and usually travels on a **queue**. The sender depends on the receiver's capability.
+- An **event** states that something has already happened: `OrderPlaced`, `PaymentCaptured`. It is named in the past tense, can have zero or many subscribers and cannot be rejected, because it's a fact. It usually travels on a **topic or log**. The publisher does not know who listens.
+- A **query** asks for data and expects a response. It is usually synchronous (HTTP or gRPC). Request-reply over messaging is possible but rarely worth it.
+
+The distinction drives coupling. Events invert the dependency: the producer doesn't change when a new consumer appears. Disguising commands as events (`SendWelcomeEmailEvent`) hides a dependency that is really there.
+
+**What the interviewer is looking for:**
+Naming conventions, cardinality of handlers, the transport that fits each, and the coupling argument.
+
+**Follow-ups:**
+- Can one business action produce both a command and an event?
+- Who owns the schema of a command versus an event?
+
+**Red flags:**
+- Using the words interchangeably.
+- Broadcasting commands on a pub/sub topic so "whoever needs to" handles them.
+
+### How do Kafka consumer group rebalances work, and how do you stop them hurting throughput? {#consumer-rebalancing}
+
+**Level:** Senior
+
+**Model answer:**
+A consumer group divides a topic's partitions among its members. A **rebalance** reassigns them when a member joins, leaves, crashes or is considered dead. A consumer is presumed dead if it misses heartbeats for `session.timeout.ms` or doesn't call `poll()` within `max.poll.interval.ms`.
+
+Why it hurts: with the classic **eager** protocol, every consumer gives up *all* partitions and stops processing until the new assignment is made, even for partitions that didn't move. Deployments, autoscaling and slow handlers can cause repeated "rebalance storms".
+
+Mitigations:
+- **Cooperative incremental rebalancing** (`CooperativeStickyAssignor`): only the partitions that move are revoked.
+- **Static membership** (`group.instance.id`): a restarting pod rejoins with the same identity within the session timeout and does not trigger a rebalance. This is ideal for rolling deploys on Kubernetes.
+- **The next-generation consumer protocol** (KIP-848), where the broker coordinates assignment incrementally. VERIFY: generally available for consumers from Kafka 4.0.
+- **Keep `poll()` loops fast:** bound `max.poll.records` and move slow work off the poll thread (with care for offset commits), or raise `max.poll.interval.ms` deliberately.
+- **Commit offsets** in the partitions-revoked callback so the next owner doesn't reprocess a large batch.
+
+**What the interviewer is looking for:**
+Understanding of liveness detection (heartbeat vs poll interval), eager vs cooperative protocols, static membership, and the link between slow processing and rebalances.
+
+**Follow-ups:**
+- Why might a consumer that is healthy and heartbeating still be kicked out of the group?
+- How do rebalances interact with exactly-once (transactional) consumers?
+
+**Red flags:**
+- Treating rebalances as rare events that need no design.
+- Fixing rebalance loops only by raising every timeout to hours.
+
+### Thin events or fat events? When do you include the full state in the payload? {#thin-vs-fat-events}
+
+**Level:** Senior
+
+**Model answer:**
+- **Thin (event notification):** `{ "type": "CustomerUpdated", "customerId": "c-42", "version": 17 }`. Consumers call the owner's API for details. Payloads stay small and never stale, and sensitive data isn't broadcast. The cost is runtime coupling back to the producer (load spikes, availability dependency) and read-your-writes races, where the consumer fetches before the owner's read model has caught up.
+- **Fat (event-carried state transfer):** the event carries the state consumers need, often the full entity snapshot after the change. Consumers can build local copies and work when the producer is down. Payloads get larger, schemas couple more tightly and data spreads (GDPR erasure, PII exposure).
+- **Delta events** (only the changed fields) are a middle ground but force consumers to have applied every previous delta in order.
+
+Rules of thumb: carry what most consumers need to act without calling back, include an entity **version** so consumers can ignore stale updates, keep sensitive fields out (or on a restricted topic) and use thin events plus fetch for rare, heavy or sensitive details. For compacted Kafka topics that act as a table, fat snapshots keyed by entity id are the natural fit.
+
+**What the interviewer is looking for:**
+Trade-offs in coupling, availability, consistency and data governance, with the versioning detail.
+
+**Follow-ups:**
+- How do you handle a GDPR erasure request when customer data is in retained events?
+- What is log compaction and how does it relate to fat events?
+
+**Red flags:**
+- Dogmatism either way.
+- Putting the entire aggregate, including secrets, on a company-wide topic.
+
+### When would you choose Azure Service Bus over Event Hubs or Kafka, and the other way round? {#service-bus-vs-event-hubs}
+
+**Level:** Senior
+
+**Model answer:**
+They solve different problems.
+
+**Service Bus** is an enterprise message broker. Pick it for commands and workflows that need per-message features:
+- Peek-lock with explicit complete/abandon, automatic dead-lettering after `MaxDeliveryCount`.
+- Sessions for ordered, exclusive processing per key; scheduled and deferred messages; duplicate detection within a time window.
+- Transactions across send and complete within a namespace; topic subscriptions with SQL-like filters.
+
+**Event Hubs or Kafka** are partitioned logs. Pick them for high-volume event streams:
+- Telemetry, clickstream and change data capture at millions of events per second.
+- Many independent consumer groups, replay from retention, and integration with stream processing (Flink, Stream Analytics, Spark).
+- Event Hubs exposes a Kafka endpoint, so Kafka clients work without running brokers.
+
+Signals for Service Bus: low or medium volume, each message is a unit of work, routing per message, need to delay or retry individual messages. Signals for a log: volume, fan-out to many readers, replay, analytics, ordered history per key.
+
+Many systems use both: Service Bus for the order workflow commands, Event Hubs for the analytics firehose.
+
+**What the interviewer is looking for:**
+Feature-level reasoning rather than "Kafka is faster", and comfort with using both.
+
+**Follow-ups:**
+- How would you implement a 30-minute delayed retry on Event Hubs?
+- What limits the throughput of a single Service Bus session?
+
+**Red flags:**
+- Choosing Kafka for a 50-messages-a-minute job queue because it is popular.
+- Not knowing that Event Hubs lacks per-message acknowledgement and dead-lettering.
+
+### Design the order flow across payment, inventory and shipping services. Choreography or orchestration? {#saga-design}
+
+**Level:** Architect
+
+**Model answer:**
+A single database transaction cannot span three services, so the flow is a **saga**: a sequence of local transactions, each with a **compensating action** for when a later step fails (`RefundPayment`, `ReleaseStock`).
+
+**Choreography:** each service reacts to events. `OrderPlaced` → Payment captures and emits `PaymentCaptured` → Inventory reserves and emits `StockReserved` → Shipping books. Failures emit events that trigger compensations upstream.
+- Pros: loose coupling, no central component, easy to add listeners.
+- Cons: the business process exists only implicitly across services. It is hard to answer "where is order 123 stuck?" and cyclic dependencies creep in.
+
+**Orchestration:** an order orchestrator (a state machine, or a workflow engine such as Temporal, Azure Durable Functions or AWS Step Functions) sends commands and waits for replies, persisting state at each step.
+- Pros: the process is explicit, versioned and observable, timeouts and compensations live in one place.
+- Cons: the orchestrator is a component to run, and it can grow into a god service if it absorbs domain logic.
+
+My default: **orchestrate the core money-moving flow**, because it needs visibility, timeouts and auditable compensation, and **choreograph the side effects** (emails, analytics, loyalty points) off domain events.
+
+Design details either way:
+- Idempotent steps and idempotency keys on payment calls.
+- Pivot step ordering: do the hardest-to-compensate step, such as shipping, last.
+- Semantic locks or a `PENDING` status so other processes don't act on half-finished orders.
+- Timeouts that trigger compensation.
+- A per-saga correlation id for tracing.
+
+**What the interviewer is looking for:**
+Saga mechanics, compensation (not rollback), an explicit trade-off between the two styles, failure and timeout handling and observability. Architect answers justify the hybrid.
+
+**Follow-ups:**
+- Payment succeeded, inventory failed and the refund call is timing out. What happens?
+- How do you version a long-running workflow while instances are in flight?
+- How do you handle the user cancelling mid-saga?
+
+**Red flags:**
+- Proposing two-phase commit across services and the payment provider.
+- No compensation design, or assuming compensation is an exact undo.
+- Choreography with no way to see the end-to-end state.
+
+### Your organisation wants to replace synchronous REST calls between 12 microservices with events. How do you evaluate and run that change? {#migrate-sync-to-async}
+
+**Level:** Architect
+
+**Model answer:**
+Start from the problem, not the pattern. Which pain is real? Cascading failures, latency chains (p99 compounding through 5 hops), tight release coupling, or scaling bottlenecks? Then classify each interaction:
+
+- **Queries that need an answer now** (price lookup, auth checks) stay synchronous, or become local read models fed by events if availability matters more than freshness.
+- **Notifications of facts** ("order shipped, update loyalty") become events. This is the biggest win.
+- **Commands for long-running work** become queued commands, with the result reported asynchronously.
+
+The cost of going asynchronous has to be accepted explicitly:
+- **Eventual consistency in the UI:** design pending states and "we'll email you" flows.
+- **Debugging:** you need distributed tracing with context propagated through message headers, and correlation ids.
+- **New failure modes:** duplicates, reordering, poison messages, DLQs.
+- **Platform and skills:** schema governance, a broker platform and team skills.
+
+Execution:
+1. Pick one high-value seam and prove the paved road: outbox library, schema registry, tracing, DLQ dashboards.
+2. Run the event path and the REST path side by side (strangler pattern), compare the results, then cut over.
+3. Measure before and after: availability, p99, incident count, lead time.
+4. Write an ADR with the guidelines, so teams don't apply events everywhere.
+
+**What the interviewer is looking for:**
+Problem-first reasoning, keeping sync where it fits, a candid account of costs, and incremental migration with measurement. This is a judgement question, not a Kafka question.
+
+**Follow-ups:**
+- The product owner insists the confirmation page shows the final shipping date. How do you design it?
+- How do you prevent the event mesh becoming an untraceable "distributed monolith"?
+
+**Red flags:**
+- "Events everywhere" as an end in itself.
+- Ignoring the user-experience impact of eventual consistency.
+- A big-bang migration.
+
+### Design event streaming across two regions for disaster recovery. What happens to ordering and offsets on failover? {#multi-region-streaming}
+
+**Level:** Architect
+
+**Model answer:**
+First agree the targets. Can the business accept losing the last few seconds of events (the **RPO**, recovery point objective)? How fast must processing resume (the **RTO**, recovery time objective)? Is active-active really needed? Then choose a topology:
+
+- **Active-passive with asynchronous replication.** Mirror topics to the DR cluster with MirrorMaker 2 or Confluent Cluster Linking (VERIFY: Event Hubs offers geo-replication of data in its Premium and Dedicated tiers; older geo-disaster recovery pairing replicated metadata only). The RPO is the replication lag. On failover, producers and consumers switch bootstrap servers.
+- **Active-active.** Each region produces to local topics (`eu.orders`, `us.orders`) and mirrors the other's. Consumers read both. There is no single global order, so per-entity ordering needs **home-region ownership** of each entity, or conflict handling with versions.
+- **Stretched cluster** across nearby availability zones or metro regions with synchronous replication (`acks=all`, `min.insync.replicas`). It gives a zero RPO but needs low latency between sites, so it doesn't work across continents.
+
+Offsets and ordering on failover:
+- Offsets are *not* the same number across clusters. Use the replication tool's **offset translation** (MirrorMaker 2 checkpoints, or cluster linking that preserves offsets), or restart from a timestamp.
+- Expect duplicates (rewind slightly) or gaps (unreplicated tail). Idempotent consumers make "rewind a bit" the safe choice.
+- Events produced in the old region but not yet replicated are lost or must be reconciled when it returns. Decide the procedure in advance and rehearse it.
+
+Operations: replication lag alerts, regular game days, runbooks and an explicit failback plan.
+
+**What the interviewer is looking for:**
+RPO and RTO first, topology trade-offs, offset translation, accepting duplicates over loss and practising failover.
+
+**Follow-ups:**
+- How would you guarantee no double-charging after failover?
+- What is the effect of `acks=1` versus `acks=all` on data loss during a broker failure?
+
+**Red flags:**
+- Assuming offsets carry over unchanged.
+- Active-active with global ordering assumptions.
+- A DR design that has never been tested.
+
 ## Cheat Sheet
 
 - **Queue** — competing consumers, message deleted on ack; for commands and jobs.
@@ -284,6 +538,10 @@ Governance that scales socially as well as technically: automation over review b
 - **Consumer lag** — the key streaming health metric; alert on growth and age.
 - **Schema compatibility** — add optional fields; breaking changes get a new topic version.
 - **KRaft** — Kafka's built-in metadata quorum; ZooKeeper was removed in Kafka 4.0.
+- **Command vs event** — command: imperative, one handler, can be rejected; event: past tense, many subscribers, a fact.
+- **Static membership** — `group.instance.id` lets a restarting consumer rejoin without triggering a rebalance.
+- **Cooperative rebalancing** — only partitions that move are revoked, so the group keeps processing.
+- **Saga** — sequence of local transactions with compensating actions; orchestrate money flows, choreograph side effects.
 
 ## Further Reading
 
