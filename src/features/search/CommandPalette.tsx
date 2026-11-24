@@ -7,6 +7,7 @@ import { LevelBadge } from '@/components/Badge';
 
 const GROUPS: { kind: SearchKind; label: string; max: number }[] = [
   { kind: 'topic', label: 'Topics', max: 5 },
+  { kind: 'glossary', label: 'Glossary', max: 4 },
   { kind: 'question', label: 'Interview questions', max: 8 },
   { kind: 'section', label: 'Sections', max: 6 },
   { kind: 'cheat', label: 'Cheat sheet', max: 6 },
@@ -17,6 +18,7 @@ const KIND_ICON: Record<SearchKind, string> = {
   question: 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01 M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
   section: 'M4 6h16M4 12h16M4 18h10',
   cheat: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z',
+  glossary: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20M9 13l2.5-6 2.5 6M9.8 11h3.4',
 };
 
 function KindIcon({ kind }: { kind: SearchKind }) {

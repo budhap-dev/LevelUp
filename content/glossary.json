@@ -1,0 +1,2694 @@
+[
+  {
+    "id": "architecture-decision-record",
+    "term": "Architecture Decision Record",
+    "aka": [
+      "ADR"
+    ],
+    "group": "architecture-design",
+    "definition": "A short, immutable document recording one significant architectural decision: its context, the options considered, the decision and its consequences.",
+    "details": [
+      "Accepted ADRs are never edited; a changed decision gets a new ADR that supersedes the old one.",
+      "Include negative consequences and \"revisit triggers\" — the conditions that would reopen the decision.",
+      "Store them in the repository next to the code and propose them as pull requests."
+    ],
+    "useCases": [
+      "Choosing a database, integration style or tenancy model.",
+      "Explaining to new joiners why the system looks the way it does."
+    ],
+    "related": [
+      "adrs-nfrs",
+      "technical-strategy"
+    ]
+  },
+  {
+    "id": "non-functional-requirement",
+    "term": "Non-functional Requirement",
+    "aka": [
+      "NFR",
+      "quality attribute"
+    ],
+    "group": "architecture-design",
+    "definition": "A requirement about how well a system works — availability, latency, security, scalability, cost — rather than what it does.",
+    "details": [
+      "Vague NFRs (\"fast\", \"secure\") are useless; write measurable quality-attribute scenarios with load, conditions and percentiles.",
+      "NFRs drive architecture far more than features do.",
+      "They trade off against each other and against cost."
+    ],
+    "useCases": [
+      "\"Search p95 < 300 ms at 1,500 req/s, including during deploys.\"",
+      "Deciding between single-region and multi-region designs."
+    ],
+    "related": [
+      "adrs-nfrs",
+      "system-design"
+    ]
+  },
+  {
+    "id": "fitness-function",
+    "term": "Fitness Function",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "An automated, objective check that an architectural characteristic still holds as the system evolves.",
+    "details": [
+      "Examples: dependency rules in CI, load-test regression thresholds, bundle-size budgets, policy-as-code checks.",
+      "SLOs with error-budget alerts act as fitness functions in production.",
+      "Term from Building Evolutionary Architectures (Ford, Parsons, Kua)."
+    ],
+    "useCases": [
+      "Stopping the domain layer importing infrastructure code.",
+      "Failing a build when p95 latency regresses by more than 10%."
+    ],
+    "related": [
+      "adrs-nfrs",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "c4-model",
+    "term": "C4 Model",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "Simon Brown's approach to architecture diagrams at four zoom levels: system context, containers, components and code.",
+    "details": [
+      "A C4 \"container\" is any separately deployable unit or data store — not specifically a Docker container.",
+      "Most teams only need to maintain context and container diagrams.",
+      "Every relationship should be labelled with intent and protocol."
+    ],
+    "useCases": [
+      "Onboarding engineers to a system.",
+      "Architecture reviews and incident response."
+    ],
+    "related": [
+      "diagrams-c4-uml-sequence"
+    ]
+  },
+  {
+    "id": "bounded-context",
+    "term": "Bounded Context",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "An explicit boundary in Domain-Driven Design within which one domain model and its language apply consistently.",
+    "details": [
+      "The same word (\"Customer\") can mean different things in different contexts; translation between them is explicit.",
+      "The best guide to service, module and team boundaries.",
+      "One team should own a context; a context split across teams becomes muddled."
+    ],
+    "useCases": [
+      "Splitting a monolith into services.",
+      "Avoiding a single enterprise-wide \"Customer\" model that serves nobody well."
+    ],
+    "related": [
+      "domain-driven-design",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "aggregate",
+    "term": "Aggregate",
+    "aka": [
+      "aggregate root"
+    ],
+    "group": "architecture-design",
+    "definition": "A cluster of domain objects treated as one unit for changes, with a single root that enforces the invariants.",
+    "details": [
+      "One transaction should modify one aggregate.",
+      "Keep aggregates small and reference other aggregates by id.",
+      "Use eventual consistency (domain events) between aggregates."
+    ],
+    "useCases": [
+      "An Order aggregate guaranteeing its total equals the sum of its lines.",
+      "Finding transactional boundaries in a complex domain."
+    ],
+    "related": [
+      "domain-driven-design",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "anticorruption-layer",
+    "term": "Anticorruption Layer",
+    "aka": [
+      "ACL"
+    ],
+    "group": "architecture-design",
+    "definition": "A translation layer that protects your domain model from a legacy or external system's model.",
+    "details": [
+      "Translates in both directions, so foreign concepts and codes never leak into your domain.",
+      "Often used with the strangler fig pattern during migrations.",
+      "Costs extra code; conforming may be cheaper for clean, stable upstream APIs."
+    ],
+    "useCases": [
+      "Integrating a mainframe policy system.",
+      "Wrapping a third-party payment provider's data model."
+    ],
+    "related": [
+      "domain-driven-design",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "cqrs",
+    "term": "CQRS",
+    "aka": [
+      "Command Query Responsibility Segregation"
+    ],
+    "group": "architecture-design",
+    "definition": "Separating the model used to change data (commands) from the model used to read it (queries).",
+    "details": [
+      "Read models are denormalised projections optimised for specific queries.",
+      "Often paired with events or event sourcing; reads become eventually consistent.",
+      "Adds complexity — use where read and write needs differ strongly."
+    ],
+    "useCases": [
+      "High-traffic product pages with complex write workflows behind them.",
+      "Dashboards built from event streams."
+    ],
+    "related": [
+      "architecture-patterns",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "event-sourcing",
+    "term": "Event Sourcing",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "Storing the sequence of domain events as the source of truth and deriving current state by replaying them.",
+    "details": [
+      "Gives a complete audit history and temporal queries.",
+      "Needs snapshots, projections and careful event schema versioning.",
+      "GDPR erasure usually needs crypto-shredding (delete per-subject encryption keys)."
+    ],
+    "useCases": [
+      "Ledgers, insurance policies and audit-critical workflows.",
+      "Rebuilding new read models from history."
+    ],
+    "related": [
+      "architecture-patterns",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "saga",
+    "term": "Saga",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A sequence of local transactions across services, where each step has a compensating action if a later step fails.",
+    "details": [
+      "Two styles: choreography (services react to events) and orchestration (a coordinator sends commands).",
+      "Compensation is a business action (refund), not a rollback.",
+      "Needs idempotent steps, timeouts and correlation ids."
+    ],
+    "useCases": [
+      "Order → payment → inventory → shipping flows.",
+      "Any multi-service process without a distributed transaction."
+    ],
+    "related": [
+      "messaging-event-streaming",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "strangler-fig",
+    "term": "Strangler Fig Pattern",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "Incrementally replacing a legacy system by routing functionality piece by piece to a new implementation behind a facade.",
+    "details": [
+      "Avoids big-bang rewrites; the old system shrinks until it can be removed.",
+      "Requires a routing layer (proxy, gateway or facade) and often an anticorruption layer.",
+      "Run old and new side by side and compare outputs before switching."
+    ],
+    "useCases": [
+      "Migrating a monolith to services.",
+      "Replacing an API gateway or legacy CMS."
+    ],
+    "related": [
+      "architecture-patterns",
+      "technical-strategy"
+    ]
+  },
+  {
+    "id": "modular-monolith",
+    "term": "Modular Monolith",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A single deployable application organised into well-separated modules with enforced boundaries and owned data.",
+    "details": [
+      "Gets many benefits of microservices (clear ownership, independent evolution) without distributed-system costs.",
+      "Enforce boundaries with dependency rules and separate schemas.",
+      "A good starting point; modules can be extracted later if needed."
+    ],
+    "useCases": [
+      "Startups and mid-size products.",
+      "Preparing a legacy monolith for gradual extraction."
+    ],
+    "related": [
+      "architecture-patterns",
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "cap-theorem",
+    "term": "CAP Theorem",
+    "aka": [
+      "PACELC"
+    ],
+    "group": "architecture-design",
+    "definition": "In a network partition, a distributed system must choose between consistency and availability. PACELC adds that, without a partition, it trades latency against consistency.",
+    "details": [
+      "Partitions are not optional in real networks, so the real choice is C or A during a partition.",
+      "Consistency here means linearisability, not ACID consistency.",
+      "Many systems let you choose per operation (e.g. strongly consistent reads at higher cost)."
+    ],
+    "useCases": [
+      "Choosing a database or replication setup.",
+      "Explaining why a multi-region system shows stale data."
+    ],
+    "related": [
+      "system-design",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "solid",
+    "term": "SOLID",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "Five object-oriented design principles: Single responsibility, Open–closed, Liskov substitution, Interface segregation and Dependency inversion.",
+    "details": [
+      "Aims for code that is easy to change and test.",
+      "Applied dogmatically it creates needless abstraction; apply where change is likely.",
+      "Dependency inversion underpins ports-and-adapters architectures."
+    ],
+    "useCases": [
+      "Refactoring a large service class.",
+      "Designing extension points such as payment providers."
+    ],
+    "related": [
+      "solid-clean-code",
+      "design-patterns"
+    ]
+  },
+  {
+    "id": "hexagonal-architecture",
+    "term": "Hexagonal Architecture",
+    "aka": [
+      "ports and adapters",
+      "clean architecture"
+    ],
+    "group": "architecture-design",
+    "definition": "Structuring an application so domain logic sits at the centre and talks to the outside world only through ports (interfaces) implemented by adapters.",
+    "details": [
+      "Dependencies point inwards: infrastructure depends on the domain, never the reverse.",
+      "Makes domain logic testable without databases or HTTP.",
+      "Clean and onion architecture are close variants."
+    ],
+    "useCases": [
+      "Swapping a database or message broker with limited impact.",
+      "Fast unit tests for complex business rules."
+    ],
+    "related": [
+      "solid-clean-code",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "technical-debt",
+    "term": "Technical Debt",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "The future cost of shortcuts or outdated design in code and systems, paid as \"interest\" in slower change, bugs and incidents.",
+    "details": [
+      "Prioritise by interest (ongoing cost in frequently changed code), not by how ugly the code looks.",
+      "Deliberate debt is fine when recorded with a repayment plan.",
+      "Fund it with a capacity allocation or tie it to features that touch the code."
+    ],
+    "useCases": [
+      "Justifying a refactor of a high-churn module.",
+      "Planning platform upgrades."
+    ],
+    "related": [
+      "technical-strategy",
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "idempotency",
+    "term": "Idempotency",
+    "aka": [
+      "idempotent operation"
+    ],
+    "group": "backend-apis",
+    "definition": "An operation is idempotent if performing it several times has the same effect as performing it once.",
+    "details": [
+      "GET, PUT and DELETE are idempotent by HTTP semantics; POST is not.",
+      "Make non-idempotent operations safe to retry with an `Idempotency-Key` stored with the result.",
+      "Essential because networks fail ambiguously and messages are delivered more than once."
+    ],
+    "useCases": [
+      "Payment creation APIs.",
+      "Message consumers in at-least-once systems."
+    ],
+    "related": [
+      "api-styles",
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "rest",
+    "term": "REST",
+    "aka": [
+      "Representational State Transfer"
+    ],
+    "group": "backend-apis",
+    "definition": "An architectural style for APIs built on resources, standard HTTP methods, status codes, statelessness and caching.",
+    "details": [
+      "Use methods by their semantics and return meaningful status codes.",
+      "Errors in a consistent format such as RFC 9457 Problem Details.",
+      "Describe the contract with OpenAPI."
+    ],
+    "useCases": [
+      "Public and partner APIs.",
+      "CRUD-style resource APIs."
+    ],
+    "related": [
+      "api-styles"
+    ]
+  },
+  {
+    "id": "graphql",
+    "term": "GraphQL",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A query language and runtime where clients request exactly the fields they need from a typed schema, usually through one endpoint.",
+    "details": [
+      "Watch the N+1 problem — batch resolvers with DataLoader.",
+      "Enforce depth/complexity limits and field-level authorisation.",
+      "Persisted queries enable caching and block arbitrary queries."
+    ],
+    "useCases": [
+      "Mobile and web apps needing different shapes of related data.",
+      "Federating data owned by several teams."
+    ],
+    "related": [
+      "api-styles"
+    ]
+  },
+  {
+    "id": "grpc",
+    "term": "gRPC",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A high-performance RPC framework using Protocol Buffers contracts over HTTP/2, with streaming and deadlines.",
+    "details": [
+      "Always set and propagate deadlines.",
+      "Long-lived HTTP/2 connections need L7 or client-side load balancing.",
+      "Browsers need gRPC-Web, Connect or a REST gateway."
+    ],
+    "useCases": [
+      "Internal service-to-service calls.",
+      "Streaming telemetry or status updates."
+    ],
+    "related": [
+      "api-styles"
+    ]
+  },
+  {
+    "id": "oauth2",
+    "term": "OAuth 2.0",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A framework for delegated authorisation: a client obtains an access token to call an API on a user's (or its own) behalf, limited by scopes.",
+    "details": [
+      "Use the authorisation code flow with PKCE for user sign-in; client credentials for machine-to-machine.",
+      "The implicit and password grants are deprecated.",
+      "Access tokens are for APIs; they are not proof of login for the client."
+    ],
+    "useCases": [
+      "\"Sign in with…\" and third-party app access.",
+      "Service-to-service API access."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "openid-connect",
+    "term": "OpenID Connect",
+    "aka": [
+      "OIDC"
+    ],
+    "group": "backend-apis",
+    "definition": "An identity layer on top of OAuth 2.0 that adds an ID token describing who logged in, when and how.",
+    "details": [
+      "ID tokens are for the client application; never send them to APIs as authorisation.",
+      "Discovery and JWKS endpoints publish configuration and signing keys.",
+      "The `nonce` binds the ID token to the login request."
+    ],
+    "useCases": [
+      "Single sign-on to web and mobile apps.",
+      "Enterprise SSO alongside SAML."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "pkce",
+    "term": "PKCE",
+    "aka": [
+      "Proof Key for Code Exchange"
+    ],
+    "group": "backend-apis",
+    "definition": "An OAuth extension that binds an authorisation code to the client that started the flow using a one-time verifier and its hash.",
+    "details": [
+      "Stops attackers redeeming intercepted authorisation codes.",
+      "Required for public clients and recommended for all.",
+      "Defined in RFC 7636; mandatory in OAuth 2.1 drafts."
+    ],
+    "useCases": [
+      "Mobile apps and SPAs (via a BFF).",
+      "Any authorisation code flow."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "jwt",
+    "term": "JSON Web Token",
+    "aka": [
+      "JWT"
+    ],
+    "group": "backend-apis",
+    "definition": "A compact, signed token containing JSON claims, commonly used as an access token.",
+    "details": [
+      "Validate the signature, pinned algorithm, `iss`, `aud` and `exp` on every request.",
+      "Claims are only base64-encoded — readable by anyone; never put secrets in them.",
+      "Hard to revoke before expiry, so keep lifetimes short."
+    ],
+    "useCases": [
+      "Stateless API authorisation.",
+      "Passing identity between services."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "rbac-abac-rebac",
+    "term": "RBAC, ABAC and ReBAC",
+    "aka": [
+      "role-based access control",
+      "attribute-based access control",
+      "relationship-based access control"
+    ],
+    "group": "backend-apis",
+    "definition": "Authorisation models based on roles, on attributes of user/resource/context, or on relationships in a graph.",
+    "details": [
+      "RBAC is simple but suffers role explosion for per-object rules.",
+      "ABAC suits contextual rules (region, classification); ReBAC suits sharing and hierarchies (Zanzibar-style).",
+      "Real systems combine them, enforced server-side on every request."
+    ],
+    "useCases": [
+      "Admin roles in internal tools (RBAC).",
+      "Google Docs-style sharing (ReBAC)."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "bff",
+    "term": "Backend for Frontend",
+    "aka": [
+      "BFF"
+    ],
+    "group": "backend-apis",
+    "definition": "A backend dedicated to one client experience that aggregates downstream services and shapes responses for that client.",
+    "details": [
+      "Owned by the client team, so it evolves with the UI.",
+      "For SPAs, a BFF can keep OAuth tokens server-side and use secure cookies.",
+      "Can grow into a mini-monolith if business logic creeps in."
+    ],
+    "useCases": [
+      "Separate web and mobile BFFs.",
+      "Secure token handling for single-page apps."
+    ],
+    "related": [
+      "api-styles",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "event-loop",
+    "term": "Event Loop",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "The mechanism in Node.js (and browsers) that runs short callbacks on a single thread while I/O happens asynchronously.",
+    "details": [
+      "Long synchronous work blocks every other request.",
+      "Microtasks (promises, `process.nextTick`) run between callbacks.",
+      "Monitor event loop delay as a key health metric."
+    ],
+    "useCases": [
+      "Diagnosing latency spikes in Node.js APIs.",
+      "Deciding when to move CPU work to worker threads."
+    ],
+    "related": [
+      "nodejs",
+      "javascript"
+    ]
+  },
+  {
+    "id": "backpressure",
+    "term": "Backpressure",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A mechanism that slows or pauses a fast producer when a consumer can't keep up, so buffers don't grow without bound.",
+    "details": [
+      "Node streams signal it when `write()` returns false; `pipeline()` handles it.",
+      "Queues use lag and bounded buffers; APIs use rate limits and load shedding.",
+      "Without it, memory grows until the process crashes."
+    ],
+    "useCases": [
+      "Streaming large files or exports.",
+      "Stream processing and message consumers."
+    ],
+    "related": [
+      "nodejs",
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "transactional-outbox",
+    "term": "Transactional Outbox",
+    "aka": [
+      "outbox pattern"
+    ],
+    "group": "backend-apis",
+    "definition": "Writing events to an outbox table in the same database transaction as the business change, then publishing them with a relay or CDC.",
+    "details": [
+      "Solves the dual-write problem: no lost or phantom events.",
+      "Publishing is at-least-once, so consumers must be idempotent.",
+      "CDC-based relays (e.g. Debezium) avoid polling load."
+    ],
+    "useCases": [
+      "Publishing OrderPlaced reliably after saving an order.",
+      "Any service that writes to a DB and a broker."
+    ],
+    "related": [
+      "messaging-event-streaming",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "at-least-once",
+    "term": "At-least-once Delivery",
+    "aka": [
+      "delivery semantics",
+      "exactly-once"
+    ],
+    "group": "backend-apis",
+    "definition": "A delivery guarantee where messages are never lost but may arrive more than once.",
+    "details": [
+      "The realistic default in most brokers; duplicates are normal.",
+      "\"Exactly-once\" holds only inside a system such as Kafka transactions; end to end you need idempotent consumers.",
+      "At-most-once acknowledges before processing and can lose messages."
+    ],
+    "useCases": [
+      "Designing message consumers.",
+      "Payment and order processing."
+    ],
+    "related": [
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "consumer-group",
+    "term": "Consumer Group",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A set of consumers that share the partitions of a log topic so each message is processed by one member of the group.",
+    "details": [
+      "Parallelism is capped by the partition count.",
+      "Each group tracks its own offsets, so many groups can read the same topic independently.",
+      "Rebalances reassign partitions; use cooperative rebalancing and static membership to reduce disruption."
+    ],
+    "useCases": [
+      "Scaling Kafka or Event Hubs consumers.",
+      "Multiple services consuming the same event stream."
+    ],
+    "related": [
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "dead-letter-queue",
+    "term": "Dead-letter Queue",
+    "aka": [
+      "DLQ"
+    ],
+    "group": "backend-apis",
+    "definition": "A queue where messages that can't be processed after retries are moved for inspection and replay.",
+    "details": [
+      "Classify errors: retry transient ones, dead-letter permanent ones immediately.",
+      "Alert on DLQ depth and age, and provide a safe redrive tool.",
+      "Kafka has no built-in DLQ; use retry and DLQ topics."
+    ],
+    "useCases": [
+      "Poison messages in order processing.",
+      "Integrations with flaky third parties."
+    ],
+    "related": [
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "circuit-breaker",
+    "term": "Circuit Breaker",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A pattern that stops calling a failing dependency for a period, failing fast instead, then probes to see if it has recovered.",
+    "details": [
+      "States: closed (normal), open (fail fast), half-open (trial requests).",
+      "Prevents cascading failures and thread/connection exhaustion.",
+      "Combine with timeouts, retries with jitter and fallbacks."
+    ],
+    "useCases": [
+      "Calls to payment providers or slow internal services.",
+      "Protecting a service from a downstream outage."
+    ],
+    "related": [
+      "system-design",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "acid",
+    "term": "ACID",
+    "aka": [],
+    "group": "data",
+    "definition": "The guarantees of database transactions: Atomicity, Consistency, Isolation and Durability.",
+    "details": [
+      "Atomicity: all or nothing. Durability: committed data survives crashes (write-ahead log).",
+      "Isolation depends on the configured level — read committed by default in PostgreSQL and SQL Server.",
+      "Many NoSQL stores now offer ACID within a partition or document."
+    ],
+    "useCases": [
+      "Money transfers and inventory updates.",
+      "Any business invariant spanning several rows."
+    ],
+    "related": [
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "isolation-level",
+    "term": "Isolation Level",
+    "aka": [
+      "read committed",
+      "serializable",
+      "snapshot isolation"
+    ],
+    "group": "data",
+    "definition": "How much concurrent transactions can see of each other's changes, trading consistency for concurrency.",
+    "details": [
+      "Read committed allows lost updates; snapshot isolation allows write skew; serializable prevents both but needs retries.",
+      "Use atomic conditional updates or `SELECT … FOR UPDATE` for hotspots.",
+      "Engines differ — check exact semantics."
+    ],
+    "useCases": [
+      "Preventing overselling stock.",
+      "Enforcing invariants such as \"at least one doctor on call\"."
+    ],
+    "related": [
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "index",
+    "term": "Database Index",
+    "aka": [
+      "B-tree index",
+      "composite index",
+      "covering index"
+    ],
+    "group": "data",
+    "definition": "A data structure that lets the database find rows without scanning the whole table.",
+    "details": [
+      "Composite indexes follow the leftmost-prefix rule.",
+      "Covering indexes answer queries from the index alone.",
+      "Every index speeds reads but slows writes and uses storage."
+    ],
+    "useCases": [
+      "Fixing slow queries found with EXPLAIN ANALYZE.",
+      "Supporting keyset pagination."
+    ],
+    "related": [
+      "databases-sql-nosql",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "normalisation",
+    "term": "Normalisation",
+    "aka": [
+      "3NF",
+      "denormalisation"
+    ],
+    "group": "data",
+    "definition": "Organising relational data so each fact is stored once, avoiding update, insert and delete anomalies.",
+    "details": [
+      "3NF: every non-key attribute depends on the key, the whole key and nothing but the key.",
+      "Denormalise deliberately for read performance.",
+      "Snapshot data that must not change, such as prices on an order."
+    ],
+    "useCases": [
+      "Designing OLTP schemas.",
+      "Building read models and reporting tables."
+    ],
+    "related": [
+      "data-modelling",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "sharding",
+    "term": "Sharding",
+    "aka": [
+      "partitioning"
+    ],
+    "group": "data",
+    "definition": "Splitting data across multiple database nodes by a key so each node holds a subset.",
+    "details": [
+      "Choosing the shard key is the critical decision; hot keys concentrate load.",
+      "Cross-shard queries and transactions become hard.",
+      "Exhaust cheaper options (indexes, replicas, caching, vertical scaling) first."
+    ],
+    "useCases": [
+      "Multi-tenant SaaS sharded by tenant id.",
+      "Very high write volumes beyond one primary."
+    ],
+    "related": [
+      "databases-sql-nosql",
+      "system-design"
+    ]
+  },
+  {
+    "id": "replication-lag",
+    "term": "Replication Lag",
+    "aka": [
+      "read replica",
+      "read-your-writes"
+    ],
+    "group": "data",
+    "definition": "The delay between a write on the primary and its appearance on asynchronous replicas.",
+    "details": [
+      "Causes users not to see their own changes when reads go to replicas.",
+      "Route read-your-writes to the primary or wait for the replica to catch up.",
+      "Never use replica reads for transactional decisions."
+    ],
+    "useCases": [
+      "Scaling reads with replicas.",
+      "Diagnosing \"my update disappeared\" bugs."
+    ],
+    "related": [
+      "databases-sql-nosql",
+      "caching"
+    ]
+  },
+  {
+    "id": "cache-aside",
+    "term": "Cache-aside",
+    "aka": [
+      "lazy loading cache"
+    ],
+    "group": "data",
+    "definition": "The application reads from the cache first and, on a miss, loads from the database and populates the cache.",
+    "details": [
+      "Combine with TTLs (with jitter) and delete-on-write for freshness.",
+      "Watch for stampedes on popular keys; use request coalescing.",
+      "The cache must be optional for correctness."
+    ],
+    "useCases": [
+      "Product pages and reference data.",
+      "Reducing database load for hot reads."
+    ],
+    "related": [
+      "caching"
+    ]
+  },
+  {
+    "id": "cache-stampede",
+    "term": "Cache Stampede",
+    "aka": [
+      "thundering herd",
+      "dogpile"
+    ],
+    "group": "data",
+    "definition": "Many requests miss the cache at once (often when a hot key expires) and overwhelm the backing store.",
+    "details": [
+      "Mitigate with request coalescing (single flight), locks, early refresh and TTL jitter.",
+      "Serve stale data while revalidating where acceptable.",
+      "Common after deploys that flush caches."
+    ],
+    "useCases": [
+      "Hot product pages during sales.",
+      "Cold starts after cache restarts."
+    ],
+    "related": [
+      "caching",
+      "system-design"
+    ]
+  },
+  {
+    "id": "cdc",
+    "term": "Change Data Capture",
+    "aka": [
+      "CDC"
+    ],
+    "group": "data",
+    "definition": "Capturing row-level changes from a database's transaction log and streaming them to other systems.",
+    "details": [
+      "Avoids dual writes and polling; preserves commit order.",
+      "Tools: Debezium, native change feeds/streams, cloud DMS.",
+      "Consumers must handle schema changes and duplicates."
+    ],
+    "useCases": [
+      "Feeding search indexes and warehouses.",
+      "Implementing the transactional outbox relay."
+    ],
+    "related": [
+      "data-engineering-basics",
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "star-schema",
+    "term": "Star Schema",
+    "aka": [
+      "dimensional modelling",
+      "fact table",
+      "dimension table"
+    ],
+    "group": "data",
+    "definition": "An analytical model with a central fact table of measurements at a declared grain, surrounded by denormalised dimension tables.",
+    "details": [
+      "Declare the grain first; never mix grains in one fact table.",
+      "Slowly changing dimensions (Type 2) preserve history.",
+      "Conformed dimensions enable cross-process analysis."
+    ],
+    "useCases": [
+      "Sales and finance reporting.",
+      "BI dashboards in a data warehouse."
+    ],
+    "related": [
+      "data-modelling",
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "etl-elt",
+    "term": "ETL and ELT",
+    "aka": [],
+    "group": "data",
+    "definition": "Extract, Transform, Load moves data and transforms it before loading; ELT loads raw data first and transforms it inside the warehouse.",
+    "details": [
+      "Modern cloud warehouses favour ELT with tools such as dbt.",
+      "Keep raw data for reprocessing; make transformations idempotent.",
+      "Test data quality (nulls, uniqueness, freshness) in pipelines."
+    ],
+    "useCases": [
+      "Building a data warehouse.",
+      "Combining SaaS and operational data for analytics."
+    ],
+    "related": [
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "bitemporal",
+    "term": "Bitemporal Data",
+    "aka": [
+      "valid time",
+      "transaction time"
+    ],
+    "group": "data",
+    "definition": "Modelling both when a fact was true in the real world (valid time) and when the system recorded it (transaction time).",
+    "details": [
+      "Answers \"what did we believe on date Y about date X?\".",
+      "Needed for back-dated corrections in insurance, finance and payroll.",
+      "Adds query complexity; use views and libraries."
+    ],
+    "useCases": [
+      "Regulatory reporting.",
+      "Policy and contract histories."
+    ],
+    "related": [
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "shared-responsibility",
+    "term": "Shared Responsibility Model",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "The split of security and operational duties between a cloud provider (the cloud itself) and the customer (what they put in it).",
+    "details": [
+      "The split shifts with IaaS, PaaS and SaaS.",
+      "Identity, data and configuration are always the customer's responsibility.",
+      "Most cloud breaches are customer misconfigurations."
+    ],
+    "useCases": [
+      "Security reviews of cloud workloads.",
+      "Deciding who patches what."
+    ],
+    "related": [
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "availability-zone",
+    "term": "Availability Zone",
+    "aka": [
+      "AZ",
+      "region"
+    ],
+    "group": "cloud-devops",
+    "definition": "A physically separate data centre (or group) within a cloud region with independent power, cooling and networking.",
+    "details": [
+      "Spread production across at least two, ideally three, AZs.",
+      "Cross-AZ traffic often costs money and adds latency.",
+      "Regions provide isolation for disaster recovery and data residency."
+    ],
+    "useCases": [
+      "Highly available web applications.",
+      "Zone-redundant managed databases."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "azure"
+    ]
+  },
+  {
+    "id": "landing-zone",
+    "term": "Landing Zone",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "A pre-configured, governed cloud foundation — account structure, identity, networking, policies, logging — into which workloads are deployed.",
+    "details": [
+      "Automate \"subscription/account vending\" so teams get compliant environments in minutes.",
+      "Roll out policies in audit mode first, then enforce.",
+      "Use provider reference designs (Azure Landing Zones, AWS Control Tower)."
+    ],
+    "useCases": [
+      "Enterprise cloud adoption.",
+      "Bringing ad-hoc accounts under governance."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "azure"
+    ]
+  },
+  {
+    "id": "infrastructure-as-code",
+    "term": "Infrastructure as Code",
+    "aka": [
+      "IaC"
+    ],
+    "group": "cloud-devops",
+    "definition": "Defining infrastructure in version-controlled files applied by automation rather than manual console changes.",
+    "details": [
+      "Declarative tools (Terraform/OpenTofu, Bicep, CloudFormation) compute the diff for you.",
+      "Apply from pipelines after reviewing the plan; never from laptops.",
+      "Protect state files: remote, locked, encrypted."
+    ],
+    "useCases": [
+      "Reproducible environments.",
+      "Disaster recovery by rebuilding from code."
+    ],
+    "related": [
+      "infrastructure-as-code"
+    ]
+  },
+  {
+    "id": "drift",
+    "term": "Configuration Drift",
+    "aka": [
+      "drift"
+    ],
+    "group": "cloud-devops",
+    "definition": "When real infrastructure differs from what the code describes, usually after manual changes.",
+    "details": [
+      "Detect with scheduled plans or continuous reconciliation (GitOps).",
+      "Resolve by reverting or by codifying the change.",
+      "Prevent with read-only console access to production."
+    ],
+    "useCases": [
+      "Post-incident clean-up of emergency changes.",
+      "Compliance audits."
+    ],
+    "related": [
+      "infrastructure-as-code"
+    ]
+  },
+  {
+    "id": "gitops",
+    "term": "GitOps",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "Operating systems from declarative desired state in Git that agents continuously pull and reconcile.",
+    "details": [
+      "Deployments are Git merges; rollbacks are reverts.",
+      "Manual changes in the cluster get reverted automatically.",
+      "Never store plaintext secrets in the config repo."
+    ],
+    "useCases": [
+      "Kubernetes deployments with Argo CD or Flux.",
+      "Promoting releases across environments."
+    ],
+    "related": [
+      "infrastructure-as-code",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "ci-cd",
+    "term": "CI/CD",
+    "aka": [
+      "continuous integration",
+      "continuous delivery",
+      "continuous deployment"
+    ],
+    "group": "cloud-devops",
+    "definition": "Continuous integration merges small changes frequently with automated tests; continuous delivery keeps every change releasable; continuous deployment releases automatically.",
+    "details": [
+      "Requires trunk-based development and fast, trustworthy tests.",
+      "Build an artefact once and promote it through environments.",
+      "Aim for PR feedback in under ten minutes."
+    ],
+    "useCases": [
+      "Any team shipping software regularly.",
+      "Reducing lead time and change failure rate."
+    ],
+    "related": [
+      "ci-cd-pipelines",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "canary-release",
+    "term": "Canary Release",
+    "aka": [
+      "progressive delivery"
+    ],
+    "group": "cloud-devops",
+    "definition": "Releasing a change to a small share of traffic, comparing its health with the baseline and expanding gradually.",
+    "details": [
+      "Automate the analysis (error rate, latency, business KPIs) and rollback.",
+      "Both versions run at once, so changes must be backward compatible.",
+      "Apply to configuration changes too, not just code."
+    ],
+    "useCases": [
+      "Risky releases of high-traffic services.",
+      "Validating performance with real traffic."
+    ],
+    "related": [
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "feature-flag",
+    "term": "Feature Flag",
+    "aka": [
+      "feature toggle"
+    ],
+    "group": "cloud-devops",
+    "definition": "A runtime switch that turns functionality on or off without deploying, often per user or segment.",
+    "details": [
+      "Decouples deploy from release; acts as a kill switch.",
+      "Release flags need owners and expiry dates to avoid flag debt.",
+      "Evaluate security-relevant flags server-side."
+    ],
+    "useCases": [
+      "Dark launches and gradual rollouts.",
+      "A/B tests and emergency shut-offs."
+    ],
+    "related": [
+      "ci-cd-pipelines",
+      "product-management"
+    ]
+  },
+  {
+    "id": "trunk-based-development",
+    "term": "Trunk-based Development",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "Developers integrate into a single main branch at least daily, using short-lived branches and feature flags.",
+    "details": [
+      "It is the practical definition of continuous integration.",
+      "Keeps changes small and merges painless.",
+      "DORA research links it with higher delivery performance."
+    ],
+    "useCases": [
+      "Teams moving to continuous delivery.",
+      "Replacing long-lived feature branches."
+    ],
+    "related": [
+      "ci-cd-pipelines",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "container",
+    "term": "Container",
+    "aka": [
+      "Docker image",
+      "OCI image"
+    ],
+    "group": "cloud-devops",
+    "definition": "A lightweight, isolated process packaging an application with its dependencies, sharing the host kernel.",
+    "details": [
+      "Isolation uses Linux namespaces and cgroups; weaker boundary than a VM.",
+      "Build small, non-root, multi-stage images pinned by digest.",
+      "Rebuild regularly to pick up security patches."
+    ],
+    "useCases": [
+      "Consistent deployments across environments.",
+      "Kubernetes and serverless container platforms."
+    ],
+    "related": [
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "kubernetes",
+    "term": "Kubernetes",
+    "aka": [
+      "K8s"
+    ],
+    "group": "cloud-devops",
+    "definition": "A declarative container orchestrator whose controllers continuously reconcile actual state towards the desired state.",
+    "details": [
+      "Production readiness needs requests/limits, probes, graceful shutdown and PodDisruptionBudgets.",
+      "Powerful but operationally expensive — managed services and platforms help.",
+      "Minor versions are supported for roughly a year upstream."
+    ],
+    "useCases": [
+      "Platforms running many services.",
+      "Workloads needing its ecosystem (operators, mesh, GitOps)."
+    ],
+    "related": [
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "readiness-liveness",
+    "term": "Readiness and Liveness Probes",
+    "aka": [
+      "startup probe"
+    ],
+    "group": "cloud-devops",
+    "definition": "Kubernetes health checks: readiness decides whether a pod gets traffic; liveness decides whether to restart it.",
+    "details": [
+      "Never check dependencies in liveness probes — it causes cascading restarts.",
+      "Startup probes protect slow-booting apps.",
+      "Readiness plus graceful shutdown prevents errors during deploys."
+    ],
+    "useCases": [
+      "Zero-downtime rolling deployments.",
+      "Recovering from deadlocked processes."
+    ],
+    "related": [
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "slo",
+    "term": "Service Level Objective",
+    "aka": [
+      "SLO",
+      "SLI",
+      "SLA",
+      "error budget"
+    ],
+    "group": "cloud-devops",
+    "definition": "A target for a service level indicator (SLI) over a window, e.g. 99.9% of requests succeed in 30 days. The error budget is the allowed failure.",
+    "details": [
+      "Measure SLIs close to the user as good events ÷ valid events.",
+      "99.9% over 30 days ≈ 43 minutes of budget.",
+      "SLAs are contractual promises; set SLOs tighter than SLAs."
+    ],
+    "useCases": [
+      "Deciding when to pause features for reliability work.",
+      "Burn-rate alerting instead of static thresholds."
+    ],
+    "related": [
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "observability",
+    "term": "Observability",
+    "aka": [
+      "telemetry",
+      "three pillars"
+    ],
+    "group": "cloud-devops",
+    "definition": "The ability to ask new questions about a system's behaviour from its telemetry — metrics, logs, traces and profiles — correlated by shared identifiers.",
+    "details": [
+      "Correlation by trace id is what turns signals into observability.",
+      "Watch cardinality: unbounded labels explode metric costs.",
+      "OpenTelemetry standardises instrumentation across vendors."
+    ],
+    "useCases": [
+      "Debugging novel production issues.",
+      "Understanding latency across microservices."
+    ],
+    "related": [
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "opentelemetry",
+    "term": "OpenTelemetry",
+    "aka": [
+      "OTel"
+    ],
+    "group": "cloud-devops",
+    "definition": "A CNCF standard of APIs, SDKs, semantic conventions, a wire protocol (OTLP) and a Collector for traces, metrics and logs.",
+    "details": [
+      "Instrument once, switch backends by configuring the Collector.",
+      "The Collector centralises sampling, redaction and routing.",
+      "Uses W3C `traceparent` headers for context propagation."
+    ],
+    "useCases": [
+      "Vendor-neutral observability across many services.",
+      "Tail sampling to control tracing cost."
+    ],
+    "related": [
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "finops",
+    "term": "FinOps",
+    "aka": [
+      "unit economics",
+      "showback",
+      "chargeback"
+    ],
+    "group": "cloud-devops",
+    "definition": "A practice bringing engineering, finance and business together to maximise value from variable cloud spend.",
+    "details": [
+      "Phases: Inform (visibility), Optimize (rate and usage), Operate (governance).",
+      "Track unit costs such as cost per order, not just total spend.",
+      "Rightsize before buying commitments."
+    ],
+    "useCases": [
+      "Controlling growing cloud bills.",
+      "Pricing and margin analysis."
+    ],
+    "related": [
+      "finops"
+    ]
+  },
+  {
+    "id": "owasp-top-10",
+    "term": "OWASP Top 10",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "An awareness list of the most critical web application security risk categories, led by broken access control.",
+    "details": [
+      "Use it for education; use OWASP ASVS for testable requirements.",
+      "Companion lists exist for APIs and LLM applications.",
+      "Check the current edition; categories change between releases."
+    ],
+    "useCases": [
+      "Secure coding training.",
+      "Code review checklists."
+    ],
+    "related": [
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "idor",
+    "term": "IDOR / BOLA",
+    "aka": [
+      "Insecure Direct Object Reference",
+      "Broken Object Level Authorisation"
+    ],
+    "group": "quality-security",
+    "definition": "A flaw where an authenticated user can access another user's objects by changing an identifier in a request.",
+    "details": [
+      "The most common serious API vulnerability.",
+      "Check ownership/tenancy on every object access, server-side.",
+      "Take tenant and user ids from the authenticated context, never the request body."
+    ],
+    "useCases": [
+      "Reviewing any endpoint with an id in the path.",
+      "Multi-tenant SaaS testing."
+    ],
+    "related": [
+      "owasp-threat-modelling",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "xss",
+    "term": "Cross-site Scripting",
+    "aka": [
+      "XSS"
+    ],
+    "group": "quality-security",
+    "definition": "An attack where malicious script runs in other users' browsers on your site.",
+    "details": [
+      "Defend with contextual output encoding and sanitising rich HTML.",
+      "Content Security Policy and HttpOnly cookies add defence in depth.",
+      "Framework escape hatches (`dangerouslySetInnerHTML`) bypass protection."
+    ],
+    "useCases": [
+      "User-generated content such as comments.",
+      "Rendering data from third parties."
+    ],
+    "related": [
+      "owasp-threat-modelling",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "ssrf",
+    "term": "Server-side Request Forgery",
+    "aka": [
+      "SSRF"
+    ],
+    "group": "quality-security",
+    "definition": "An attack that makes your server send requests to destinations the attacker chooses, such as internal services or cloud metadata endpoints.",
+    "details": [
+      "Allow-list destinations; block private and metadata IP ranges after redirects.",
+      "Isolate fetchers and restrict egress.",
+      "Enforce IMDSv2 on AWS."
+    ],
+    "useCases": [
+      "URL import and webhook features.",
+      "Link previews and PDF generators."
+    ],
+    "related": [
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "stride",
+    "term": "STRIDE",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A threat-modelling mnemonic: Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege.",
+    "details": [
+      "Apply it to each element and data flow on a data-flow diagram.",
+      "Focus on flows crossing trust boundaries.",
+      "Record mitigations as backlog items and tests."
+    ],
+    "useCases": [
+      "Design reviews for new features.",
+      "Payment and authentication flows."
+    ],
+    "related": [
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "threat-modelling",
+    "term": "Threat Modelling",
+    "aka": [
+      "trust boundary"
+    ],
+    "group": "quality-security",
+    "definition": "Structured analysis of what can go wrong with a design, answering: what are we working on, what can go wrong, what will we do, did we do a good job.",
+    "details": [
+      "Start with a data-flow diagram showing trust boundaries.",
+      "Do it early in design, not after the build.",
+      "Keep it lightweight and repeatable for most features."
+    ],
+    "useCases": [
+      "New external inputs or integrations.",
+      "Systems handling money or personal data."
+    ],
+    "related": [
+      "owasp-threat-modelling",
+      "devsecops"
+    ]
+  },
+  {
+    "id": "sast-dast-sca",
+    "term": "SAST, DAST and SCA",
+    "aka": [
+      "static analysis",
+      "dynamic analysis",
+      "software composition analysis"
+    ],
+    "group": "quality-security",
+    "definition": "Security testing types: SAST scans source code, DAST probes the running app, SCA finds known vulnerabilities in dependencies.",
+    "details": [
+      "They complement each other; none covers everything.",
+      "Prioritise findings by exploitability and reachability, not CVSS alone.",
+      "Block only on high-confidence, high-impact findings."
+    ],
+    "useCases": [
+      "Security checks in CI pipelines.",
+      "Release readiness for internet-facing apps."
+    ],
+    "related": [
+      "devsecops"
+    ]
+  },
+  {
+    "id": "sbom",
+    "term": "Software Bill of Materials",
+    "aka": [
+      "SBOM"
+    ],
+    "group": "quality-security",
+    "definition": "A machine-readable inventory of the components in a piece of software, in formats such as SPDX or CycloneDX.",
+    "details": [
+      "Generate automatically at build and store with deployment metadata.",
+      "Answers \"where do we use library X?\" in minutes during incidents.",
+      "VEX statements say whether known vulnerabilities actually apply."
+    ],
+    "useCases": [
+      "Responding to a critical CVE like Log4Shell.",
+      "Customer and regulatory requirements."
+    ],
+    "related": [
+      "devsecops",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "slsa",
+    "term": "SLSA",
+    "aka": [
+      "supply-chain levels",
+      "provenance"
+    ],
+    "group": "quality-security",
+    "definition": "A framework of levels for software supply-chain integrity, centred on verifiable build provenance.",
+    "details": [
+      "Provenance proves which pipeline built an artefact from which source.",
+      "Pair with signing (Sigstore) and verification at deploy.",
+      "Protects against tampered builds and artefacts."
+    ],
+    "useCases": [
+      "Hardening CI/CD pipelines.",
+      "Verifying images before Kubernetes admission."
+    ],
+    "related": [
+      "devsecops"
+    ]
+  },
+  {
+    "id": "test-pyramid",
+    "term": "Test Pyramid",
+    "aka": [
+      "testing trophy"
+    ],
+    "group": "quality-security",
+    "definition": "A heuristic: many fast unit tests, fewer integration tests and a small number of end-to-end tests.",
+    "details": [
+      "Variants (trophy, honeycomb) shift weight towards integration tests.",
+      "Put effort where bugs actually occur in your architecture.",
+      "The anti-pattern is the \"ice-cream cone\" of mostly manual and E2E tests."
+    ],
+    "useCases": [
+      "Planning a test strategy.",
+      "Speeding up slow CI suites."
+    ],
+    "related": [
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "contract-testing",
+    "term": "Consumer-driven Contract Testing",
+    "aka": [
+      "Pact"
+    ],
+    "group": "quality-security",
+    "definition": "Consumers define the interactions they rely on; providers verify they still satisfy them before releasing.",
+    "details": [
+      "Replaces many slow end-to-end tests between services.",
+      "A `can-i-deploy` check gates releases.",
+      "Use schema compatibility checks for events."
+    ],
+    "useCases": [
+      "Microservices owned by different teams.",
+      "Independent deployability."
+    ],
+    "related": [
+      "testing-strategy",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "flaky-test",
+    "term": "Flaky Test",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A test that passes and fails on the same code without changes.",
+    "details": [
+      "Erodes trust in CI — people re-run until green.",
+      "Quarantine with an owner and a deadline; fix or delete.",
+      "Common causes: timing, shared state, order dependence, external services."
+    ],
+    "useCases": [
+      "CI reliability improvement.",
+      "Reducing pipeline time."
+    ],
+    "related": [
+      "testing-strategy",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "llm",
+    "term": "Large Language Model",
+    "aka": [
+      "LLM",
+      "foundation model"
+    ],
+    "group": "ai",
+    "definition": "A large neural network (usually a transformer) pre-trained on huge text corpora to predict tokens, adaptable to many tasks by prompting, retrieval or fine-tuning.",
+    "details": [
+      "Outputs are probabilistic and can be fluent but wrong (hallucinations).",
+      "Cost and latency scale with tokens in and out.",
+      "Pin model versions and evaluate before upgrading."
+    ],
+    "useCases": [
+      "Summarisation, extraction and classification of text.",
+      "Assistants, agents and coding tools."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "token",
+    "term": "Token",
+    "aka": [
+      "context window"
+    ],
+    "group": "ai",
+    "definition": "The unit of text a language model reads and writes — sub-word pieces. The context window is the maximum number of tokens a model can attend to in one request.",
+    "details": [
+      "Pricing, rate limits and latency are per token.",
+      "Long contexts cost more and attention to the middle can be weaker.",
+      "Responses truncated at the output limit often produce broken JSON."
+    ],
+    "useCases": [
+      "Estimating the cost of an LLM feature.",
+      "Designing what goes into a prompt."
+    ],
+    "related": [
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "rag",
+    "term": "Retrieval-augmented Generation",
+    "aka": [
+      "RAG"
+    ],
+    "group": "ai",
+    "definition": "Supplying relevant documents retrieved at query time to a language model so it answers from them rather than from memory alone.",
+    "details": [
+      "Most quality problems are retrieval problems — measure recall@k separately.",
+      "Use hybrid search (keyword + vector) and a reranker.",
+      "Filter by permissions inside the search, not afterwards."
+    ],
+    "useCases": [
+      "Internal knowledge assistants.",
+      "Customer support answers grounded in documentation."
+    ],
+    "related": [
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "embedding",
+    "term": "Embedding",
+    "aka": [
+      "vector search",
+      "ANN"
+    ],
+    "group": "ai",
+    "definition": "A dense vector representing the meaning of text, images or other items, so similar items are close together.",
+    "details": [
+      "Query and documents must use the same embedding model.",
+      "Approximate nearest neighbour indexes (HNSW) trade a little recall for speed.",
+      "Weak on exact identifiers — combine with keyword search."
+    ],
+    "useCases": [
+      "Semantic search and RAG.",
+      "Recommendations and clustering."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "hallucination",
+    "term": "Hallucination",
+    "aka": [],
+    "group": "ai",
+    "definition": "Fluent, confident output from a language model that is false or unsupported by its inputs.",
+    "details": [
+      "Reduce with grounding (RAG), permission to say \"I don't know\", citations and narrower tasks.",
+      "Evaluate faithfulness and monitor production answers.",
+      "Keep humans in the loop for high-stakes outputs."
+    ],
+    "useCases": [
+      "Assistants answering policy or medical questions.",
+      "Code generation referencing APIs that don't exist."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "prompt-injection",
+    "term": "Prompt Injection",
+    "aka": [],
+    "group": "ai",
+    "definition": "Untrusted input — from users or from documents, emails and web pages an AI reads — that overrides a model's instructions.",
+    "details": [
+      "Indirect injection via retrieved content is the dangerous case for agents.",
+      "No prompt wording fully prevents it; enforce permissions in code behind tools.",
+      "Treat all model output as untrusted."
+    ],
+    "useCases": [
+      "Agents with tool access.",
+      "RAG over external content."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "ai-agent",
+    "term": "AI Agent",
+    "aka": [
+      "tool calling",
+      "agentic workflow"
+    ],
+    "group": "ai",
+    "definition": "An LLM-driven system that chooses actions — calling tools, reading results and iterating — towards a goal.",
+    "details": [
+      "Prefer deterministic workflows when the steps are known.",
+      "Bound autonomy: limits and authorisation live in code, not in the prompt.",
+      "Log every tool call; add human approval for high-impact actions."
+    ],
+    "useCases": [
+      "Coding agents, research assistants.",
+      "Support agents that look up orders and issue small refunds."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "ai-assisted-development"
+    ]
+  },
+  {
+    "id": "mcp",
+    "term": "Model Context Protocol",
+    "aka": [
+      "MCP"
+    ],
+    "group": "ai",
+    "definition": "An open protocol for connecting AI applications to tools and data sources through standard servers.",
+    "details": [
+      "Lets one integration work across many AI clients.",
+      "Each server's tools run with real permissions — apply least privilege.",
+      "Treat data returned by servers as untrusted input."
+    ],
+    "useCases": [
+      "Giving coding agents access to issue trackers, docs or databases.",
+      "Internal AI assistants using company systems."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "ai-assisted-development"
+    ]
+  },
+  {
+    "id": "fine-tuning",
+    "term": "Fine-tuning",
+    "aka": [],
+    "group": "ai",
+    "definition": "Further training a pre-trained model on task-specific examples to change its behaviour, style or format.",
+    "details": [
+      "Good for consistent format and narrow tasks; poor for keeping knowledge current (use RAG).",
+      "Needs a training data pipeline and evaluation; re-tune when the base model changes.",
+      "Can let a smaller model match a larger one on one task."
+    ],
+    "useCases": [
+      "Classification with a fixed label set.",
+      "Domain-specific output style."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "precision-recall",
+    "term": "Precision and Recall",
+    "aka": [
+      "F1"
+    ],
+    "group": "ai",
+    "definition": "Precision is the share of predicted positives that are correct; recall is the share of actual positives that are found.",
+    "details": [
+      "Raising the decision threshold usually raises precision and lowers recall.",
+      "Accuracy is misleading on imbalanced data.",
+      "Choose by the business cost of false positives vs misses."
+    ],
+    "useCases": [
+      "Fraud detection and content moderation.",
+      "Search and retrieval evaluation."
+    ],
+    "related": [
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "overfitting",
+    "term": "Overfitting",
+    "aka": [
+      "bias–variance trade-off"
+    ],
+    "group": "ai",
+    "definition": "When a model learns noise in its training data and performs poorly on new data.",
+    "details": [
+      "Detect with a gap between training and validation performance.",
+      "Prevent with more data, regularisation, simpler models and early stopping.",
+      "Keep the test set untouched until the end."
+    ],
+    "useCases": [
+      "Model selection and tuning.",
+      "Explaining poor production performance."
+    ],
+    "related": [
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "data-leakage",
+    "term": "Data Leakage",
+    "aka": [
+      "training–serving skew"
+    ],
+    "group": "ai",
+    "definition": "Information unavailable at prediction time sneaking into training data, inflating offline results.",
+    "details": [
+      "Split by time and by entity; compute features point-in-time.",
+      "Fit preprocessing on training data only.",
+      "A feature store helps keep training and serving features identical."
+    ],
+    "useCases": [
+      "Churn and fraud models.",
+      "Auditing suspiciously good offline metrics."
+    ],
+    "related": [
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "model-drift",
+    "term": "Model Drift",
+    "aka": [
+      "data drift",
+      "concept drift"
+    ],
+    "group": "ai",
+    "definition": "Degradation of a deployed model as input data (data drift) or the relationship between inputs and outcomes (concept drift) changes.",
+    "details": [
+      "Monitor input distributions, prediction distributions and delayed outcome labels.",
+      "Retrain on schedule or when drift is detected.",
+      "Keep versions in a model registry for rollback."
+    ],
+    "useCases": [
+      "Fraud patterns evolving.",
+      "Seasonality and new markets."
+    ],
+    "related": [
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "mlops",
+    "term": "MLOps",
+    "aka": [
+      "model registry",
+      "feature store"
+    ],
+    "group": "ai",
+    "definition": "Engineering practices for reliably building, deploying and operating machine-learning models.",
+    "details": [
+      "Versioned data and models, reproducible pipelines, evaluation gates.",
+      "Shadow mode and canaries for safe rollout.",
+      "Monitoring for drift, quality, fairness and cost."
+    ],
+    "useCases": [
+      "Moving models from notebooks to production.",
+      "Continuous retraining."
+    ],
+    "related": [
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "red-teaming",
+    "term": "Red-teaming",
+    "aka": [],
+    "group": "ai",
+    "definition": "Structured adversarial testing of an AI system to find harmful, unsafe or insecure behaviour before attackers or users do.",
+    "details": [
+      "Combine expert human testers with automated adversarial prompts.",
+      "Measure over-blocking of legitimate requests too.",
+      "Repeat after significant model or prompt changes."
+    ],
+    "useCases": [
+      "Public-facing chatbots.",
+      "Agents with tool access."
+    ],
+    "related": [
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "eu-ai-act",
+    "term": "EU AI Act",
+    "aka": [],
+    "group": "ai",
+    "definition": "EU regulation that classifies AI systems by risk — prohibited, high-risk, transparency obligations, minimal — with obligations phased in from 2025.",
+    "details": [
+      "High-risk systems (e.g. hiring, credit scoring) need risk management, documentation, logging and human oversight.",
+      "Chatbots must disclose AI use; deepfakes must be labelled.",
+      "Applies to providers and deployers serving the EU, not just EU companies."
+    ],
+    "useCases": [
+      "Assessing an AI feature for compliance.",
+      "Designing logging and oversight into high-risk systems."
+    ],
+    "related": [
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "model-card",
+    "term": "Model Card",
+    "aka": [
+      "system card"
+    ],
+    "group": "ai",
+    "definition": "Documentation describing a model's intended use, training data, evaluation (including by subgroup), limitations and owners.",
+    "details": [
+      "Keep it versioned with the model and update it on changes.",
+      "Increasingly expected by regulators and customers.",
+      "Datasheets document datasets in the same spirit."
+    ],
+    "useCases": [
+      "Approval of high-impact models.",
+      "Vendor due diligence."
+    ],
+    "related": [
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "dora-metrics",
+    "term": "DORA Metrics",
+    "aka": [
+      "four keys"
+    ],
+    "group": "delivery",
+    "definition": "Delivery performance measures from the DORA research: deployment frequency, lead time for changes, change failure rate and failed-deployment recovery time.",
+    "details": [
+      "Speed and stability improve together in high performers.",
+      "Use for team improvement, never to rank teams or individuals.",
+      "Collect automatically from pipelines and incident tools."
+    ],
+    "useCases": [
+      "Baseline before a CI/CD investment.",
+      "Spotting delivery bottlenecks."
+    ],
+    "related": [
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "lead-time",
+    "term": "Lead Time for Changes",
+    "aka": [
+      "cycle time"
+    ],
+    "group": "delivery",
+    "definition": "The time from code being committed (or merged) to running in production. Cycle time usually means start-to-done for a work item.",
+    "details": [
+      "Report percentiles (p50, p85), not averages.",
+      "Most lead time is waiting, not working — map the value stream.",
+      "Define the start point explicitly."
+    ],
+    "useCases": [
+      "Measuring CI/CD improvements.",
+      "Forecasting delivery."
+    ],
+    "related": [
+      "dora-metrics",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "littles-law",
+    "term": "Little's Law",
+    "aka": [
+      "WIP limit"
+    ],
+    "group": "delivery",
+    "definition": "Average work in progress = throughput × average cycle time; with fixed throughput, less WIP means shorter cycle times.",
+    "details": [
+      "Explains why \"stop starting, start finishing\" works.",
+      "Kanban uses explicit WIP limits per stage.",
+      "Holds for stable systems; use as a guide, not a precise law."
+    ],
+    "useCases": [
+      "Reducing team cycle time.",
+      "Limiting the number of initiatives in flight."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe",
+      "estimation"
+    ]
+  },
+  {
+    "id": "scrum",
+    "term": "Scrum",
+    "aka": [
+      "sprint"
+    ],
+    "group": "delivery",
+    "definition": "An agile framework of fixed-length sprints with a Product Owner, Scrum Master and Developers, and a Product Goal, Sprint Goal and Definition of Done.",
+    "details": [
+      "Events: Sprint Planning, Daily Scrum, Sprint Review, Retrospective.",
+      "Velocity is a planning aid, not a performance metric.",
+      "Works best for product teams with plannable work."
+    ],
+    "useCases": [
+      "Product teams needing cadence and focus.",
+      "Regular stakeholder feedback."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "kanban",
+    "term": "Kanban",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A method for managing flow: visualise work, limit WIP, manage flow with metrics and improve continuously.",
+    "details": [
+      "No prescribed roles or iterations; start with what you do now.",
+      "Track cycle time, throughput and work item age.",
+      "Classes of service handle urgent and fixed-date work."
+    ],
+    "useCases": [
+      "Platform, ops and support teams.",
+      "Interrupt-heavy work."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "definition-of-done",
+    "term": "Definition of Done",
+    "aka": [
+      "DoD"
+    ],
+    "group": "delivery",
+    "definition": "The shared quality standard work must meet to count as done — e.g. reviewed, tested, deployed behind a flag, monitored.",
+    "details": [
+      "Without it, \"done\" hides undone work and debt.",
+      "Tighten it as capabilities improve (e.g. \"deployed to production\").",
+      "A Definition of Ready is optional and should stay lightweight."
+    ],
+    "useCases": [
+      "Sprint planning and reviews.",
+      "Embedding NFRs like accessibility into every story."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe",
+      "adrs-nfrs"
+    ]
+  },
+  {
+    "id": "story-points",
+    "term": "Story Points",
+    "aka": [
+      "velocity",
+      "planning poker"
+    ],
+    "group": "delivery",
+    "definition": "Relative estimates of size, complexity and uncertainty used by a team for planning.",
+    "details": [
+      "Team-specific — never compare teams or convert to hours.",
+      "Planning poker's value is surfacing different assumptions.",
+      "Throughput-based forecasting often works as well or better."
+    ],
+    "useCases": [
+      "Sprint planning.",
+      "Splitting oversized stories."
+    ],
+    "related": [
+      "estimation",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "monte-carlo-forecast",
+    "term": "Monte Carlo Forecasting",
+    "aka": [],
+    "group": "delivery",
+    "definition": "Simulating many possible futures from historical throughput to give probabilistic delivery dates (e.g. 85% by 24 March).",
+    "details": [
+      "Based on what the team actually delivered, including interruptions.",
+      "Needs consistently sized items and accounts for backlog growth.",
+      "Communicate P50 and P85 rather than one date."
+    ],
+    "useCases": [
+      "Release and roadmap forecasting.",
+      "Answering \"when will it be done?\""
+    ],
+    "related": [
+      "estimation"
+    ]
+  },
+  {
+    "id": "cone-of-uncertainty",
+    "term": "Cone of Uncertainty",
+    "aka": [],
+    "group": "delivery",
+    "definition": "The idea that early estimates have a wide range of possible outcomes that narrows as uncertainty is resolved.",
+    "details": [
+      "Give early estimates as ranges, not commitments.",
+      "The cone only narrows if you actively reduce unknowns (spikes, decisions).",
+      "Re-forecast at milestones."
+    ],
+    "useCases": [
+      "Early-stage project estimates.",
+      "Communicating uncertainty to executives."
+    ],
+    "related": [
+      "estimation"
+    ]
+  },
+  {
+    "id": "mvp",
+    "term": "Minimum Viable Product",
+    "aka": [
+      "MVP"
+    ],
+    "group": "product-business",
+    "definition": "The smallest experiment that tests a key product hypothesis with real users.",
+    "details": [
+      "About learning, not a cut-down version one of everything.",
+      "Start from a hypothesis and success criteria.",
+      "Quality still matters where users experience it."
+    ],
+    "useCases": [
+      "Testing demand before building.",
+      "Validating a new customer segment."
+    ],
+    "related": [
+      "product-management",
+      "business-requirement-gathering"
+    ]
+  },
+  {
+    "id": "north-star-metric",
+    "term": "North Star Metric",
+    "aka": [
+      "input metric",
+      "guardrail metric"
+    ],
+    "group": "product-business",
+    "definition": "A single metric capturing the value customers get from a product and predicting long-term success.",
+    "details": [
+      "Supported by input metrics teams can move (activation, time to value).",
+      "Guardrail metrics must not get worse while optimising.",
+      "Avoid vanity metrics such as raw sign-ups."
+    ],
+    "useCases": [
+      "Aligning teams on outcomes.",
+      "Choosing what to measure in experiments."
+    ],
+    "related": [
+      "product-management"
+    ]
+  },
+  {
+    "id": "rice",
+    "term": "RICE",
+    "aka": [
+      "ICE"
+    ],
+    "group": "product-business",
+    "definition": "A prioritisation score: Reach × Impact × Confidence ÷ Effort.",
+    "details": [
+      "Confidence pushes speculative ideas down until they are de-risked.",
+      "Scores are guesses — use them to structure debate, not decide mechanically.",
+      "ICE drops Reach for speed."
+    ],
+    "useCases": [
+      "Ranking a product backlog.",
+      "Comparing feature ideas."
+    ],
+    "related": [
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "cost-of-delay",
+    "term": "Cost of Delay",
+    "aka": [
+      "WSJF",
+      "CD3"
+    ],
+    "group": "product-business",
+    "definition": "The value lost per unit of time by not delivering something; divided by duration it gives CD3/WSJF for sequencing.",
+    "details": [
+      "Makes urgency explicit, including deadlines and decaying value.",
+      "Short, valuable items should go first.",
+      "Works for technical and platform work too."
+    ],
+    "useCases": [
+      "Sequencing a roadmap.",
+      "Comparing tech debt with features."
+    ],
+    "related": [
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "moscow",
+    "term": "MoSCoW",
+    "aka": [],
+    "group": "product-business",
+    "definition": "A prioritisation scheme: Must have, Should have, Could have, Won't have (this time).",
+    "details": [
+      "Easy to understand; prone to everything becoming \"Must\".",
+      "Cap Musts (e.g. at 60% of capacity) to keep it honest.",
+      "\"Won't\" is valuable — it records explicit exclusions."
+    ],
+    "useCases": [
+      "Scoping a release with stakeholders.",
+      "Fixed-date projects."
+    ],
+    "related": [
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "jobs-to-be-done",
+    "term": "Jobs to be Done",
+    "aka": [
+      "JTBD"
+    ],
+    "group": "product-business",
+    "definition": "A framing of demand around the progress a customer wants to make in a situation: \"When…, I want to…, so I can…\".",
+    "details": [
+      "Focuses on underlying needs rather than requested features.",
+      "Reveals real competitors, including spreadsheets and doing nothing.",
+      "Researched through interviews about recent switching decisions."
+    ],
+    "useCases": [
+      "Discovery interviews.",
+      "Positioning and onboarding design."
+    ],
+    "related": [
+      "product-management"
+    ]
+  },
+  {
+    "id": "raci",
+    "term": "RACI",
+    "aka": [
+      "DACI"
+    ],
+    "group": "product-business",
+    "definition": "A matrix of who is Responsible, Accountable (exactly one), Consulted and Informed for each decision or deliverable.",
+    "details": [
+      "Agree it at kick-off, not during a conflict.",
+      "Keep Consulted small or decisions slow down.",
+      "DACI (Driver, Approver, Contributors, Informed) is a decision-focused variant."
+    ],
+    "useCases": [
+      "Cross-team projects.",
+      "Clarifying sign-off for go-live or security."
+    ],
+    "related": [
+      "stakeholder-management"
+    ]
+  },
+  {
+    "id": "user-story",
+    "term": "User Story",
+    "aka": [
+      "INVEST",
+      "acceptance criteria"
+    ],
+    "group": "product-business",
+    "definition": "A short description of a need from a user's perspective — \"As a…, I want…, so that…\" — with acceptance criteria.",
+    "details": [
+      "INVEST: Independent, Negotiable, Valuable, Estimable, Small, Testable.",
+      "Split vertically by workflow or rule, never by technical layer.",
+      "Acceptance criteria often use Given/When/Then."
+    ],
+    "useCases": [
+      "Backlog refinement.",
+      "Behaviour-driven development."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "story-mapping",
+    "term": "Story Mapping",
+    "aka": [],
+    "group": "product-business",
+    "definition": "Laying out the user journey as a backbone of activities with stories beneath, then slicing releases horizontally.",
+    "details": [
+      "The first slice should run end to end, even crudely.",
+      "Makes trade-offs visible when moving stories across release lines.",
+      "Created by Jeff Patton."
+    ],
+    "useCases": [
+      "Defining an MVP.",
+      "Planning releases with stakeholders."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "product-management"
+    ]
+  },
+  {
+    "id": "star-method",
+    "term": "STAR Method",
+    "aka": [
+      "STAR+L"
+    ],
+    "group": "leadership-people",
+    "definition": "A structure for behavioural interview answers: Situation, Task, Action, Result — often plus Learning.",
+    "details": [
+      "Spend most time on your own actions and the measurable result.",
+      "Lead with a one-line headline; keep to 2–3 minutes.",
+      "Prepare a bank of real stories tagged by competency."
+    ],
+    "useCases": [
+      "Behavioural interviews.",
+      "Promotion cases and performance reviews."
+    ],
+    "related": [
+      "behavioural-interviews-star"
+    ]
+  },
+  {
+    "id": "psychological-safety",
+    "term": "Psychological Safety",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A shared belief that a team is safe for interpersonal risk-taking — asking questions, admitting mistakes, disagreeing.",
+    "details": [
+      "Not the same as being nice or lowering standards.",
+      "Leaders build it by modelling fallibility and reacting well to bad news.",
+      "Google's Project Aristotle found it the top factor in team effectiveness."
+    ],
+    "useCases": [
+      "Blameless postmortems.",
+      "Team health checks."
+    ],
+    "related": [
+      "leadership",
+      "people-management"
+    ]
+  },
+  {
+    "id": "one-on-one",
+    "term": "One-to-one",
+    "aka": [
+      "1:1"
+    ],
+    "group": "leadership-people",
+    "definition": "A regular private meeting between a manager and a report, focused on the report's agenda: growth, blockers, feedback and wellbeing.",
+    "details": [
+      "Weekly or fortnightly; reschedule rather than cancel.",
+      "Not a status update.",
+      "Track actions and follow through."
+    ],
+    "useCases": [
+      "People management.",
+      "Early detection of burnout or disengagement."
+    ],
+    "related": [
+      "people-management",
+      "mentorship"
+    ]
+  },
+  {
+    "id": "sbi-feedback",
+    "term": "SBI Feedback",
+    "aka": [
+      "Situation-Behaviour-Impact"
+    ],
+    "group": "leadership-people",
+    "definition": "A feedback structure describing the situation, the observable behaviour and its impact, then inviting the other person's view.",
+    "details": [
+      "Keeps feedback specific and about behaviour, not character.",
+      "Give it promptly and privately when corrective.",
+      "Use it for positive feedback too."
+    ],
+    "useCases": [
+      "Coaching and performance conversations.",
+      "Peer feedback."
+    ],
+    "related": [
+      "mentorship",
+      "people-management"
+    ]
+  },
+  {
+    "id": "sponsorship",
+    "term": "Sponsorship",
+    "aka": [
+      "mentoring",
+      "coaching"
+    ],
+    "group": "leadership-people",
+    "definition": "Using your influence to create opportunities for someone — recommending them for projects, promotions and visibility.",
+    "details": [
+      "Mentoring shares experience; coaching asks questions; sponsorship opens doors.",
+      "Often the missing ingredient for under-represented engineers.",
+      "Track who gets visible work to keep it fair."
+    ],
+    "useCases": [
+      "Growing senior engineers towards Staff.",
+      "Talent reviews."
+    ],
+    "related": [
+      "mentorship",
+      "leadership"
+    ]
+  },
+  {
+    "id": "disagree-and-commit",
+    "term": "Disagree and Commit",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "Raising disagreement openly during a decision, then fully supporting the decision once it is made.",
+    "details": [
+      "Agree revisit triggers so dissent becomes a testable hypothesis.",
+      "Does not apply to ethical or legal violations.",
+      "Quietly undermining a decision is not committing."
+    ],
+    "useCases": [
+      "Architecture and product debates.",
+      "Working with leadership decisions you challenged."
+    ],
+    "related": [
+      "influence-without-authority",
+      "leadership"
+    ]
+  },
+  {
+    "id": "pre-wiring",
+    "term": "Pre-wiring",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "Discussing a proposal individually with key stakeholders before the meeting where it will be decided.",
+    "details": [
+      "Surfaces real objections that people won't raise in a group.",
+      "Change the proposal based on what you hear.",
+      "Be transparent; don't tell different people different stories."
+    ],
+    "useCases": [
+      "RFCs and architecture proposals.",
+      "Organisation-wide changes."
+    ],
+    "related": [
+      "influence-without-authority",
+      "stakeholder-management"
+    ]
+  },
+  {
+    "id": "structured-interview",
+    "term": "Structured Interview",
+    "aka": [
+      "interview rubric"
+    ],
+    "group": "leadership-people",
+    "definition": "An interview using the same questions or problems for every candidate, scored against predefined rubrics before discussion.",
+    "details": [
+      "More predictive and fairer than unstructured conversations.",
+      "Write independent feedback before the debrief.",
+      "Rubrics need behavioural anchors for each score."
+    ],
+    "useCases": [
+      "Engineering hiring loops.",
+      "Reducing bias in hiring decisions."
+    ],
+    "related": [
+      "hiring-interviewing"
+    ]
+  },
+  {
+    "id": "rumelt-kernel",
+    "term": "Strategy Kernel",
+    "aka": [
+      "diagnosis, guiding policy, coherent actions"
+    ],
+    "group": "leadership-people",
+    "definition": "Richard Rumelt's structure of good strategy: a diagnosis of the critical challenge, a guiding policy and coherent actions.",
+    "details": [
+      "Good strategy makes choices, including what not to do.",
+      "Goals and wishlists are not strategy.",
+      "Embed it in planning, paved roads and decisions."
+    ],
+    "useCases": [
+      "Writing an engineering strategy.",
+      "Reviewing a technology roadmap."
+    ],
+    "related": [
+      "technical-strategy"
+    ]
+  },
+  {
+    "id": "wardley-map",
+    "term": "Wardley Map",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A map of a value chain from user needs down to components, placed on an evolution axis from genesis to commodity.",
+    "details": [
+      "Don't build components that have become commodities.",
+      "Anticipate components moving towards commodity over time.",
+      "Best used as a discussion tool."
+    ],
+    "useCases": [
+      "Build-versus-buy decisions.",
+      "Technology strategy workshops."
+    ],
+    "related": [
+      "technical-strategy"
+    ]
+  },
+  {
+    "id": "team-topologies",
+    "term": "Team Topologies",
+    "aka": [
+      "Conway's law",
+      "cognitive load"
+    ],
+    "group": "leadership-people",
+    "definition": "A model of team types (stream-aligned, platform, enabling, complicated-subsystem) and interaction modes, designed around flow and cognitive load.",
+    "details": [
+      "Conway's law: systems mirror the communication structure of the organisations that build them.",
+      "Align teams with bounded contexts (the inverse Conway manoeuvre).",
+      "Platform teams should offer self-service as a product."
+    ],
+    "useCases": [
+      "Re-organisations.",
+      "Designing platform teams."
+    ],
+    "related": [
+      "domain-driven-design",
+      "technical-strategy"
+    ]
+  },
+  {
+    "id": "discriminated-union",
+    "term": "Discriminated Union",
+    "aka": [
+      "tagged union"
+    ],
+    "group": "languages-frontend",
+    "definition": "A TypeScript union of object types sharing a literal \"tag\" field, letting the compiler narrow to the right variant.",
+    "details": [
+      "Model states explicitly: `{ status: \"loading\" } | { status: \"error\"; error } | { status: \"ok\"; data }`.",
+      "Use a `never` check in `switch` for exhaustiveness.",
+      "Makes impossible states unrepresentable."
+    ],
+    "useCases": [
+      "UI and request state.",
+      "Domain events and commands."
+    ],
+    "related": [
+      "typescript",
+      "state-management"
+    ]
+  },
+  {
+    "id": "closure",
+    "term": "Closure",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "A function bundled with the variables from the scope where it was created, which it keeps access to later.",
+    "details": [
+      "Enables private state, callbacks and factories.",
+      "Stale closures cause bugs in React hooks.",
+      "Closures holding large objects can leak memory."
+    ],
+    "useCases": [
+      "Event handlers and callbacks.",
+      "Module patterns and memoisation."
+    ],
+    "related": [
+      "javascript",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "core-web-vitals",
+    "term": "Core Web Vitals",
+    "aka": [
+      "LCP",
+      "INP",
+      "CLS"
+    ],
+    "group": "languages-frontend",
+    "definition": "Google's user-centred performance metrics: Largest Contentful Paint (loading), Interaction to Next Paint (responsiveness) and Cumulative Layout Shift (visual stability).",
+    "details": [
+      "Good thresholds: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1, at the 75th percentile.",
+      "INP replaced First Input Delay in 2024.",
+      "Measure real users (RUM), not only lab tests."
+    ],
+    "useCases": [
+      "Performance budgets in CI.",
+      "SEO and conversion improvements."
+    ],
+    "related": [
+      "web-performance"
+    ]
+  },
+  {
+    "id": "wcag",
+    "term": "WCAG",
+    "aka": [
+      "accessibility",
+      "a11y"
+    ],
+    "group": "languages-frontend",
+    "definition": "The Web Content Accessibility Guidelines — testable success criteria organised under perceivable, operable, understandable and robust.",
+    "details": [
+      "Level AA is the common legal and contractual target.",
+      "Automated tools catch only part of the issues; test with keyboard and screen readers.",
+      "Semantic HTML first; ARIA only when needed."
+    ],
+    "useCases": [
+      "Public sector and regulated products.",
+      "Design-system components."
+    ],
+    "related": [
+      "accessibility"
+    ]
+  },
+  {
+    "id": "micro-frontends",
+    "term": "Micro-frontends",
+    "aka": [
+      "module federation"
+    ],
+    "group": "languages-frontend",
+    "definition": "Splitting a web front end into independently developed and deployed parts owned by different teams.",
+    "details": [
+      "Solves team autonomy problems, not technical ones.",
+      "Costs: bundle duplication, consistency, integration complexity.",
+      "Composition options: build-time, server-side, client-side (e.g. Module Federation)."
+    ],
+    "useCases": [
+      "Large organisations with many teams on one product.",
+      "Gradual migration from a legacy front end."
+    ],
+    "related": [
+      "micro-frontends"
+    ]
+  },
+  {
+    "id": "server-state-vs-client-state",
+    "term": "Server State vs Client State",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "Server state is cached data owned by a backend; client state is UI state owned by the browser.",
+    "details": [
+      "Use data-fetching libraries (e.g. TanStack Query) for server state: caching, refetching, invalidation.",
+      "Keep client state local unless it truly needs sharing.",
+      "Mixing them in one global store causes staleness bugs."
+    ],
+    "useCases": [
+      "Choosing a state management approach.",
+      "Simplifying Redux-heavy apps."
+    ],
+    "related": [
+      "state-management",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "reconciliation",
+    "term": "Reconciliation",
+    "aka": [
+      "virtual DOM"
+    ],
+    "group": "languages-frontend",
+    "definition": "React's process of comparing the new element tree with the previous one and updating only what changed.",
+    "details": [
+      "Keys identify list items across renders — use stable ids, not indexes.",
+      "Re-renders are usually cheap; measure before memoising.",
+      "The React Compiler can automate memoisation."
+    ],
+    "useCases": [
+      "Debugging unexpected re-renders.",
+      "Rendering large lists."
+    ],
+    "related": [
+      "reactjs"
+    ]
+  }
+]

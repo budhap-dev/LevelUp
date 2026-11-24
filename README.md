@@ -26,7 +26,7 @@ npm run dev        # http://localhost:5173 — recompiles content on save
 
 ```
 api/                     Notes API: one Vercel Function (router.ts) + _lib/
-content/                 Topic Markdown, groups.json, paths.json, _template.md
+content/                 Topic Markdown, groups.json, paths.json, glossary.json, _template.md
 docs/prompts/            Prompt for generating topic content
 scripts/content/         Build-time pipeline: parse, validate, render to JSON (+ tests)
 scripts/notes/           Notes CLI, dev-server API middleware, API tests
@@ -93,6 +93,14 @@ Progress lives in the browser (`localStorage`, key `levelup:progress`) and stays
 `/paths` lists the career routes defined in [`content/paths.json`](content/paths.json), such as Senior → Staff/Principal and Senior → Solution Architect. Each path page shows its topics in order, with your status on each one. It highlights the next required step, and a Start/Continue button opens that topic. A step counts as done when you mark its topic **Learned**. Optional steps (`"optional": true`) are shown but don't count towards completion. The dashboard shows each path's progress and its next step.
 
 To add or change a path, edit `paths.json`: `id`, `title`, `description` and `steps` (`topicId`, plus an optional `note` and `optional`). The content pipeline rejects unknown topic ids.
+
+## Content summary and glossary
+
+`/summary` shows how complete the knowledge base is. It covers overall progress (topics, questions against the 15-per-topic target, flashcards, study time, VERIFY markers), questions by level, learning-path coverage, and a per-module table. Each topic's row shows its status, question count and level mix, flashcards, sections present and unverified claims. The page is built from the content manifest, so it updates automatically whenever content changes.
+
+`/glossary` lists key terms with a definition, key details, use cases and links to the topics that cover them. You can filter by text or module and jump to a letter. Ctrl/⌘ K search includes glossary terms, and a result opens `/glossary#<id>`.
+
+To add a term, append an entry to [`content/glossary.json`](content/glossary.json). Each entry needs `id` (kebab-case), `term`, `aka` (alternative names), `group`, `definition`, `details`, `useCases` and `related` (topic ids). Wrap code in `backticks`. The content pipeline validates the schema, rejects duplicate ids and terms, and checks that every group and related topic exists.
 
 ## Notes
 

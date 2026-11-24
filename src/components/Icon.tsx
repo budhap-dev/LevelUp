@@ -35,6 +35,9 @@ const PATHS = {
   bookmark: 'M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
   settings: 'M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4',
   chevron: 'm9 18 6-6-6-6',
+  summary: 'M3 3v18h18M7 16v-4M12 16V8M17 16v-7',
+  glossary: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20M9 13l2.5-6 2.5 6M9.8 11h3.4',
+  check: 'M20 6 9 17l-5-5',
   collapse: 'm7 20 5-5 5 5M7 4l5 5 5-5',
   // Topic groups
   server: 'M4 2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM6 6h.01M6 18h.01',
