@@ -75,7 +75,7 @@ Key properties:
 
 ### Non-functional requirements as quality attributes
 
-Common categories (ISO/IEC 25010 is the formal model; VERIFY: its 2023 revision renamed some characteristics, for example usability to interaction capability, and added safety):
+Common categories (ISO/IEC 25010 is the formal model; its 2023 revision renamed some characteristics, for example usability to interaction capability and portability to flexibility, and added safety):
 
 | Attribute | Example measurable requirement |
 |---|---|
@@ -613,6 +613,6 @@ Stage-appropriate prioritisation, non-negotiable baselines, revisit triggers in 
 - [Documenting Architecture Decisions (Michael Nygard, 2011)](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions) — the original ADR blog post and format.
 - [ADR GitHub organisation](https://adr.github.io/) — templates (including MADR), tools and guidance for decision records.
 - [arc42 template](https://arc42.org/overview) — a widely used architecture documentation structure with sections for quality requirements and decisions.
-- [SEI: Architecture Tradeoff Analysis Method](https://www.sei.cmu.edu/library/architecture-tradeoff-analysis-method-collection/) — VERIFY: link path; the primary source for ATAM and quality-attribute scenarios.
+- [SEI: Architecture Tradeoff Analysis Method](https://www.sei.cmu.edu/library/architecture-tradeoff-analysis-method-collection/) — the primary source for ATAM and quality-attribute scenarios.
 - [Azure Well-Architected Framework](https://learn.microsoft.com/en-us/azure/well-architected/) — quality pillars (reliability, security, cost, operations, performance) with design checklists.
 - [AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html) — the AWS equivalent, useful for structured NFR reviews.

@@ -73,7 +73,7 @@ await container.getBlockBlobClient('2026/03/inv-981.pdf').uploadData(pdfBuffer);
 - **Redundancy:** LRS (3 copies, one data centre), ZRS (across 3 AZs), GRS/RA-GRS (LRS + async copy to the paired region), GZRS/RA-GZRS (ZRS + async geo copy).
 - **Relational:** Azure SQL Database (serverless, Hyperscale), SQL Managed Instance (near-full SQL Server compatibility for migrations), Azure Database for PostgreSQL / MySQL Flexible Server (zone-redundant HA).
 - **Cosmos DB:** multi-model NoSQL with global distribution, multi-region writes, five consistency levels, partition-key-based scaling, RU-based or serverless billing; also offers a PostgreSQL (Citus) option for distributed relational workloads.
-- **Caching:** Azure Managed Redis / Azure Cache for Redis (VERIFY: the product transition and retirement timeline for Azure Cache for Redis tiers).
+- **Caching:** Azure Managed Redis (the successor to Azure Cache for Redis, whose Enterprise tiers retire on 31 March 2027 and Basic/Standard/Premium tiers on 30 September 2028).
 
 ### Messaging and integration
 
@@ -290,7 +290,7 @@ Global vs regional, L7 vs L4 vs DNS, and sensible combinations.
 
 **Model answer:**
 - **Service Bus:** enterprise message broker for **high-value messages** — commands, workflows, ordered processing (sessions), transactions, dead-lettering, scheduled and deferred messages, duplicate detection. Pull-based with peek-lock.
-- **Event Grid:** **push-based event routing** for reactive programming: Azure resources and custom apps publish events ("BlobCreated", "OrderPlaced"), subscribers (Functions, webhooks, queues) receive them with filtering and retries. Lightweight notifications, not a durable stream for replay (VERIFY: Event Grid namespaces add pull delivery and MQTT).
+- **Event Grid:** **push-based event routing** for reactive programming: Azure resources and custom apps publish events ("BlobCreated", "OrderPlaced"), subscribers (Functions, webhooks, queues) receive them with filtering and retries. Lightweight notifications, not a durable stream for replay (Event Grid namespaces add pull delivery and an MQTT broker).
 - **Event Hubs:** **partitioned event stream** for high-throughput telemetry and event streaming, multiple consumer groups, retention and replay, **Kafka-compatible endpoint**, Capture to storage for analytics.
 
 Combine them: an order service sends `ReserveStock` commands on Service Bus; storage uploads trigger processing via Event Grid; clickstream flows through Event Hubs into analytics.

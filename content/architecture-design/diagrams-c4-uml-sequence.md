@@ -82,7 +82,7 @@ flowchart TB
   worker -->|"Creates shipments, HTTPS"| wms
 ```
 
-Mermaid also has a dedicated `C4Context` and `C4Container` syntax (VERIFY: still marked experimental). Structurizr DSL lets you define the **model once** and generate several consistent views from it, which matters once you have many diagrams.
+Mermaid also has dedicated `C4Context` and `C4Container` syntax (PlantUML-compatible, with limited control over layout). Structurizr DSL lets you define the **model once** and generate several consistent views from it, which matters once you have many diagrams.
 
 ### Sequence diagrams
 
@@ -125,7 +125,7 @@ Tips: keep to around 6–8 participants and one scenario per diagram, label mess
 - **Activity diagrams or flowcharts:** business processes with decisions and parallel branches. BPMN is the specialist standard for business process modelling.
 - **Deployment diagrams:** largely replaced in practice by C4 deployment diagrams or cloud-specific diagrams.
 
-UML 2.5 defines 14 diagram types (VERIFY). You don't need most of them day to day, but you should recognise the notation (open versus filled arrowheads, multiplicities) when you see it.
+UML 2.5 defines 14 diagram types (7 structural and 7 behavioural). You don't need most of them day to day, but you should recognise the notation (open versus filled arrowheads, multiplicities) when you see it.
 
 ```mermaid
 stateDiagram-v2

@@ -571,6 +571,6 @@ DORA plus pipeline-specific health, developer experience and adoption metrics us
 - [Continuous Delivery (Jez Humble, Dave Farley)](https://continuousdelivery.com/) — the foundational principles and patterns.
 - [DORA capabilities: Continuous integration](https://dora.dev/capabilities/continuous-integration/) — research-backed guidance on CI and related capabilities.
 - [Trunk Based Development](https://trunkbaseddevelopment.com/) — practices, branch strategies and feature flags.
-- [GitHub Actions: Security hardening](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions) — VERIFY: link path; OIDC, permissions, pinning and untrusted input.
+- [GitHub Actions: Secure use reference](https://docs.github.com/en/actions/reference/security/secure-use) — OIDC, permissions, pinning and untrusted input.
 - [Argo Rollouts documentation](https://argo-rollouts.readthedocs.io/) — progressive delivery on Kubernetes with automated analysis.
 - [OpenFeature](https://openfeature.dev/) — vendor-neutral feature flag API.

@@ -508,5 +508,5 @@ Accurate description of both paths, coaching for motivation, safe experiments, t
 - [Radical Candor](https://www.radicalcandor.com/) — Kim Scott's framework for feedback that cares personally and challenges directly.
 - [Staff Engineer archetypes (Will Larson)](https://staffeng.com/guides/staff-archetypes/) — useful when mentoring seniors towards Staff roles.
 - [Being Glue (Tanya Reilly)](https://www.noidea.dog/glue) — the talk and essay on glue work and its career impact.
-- [Center for Creative Leadership: SBI feedback model](https://www.ccl.org/articles/leading-effectively-articles/closing-the-gap-between-intent-vs-impact-sbii/) — VERIFY: link path; the origin of the Situation-Behaviour-Impact model.
-- [Google re:Work: Psychological safety](https://rework.withgoogle.com/guides/understanding-team-effectiveness/steps/foster-psychological-safety/) — VERIFY: link path; Project Aristotle findings on team effectiveness.
+- [Center for Creative Leadership: SBI feedback model](https://www.ccl.org/articles/leading-effectively-articles/closing-the-gap-between-intent-vs-impact-sbii/) — the origin of the Situation-Behaviour-Impact model.
+- [Google re:Work: Psychological safety](https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness) — Project Aristotle findings on team effectiveness.

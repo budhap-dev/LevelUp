@@ -433,7 +433,7 @@ Category-based architecture, conventions, guardrails and documentation.
 - **Incremental sync:** fetch changes since a cursor/version; tombstones for deletes.
 - **Schema versioning and migrations** for local stores.
 - **Security:** encrypt sensitive local data, handle logout (clear data), respect retention.
-- **Sync engines/services** (e.g. Replicache-style, ElectricSQL, PowerSync, Firestore/CouchDB-style replication — VERIFY: product capabilities) can provide much of this.
+- **Sync engines/services** (e.g. Replicache and its successor Zero, ElectricSQL and PowerSync for syncing Postgres data to the client, Firestore offline persistence, or CouchDB/PouchDB replication) can provide much of this.
 - **UX:** show sync status, pending changes and conflicts clearly.
 
 **What the interviewer is looking for:**
@@ -542,6 +542,6 @@ Independence, URL and platform services, event-based communication with contract
 - [react.dev: Managing State](https://react.dev/learn/managing-state) — choosing state structure, lifting and context.
 - [TanStack Query: Overview](https://tanstack.com/query/latest/docs/framework/react/overview) — server state concepts.
 - [Redux Toolkit documentation](https://redux-toolkit.js.org/) — modern Redux patterns and RTK Query.
-- [Zustand documentation](https://zustand.docs.pmnd.rs/) — VERIFY: link path; minimal store with selectors.
+- [Zustand documentation](https://zustand.docs.pmnd.rs/) — minimal store with selectors.
 - [XState documentation](https://stately.ai/docs) — state machines and statecharts.
 - [Yjs documentation](https://docs.yjs.dev/) — CRDTs for collaborative applications.

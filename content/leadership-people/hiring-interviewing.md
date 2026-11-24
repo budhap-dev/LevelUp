@@ -519,8 +519,8 @@ Aligning assessment with real work, clear rules, emphasis on judgement and under
 
 ## Further Reading
 
-- [Google re:Work: Use structured interviewing](https://rework.withgoogle.com/guides/hiring-use-structured-interviewing/steps/introduction/) — VERIFY: link path; practical guidance and rationale.
-- [Schmidt & Hunter (1998): The validity and utility of selection methods](https://psycnet.apa.org/record/1998-10661-006) — VERIFY: link path; the classic meta-analysis on selection methods (later updated with revised estimates).
-- [Lara Hogan's blog](https://larahogan.me/blog/) — VERIFY: link path; practitioner writing on management, including interviewing and team building.
+- [Google re:Work: A guide to structured interviewing](https://rework.withgoogle.com/intl/en/guides/a-guide-to-structured-interviewing-for-better-hiring-practices) — practical guidance and rationale.
+- [Schmidt & Hunter (1998): The validity and utility of selection methods](https://doi.org/10.1037/0033-2909.124.2.262) — the classic meta-analysis on selection methods (later updated with revised estimates).
+- [Lara Hogan's blog](https://larahogan.me/blog/) — practitioner writing on management, including interviewing and team building.
 - [The Manager's Path (Camille Fournier)](https://www.oreilly.com/library/view/the-managers-path/9781491973882/) — hiring and team-building from an engineering manager's perspective.
 - [ACAS: Recruiting staff](https://www.acas.org.uk/recruiting-someone) — UK guidance on fair, lawful recruitment (check local law in other jurisdictions).

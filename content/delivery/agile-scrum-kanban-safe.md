@@ -524,7 +524,7 @@ Outcome-based, multi-dimensional measurement used for learning, with awareness o
 
 - [Manifesto for Agile Software Development](https://agilemanifesto.org/) — the original values and principles.
 - [The Scrum Guide](https://scrumguides.org/scrum-guide.html) — the official, current definition of Scrum.
-- [Kanban University: The Kanban Method](https://kanban.university/kanban-guide/) — VERIFY: link path; the official Kanban Method guide.
+- [Kanban University: The Kanban Method](https://kanban.university/kanban-guide/) — the official Kanban Method guide.
 - [Scaled Agile Framework](https://scaledagileframework.com/) — SAFe's official documentation.
 - [LeSS framework](https://less.works/) — Large-Scale Scrum principles and rules.
 - [Team Topologies](https://teamtopologies.com/key-concepts) — reducing dependencies through team design.

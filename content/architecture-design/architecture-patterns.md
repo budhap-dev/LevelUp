@@ -720,6 +720,6 @@ Workload-driven reasoning with cost maths, awareness of limits, and no ideology.
 - [microservices.io patterns](https://microservices.io/patterns/) — Chris Richardson's pattern language for microservices, including the transactional outbox.
 - [Spring Modulith documentation](https://spring.io/projects/spring-modulith) — verifiable module boundaries and internal events in a modular monolith.
 - [Temporal documentation](https://docs.temporal.io/) — durable workflow orchestration for sagas.
-- VERIFY: [Debezium: outbox event router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html) — CDC-based relay for the outbox pattern.
-- VERIFY: [AWS Well-Architected: Reducing the scope of impact with cell-based architecture](https://docs.aws.amazon.com/wellarchitected/latest/reducing-scope-of-impact-with-cell-based-architecture/reducing-scope-of-impact-with-cell-based-architecture.html) — AWS guidance on cell design, routing and sizing.
-- VERIFY: [Melvin Conway: How Do Committees Invent?](http://www.melconway.com/Home/Committees_Paper.html) — the 1968 paper behind Conway's law.
+- [Debezium: outbox event router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html) — CDC-based relay for the outbox pattern.
+- [AWS Well-Architected: Reducing the scope of impact with cell-based architecture](https://docs.aws.amazon.com/wellarchitected/latest/reducing-scope-of-impact-with-cell-based-architecture/reducing-scope-of-impact-with-cell-based-architecture.html) — AWS guidance on cell design, routing and sizing.
+- [Melvin Conway: How Do Committees Invent?](http://www.melconway.com/Home/Committees_Paper.html) — the 1968 paper behind Conway's law.

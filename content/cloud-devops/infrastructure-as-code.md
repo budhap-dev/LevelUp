@@ -303,7 +303,7 @@ Causes, risks, detection mechanisms, prevention through access control, and deli
 - **Generate and store in a vault:** let IaC create secrets (e.g. random passwords) directly into Key Vault/Secrets Manager and have applications read them at runtime via identity — but be aware the generated value may still land in **state**, so state must be treated as sensitive (encrypted, restricted access).
 - **Reference, don't copy:** pass vault references or secret ids to applications (Key Vault references, CSI drivers) rather than secret values as outputs or environment variables in plans.
 - **Mark sensitive** variables/outputs so tools redact them in logs and plans (redaction only — not encryption).
-- Consider ephemeral resources/values where the tool supports them (VERIFY: Terraform 1.10+ ephemeral values reduce secrets persisted in state).
+- Consider ephemeral resources/values where the tool supports them (Terraform 1.10 added ephemeral values and resources, and 1.11 write-only arguments, so secrets need not be persisted in state).
 - **Rotate** regularly, ideally automated.
 
 **What the interviewer is looking for:**

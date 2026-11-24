@@ -53,7 +53,7 @@ export function ProductCard({ product, onAdd }: Props) {
 3. **Reconcile:** compare with the previous tree; **keys** identify list items; element type changes remount subtrees.
 4. **Commit:** apply DOM changes, run layout effects, then (after paint) passive effects.
 
-A parent re-render re-renders its children by default; usually fine. Optimise with `React.memo`, `useMemo`, `useCallback` only where profiling shows cost — or let the **React Compiler** memoise automatically (VERIFY: compiler stable release status and adoption guidance).
+A parent re-render re-renders its children by default; usually fine. Optimise with `React.memo`, `useMemo`, `useCallback` only where profiling shows cost — or let the **React Compiler** memoise automatically (stable since React Compiler 1.0 in October 2025, and it can be adopted incrementally).
 
 ### Hooks rules and essentials
 
@@ -180,7 +180,7 @@ Clear definitions, unidirectional data flow and derived state.
 
 Why: React associates hook state with components **by call order**. If the order changes between renders (a hook called conditionally), React would mismatch state to the wrong hook. The ESLint plugin (`eslint-plugin-react-hooks`) enforces the rules and checks effect dependencies.
 
-Custom hooks (named `useSomething`) let you extract and reuse stateful logic while following the same rules. (The `use()` API in React 19 is an exception that can be called conditionally — VERIFY: its specific rules.)
+Custom hooks (named `useSomething`) let you extract and reuse stateful logic while following the same rules. (The `use()` API in React 19 is an exception: it can be called inside conditions and loops, but still only from a component or hook, and not inside a try/catch block.)
 
 **What the interviewer is looking for:**
 Both rules and the call-order rationale; lint enforcement.
@@ -273,7 +273,7 @@ Techniques:
 - **Split contexts** by update frequency; use selectors (external stores with `useSyncExternalStore`, or libraries like Zustand) to subscribe to slices.
 - **Virtualise** long lists.
 - **Transitions/`useDeferredValue`** to keep input responsive during heavy renders.
-- **React Compiler** can automatically memoise components and values, reducing manual `useMemo`/`useCallback` (VERIFY: current status).
+- **React Compiler** can automatically memoise components and values, reducing manual `useMemo`/`useCallback` (stable since 1.0 in October 2025).
 
 **What the interviewer is looking for:**
 Measurement first, structural fixes before memoisation, context strategies and modern tools.
@@ -528,6 +528,6 @@ Incremental sequencing, tooling and upgrades, testing migration, server-state ex
 - [react.dev: Learn React](https://react.dev/learn) — the official documentation and mental model.
 - [react.dev: You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-an-effect) — when effects are the wrong tool.
 - [react.dev: React 19 release notes](https://react.dev/blog/2024/12/05/react-19) — Actions, `use`, Server Components and more.
-- [React Compiler documentation](https://react.dev/learn/react-compiler) — VERIFY: link path; automatic memoisation.
+- [React Compiler documentation](https://react.dev/learn/react-compiler) — automatic memoisation.
 - [Testing Library: React](https://testing-library.com/docs/react-testing-library/intro/) — user-centric component testing.
 - [TanStack Query documentation](https://tanstack.com/query/latest) — server-state management patterns.

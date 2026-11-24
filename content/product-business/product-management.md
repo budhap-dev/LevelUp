@@ -493,4 +493,4 @@ Integrated roadmap, outcome framing for technical work, joint planning, capacity
 - [Product Talk (Teresa Torres)](https://www.producttalk.org/) — continuous discovery and the opportunity solution tree.
 - [Shape Up (Basecamp)](https://basecamp.com/shapeup) — shaping, appetites and betting on work.
 - [Trustworthy Online Controlled Experiments (Kohavi, Tang, Xu)](https://experimentguide.com/) — the reference on running A/B tests correctly.
-- [Christensen Institute: Jobs to Be Done](https://www.christenseninstitute.org/theory/jobs-to-be-done/) — VERIFY: link path; the theory from its originators.
+- [Christensen Institute: Jobs to Be Done](https://www.christenseninstitute.org/theory/jobs-to-be-done/) — the theory from its originators.

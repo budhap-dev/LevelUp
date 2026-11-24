@@ -133,7 +133,7 @@ flowchart LR
 **Level:** Foundation
 
 **Model answer:**
-WCAG (Web Content Accessibility Guidelines, from the W3C) is the international standard for web accessibility, with testable success criteria at levels **A**, **AA** and **AAA**. Version **2.2** (2023) is current; most laws and contracts reference level **AA**. WCAG 3 is in development with a different structure (VERIFY: status).
+WCAG (Web Content Accessibility Guidelines, from the W3C) is the international standard for web accessibility, with testable success criteria at levels **A**, **AA** and **AAA**. Version **2.2** (2023) is current; most laws and contracts reference level **AA**. WCAG 3 is an early W3C Working Draft with a different structure and is not expected to replace 2.x for several years.
 
 **POUR** are the four principles:
 - **Perceivable:** information must be presentable in ways users can perceive — text alternatives, captions, adaptable layouts, contrast.
@@ -289,7 +289,7 @@ Labels, grouping, descriptions, error identification and summaries, autocomplete
 **Model answer:**
 A layered approach:
 - **Linting:** `eslint-plugin-jsx-a11y` and framework equivalents catch common markup issues while coding.
-- **Automated testing:** axe-core in component tests (e.g. `jest-axe`/`vitest-axe`), Playwright + axe for pages, Lighthouse accessibility audits in CI. Automated tools detect only a portion of WCAG issues (estimates commonly cited around a third — VERIFY), mostly structural ones.
+- **Automated testing:** axe-core in component tests (e.g. `jest-axe`/`vitest-axe`), Playwright + axe for pages, Lighthouse accessibility audits in CI. Automated tools detect only a portion of WCAG issues (in a UK Government Digital Service test, the best tool found only about 40% of deliberately planted barriers), mostly structural ones.
 - **Component tests using accessible queries:** Testing Library's `getByRole` with names fails when components lack proper semantics.
 - **Manual testing:**
   - Keyboard-only walkthrough of key journeys.
@@ -436,9 +436,9 @@ Accessible tokens, native/APG components, enforced labelling, documentation, tes
 **Level:** Architect
 
 **Model answer:**
-- **European Accessibility Act (EAA):** applies from **28 June 2025** to many products and services in the EU market — e-commerce, banking, e-books, transport ticketing, consumer devices, communications — referencing harmonised standard EN 301 549 (which incorporates WCAG). Requirements include accessible services, information and an accessibility statement; microenterprises have some exemptions for services (VERIFY: specifics and national enforcement).
+- **European Accessibility Act (EAA):** applies from **28 June 2025** to many products and services in the EU market — e-commerce, banking, e-books, transport ticketing, consumer devices, communications — referencing harmonised standard EN 301 549 (which incorporates WCAG). Requirements include accessible services, information and an accessibility statement; microenterprises (fewer than 10 staff and no more than €2 million turnover or balance sheet) providing services are exempt, and enforcement and penalties are set by each member state.
 - **EU Web Accessibility Directive:** public sector websites and apps.
-- **US:** the **ADA** (courts have applied it to websites; frequent litigation), **Section 508** for federal agencies and contractors; the DOJ issued a rule (2024) adopting WCAG 2.1 AA for state and local government web content (VERIFY: compliance dates).
+- **US:** the **ADA** (courts have applied it to websites; frequent litigation), **Section 508** for federal agencies and contractors; the DOJ issued a rule (2024) adopting WCAG 2.1 AA for state and local government web content and mobile apps; a 2026 interim final rule moved compliance to April 2027 for entities serving 50,000+ people and April 2028 for smaller ones and special districts.
 - **UK:** Equality Act 2010 and Public Sector Bodies Accessibility Regulations.
 - **Other jurisdictions:** Canada (ACA, AODA), Australia (DDA) and more.
 

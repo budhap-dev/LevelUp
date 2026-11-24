@@ -546,9 +546,9 @@ Capability mapping, linking requirements to capabilities, classification for bui
 
 ## Further Reading
 
-- [IIBA: BABOK Guide](https://www.iiba.org/career-resources/a-business-analysis-professionals-foundation-for-success/babok/) — VERIFY: link path; the standard body of knowledge for business analysis.
+- [IIBA: BABOK Guide](https://www.iiba.org/career-resources/a-business-analysis-professionals-foundation-for-success/babok/) — the standard body of knowledge for business analysis.
 - [Example Mapping (Matt Wynne, Cucumber blog)](https://cucumber.io/blog/bdd/example-mapping-introduction/) — the original introduction to example mapping.
 - [Cucumber: Gherkin reference](https://cucumber.io/docs/gherkin/reference/) — syntax for Given/When/Then specifications.
-- [Jeff Patton: User Story Mapping](https://jpattonassociates.com/story-mapping/) — VERIFY: link path; the author's resources on story mapping.
+- [Jeff Patton: User Story Mapping](https://jpattonassociates.com/story-mapping/) — the author's resources on story mapping.
 - [OMG BPMN specification](https://www.omg.org/spec/BPMN/) — the standard notation for business process modelling.
 - [GOV.UK Service Manual: User research](https://www.gov.uk/service-manual/user-research) — practical, well-tested guidance on understanding user needs.

@@ -535,7 +535,7 @@ Minimisation, classification, separation, retention automation, erasure across s
 
 - [PostgreSQL documentation: Data Definition](https://www.postgresql.org/docs/current/ddl.html) — constraints, schemas, partitioning and row-level security.
 - [PostgreSQL: Date/Time Types](https://www.postgresql.org/docs/current/datatype-datetime.html) — timestamp with/without time zone semantics.
-- [Kimball Group: Dimensional Modeling Techniques](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/) — VERIFY: link path; the canonical reference for star schemas and SCDs.
+- [Kimball Group: Dimensional Modeling Techniques](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/) — the canonical reference for star schemas and SCDs.
 - [Martin Fowler: Bitemporal History](https://martinfowler.com/articles/bitemporal-history.html) — an accessible explanation of bitemporal modelling.
 - [Microsoft: Multitenant SaaS database tenancy patterns](https://learn.microsoft.com/en-us/azure/azure-sql/database/saas-tenancy-app-design-patterns) — tenancy models and trade-offs.
 - [Designing Data-Intensive Applications](https://dataintensive.net/) — data models, storage and schema evolution in depth.

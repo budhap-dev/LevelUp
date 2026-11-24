@@ -26,13 +26,13 @@ status: complete
 |---|---|---|---|
 | Deployment frequency | How often a team deploys to production | Throughput | CD pipeline / deploy events |
 | Lead time for changes | Time from commit to running in production | Throughput | VCS commit time + deploy time |
-| Failed deployment recovery time | Time to recover from a deployment that caused a failure in production | Throughput (VERIFY: classed as throughput since the 2024 report) | Incident/rollback data |
+| Failed deployment recovery time | Time to recover from a deployment that caused a failure in production | Throughput (moved here from stability in the 2024 report) | Incident/rollback data |
 | Change failure rate | % of deployments needing immediate remediation (rollback, hotfix) | Instability | Deploys linked to incidents/rollbacks |
-| Rework rate | Share of deployments that are unplanned, made to fix user-facing bugs | Instability | Deploy metadata (VERIFY: added in the 2024 report) |
+| Rework rate | Share of deployments that are unplanned, made to fix user-facing bugs | Instability | Deploy metadata (added in the 2024 report) |
 
-"Time to restore service" was renamed **failed deployment recovery time** (VERIFY: in the 2023 report) to focus on failures caused by changes rather than all incidents. **Reliability** (meeting operational goals such as SLOs) is tracked alongside as an outcome.
+"Time to restore service" was renamed **failed deployment recovery time** (in the 2023 report) to focus on failures caused by changes rather than all incidents. **Reliability** (meeting operational goals such as SLOs) is tracked alongside as an outcome.
 
-VERIFY: DORA moved away from the fixed low/medium/high/elite cluster labels in recent reports. Use the published benchmarks for context, not as targets.
+The 2025 DORA report dropped the low/medium/high/elite clusters in favour of seven team profiles that combine delivery performance with well-being and friction. Use the published benchmarks for context, not as targets.
 
 ### Measuring lead time precisely
 
@@ -335,7 +335,7 @@ Derive them from **system events, not surveys or spreadsheets**:
 - **Change failures and recovery:** link incidents and rollbacks to deployments, using incident-tool fields, automatic rollbacks reported by the deployment system, or hotfix labels. Recovery time runs from the failed deploy (or detection) to restoration.
 - **Normalise** into one store (a warehouse table), report p50 and p90 per service and team, and show trends over time.
 
-Tools: the open-source Four Keys project from Google (now archived, VERIFY) showed the pattern. Commercial platforms (LinearB, Sleuth, GitLab and Azure DevOps analytics, internal developer portals such as Backstage plugins) offer it ready-made.
+Tools: the open-source Four Keys project from Google (now archived) showed the pattern. Commercial platforms (LinearB, Sleuth, GitLab and Azure DevOps analytics, internal developer portals such as Backstage plugins) offer it ready-made.
 
 Make it trustworthy: publish the definitions, let teams see the raw events behind their numbers, and fix data-quality issues before anyone draws conclusions.
 

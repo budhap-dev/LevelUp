@@ -290,7 +290,7 @@ Uses:
 - **Incident response:** when a new vulnerability (e.g. Log4Shell) is announced, query SBOMs to find every affected artefact and deployment in minutes.
 - **Vulnerability management:** continuous matching of components against vulnerability databases, including after release.
 - **Licence compliance:** detect incompatible licences.
-- **Customer and regulatory requirements:** many customers and regulations increasingly ask for SBOMs (VERIFY: e.g. US federal procurement guidance and the EU Cyber Resilience Act timelines).
+- **Customer and regulatory requirements:** many customers and regulations increasingly ask for SBOMs (for example US federal software attestation following Executive Order 14028, and the EU Cyber Resilience Act, which requires manufacturers to produce an SBOM; its vulnerability reporting duties apply from 11 September 2026 and its main obligations from 11 December 2027).
 - **Supply chain trust:** combined with signatures and provenance.
 
 Practice: generate SBOMs automatically at build (Syft, build tools), attach them to artefacts (attestations), store them centrally with deployment metadata, and use VEX statements to communicate whether known vulnerabilities actually affect a product.
