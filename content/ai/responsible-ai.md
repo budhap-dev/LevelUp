@@ -6,7 +6,7 @@ tags: [ethics, governance, ai]
 level: Senior
 estimatedMinutes: 45
 related: [llms-rag-agents, ai-ml-fundamentals]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-25
 status: complete
 ---
 
@@ -49,6 +49,57 @@ Most frameworks (OECD, Microsoft, Google, NIST) converge on:
 - **Calibration within groups:** a score of 0.7 means 70% likelihood for every group.
 
 These generally **cannot all be satisfied at once** when base rates differ (impossibility results), so choosing a fairness definition is a **values and legal decision** made with stakeholders, documented and monitored.
+
+### Worked example: the same model, two verdicts
+
+A screening model shortlists applicants. Here are its results for two groups on a labelled audit sample:
+
+| Group | Applicants | Actually qualified | Shortlisted | Shortlisted and qualified |
+|---|---|---|---|---|
+| A | 1,000 | 400 | 300 | 240 |
+| B | 1,000 | 200 | 180 | 150 |
+
+```ts
+const g = {
+  A: { n: 1000, qualified: 400, selected: 300, tp: 240 },
+  B: { n: 1000, qualified: 200, selected: 180, tp: 150 },
+};
+const selectionRate = (x: typeof g.A) => x.selected / x.n; // A 0.30, B 0.18
+const tpr = (x: typeof g.A) => x.tp / x.qualified;          // A 0.60, B 0.75
+const precision = (x: typeof g.A) => x.tp / x.selected;     // A 0.80, B 0.83
+
+selectionRate(g.B) / selectionRate(g.A); // 0.60: fails the four-fifths (0.8) screen
+tpr(g.B) - tpr(g.A);                     // +0.15: qualified B applicants are MORE likely to be shortlisted
+```
+
+Judged by **demographic parity**, the model looks biased against group B: its selection rate is only 60% of group A's. Judged by **equal opportunity**, it favours group B: a qualified B applicant has a 75% chance of being shortlisted, against 60% for A. Both statements are true at once, because the base rates differ (40% against 20% qualified). Which matters, and whether "qualified" in the audit labels is itself biased, is the decision for legal, domain experts and affected people. Engineers make that conversation possible by computing all the views, per group and for intersections.
+
+### Oversight and contest, step by step
+
+```mermaid
+sequenceDiagram
+  participant P as Applicant
+  participant Sys as Application system
+  participant M as Model
+  participant R as Recruiter
+  participant Log as Audit log
+  %% step: The applicant is told up front that AI assists the screening, and how.
+  %% step: The model returns a relevance score plus the evidence behind it, not a verdict.
+  %% step: Inputs, score, explanation and model version are logged, which the EU AI Act requires for high-risk systems.
+  %% step: The recruiter sees the explanation and decides. The model never auto-rejects.
+  %% step: The recruiter's decision and any override are logged. Override rates reveal rubber-stamping.
+  %% step: The applicant is told the outcome and how to contest it.
+  %% step: A contest goes to a different human, who sees the full record.
+  %% step: The case and its outcome feed fairness monitoring and the next model review.
+  Sys->>P: AI-assisted screening notice
+  M-->>Sys: score 0.71 + top evidence
+  Sys->>Log: inputs, score, explanation, model v3
+  Sys->>R: candidate + explanation
+  R->>Log: decision: interview (agrees with model)
+  Sys->>P: outcome + how to contest
+  P->>Sys: contest, routed to a second reviewer
+  R->>Log: contest outcome, feeds monitoring
+```
 
 ### Explainability
 
@@ -476,6 +527,130 @@ Risk-proportionate processes, platforms that accelerate safely, staged autonomy 
 **Red flags:**
 - Either "move fast and ignore risk" or "ban until fully understood".
 
+### What does "proportionate" AI governance look like in practice? {#proportionate-controls}
+
+**Level:** Foundation
+
+**Model answer:**
+Controls should scale with the **impact on people**, not with how impressive the technology is. Three illustrative tiers:
+- **Low risk:** an internal tool that summarises meeting notes, or a coding assistant. Approved tools, the data rules in the acceptable-use policy, standard security review, and a short self-assessment. Shipping takes days.
+- **Medium risk:** a customer-facing support chatbot. Add disclosure that users are talking to AI, grounding and citations, output filters, an evaluation suite and red-teaming before launch, a route to a human, and monitoring with a kill switch.
+- **High risk:** credit decisions, hiring, health triage. Add a formal impact assessment (DPIA, plus the EU AI Act duties where they apply), fairness evaluation by subgroup, meaningful human oversight, explanations and a contest route, technical documentation, logging for audit, sign-off by a review board, and periodic re-review.
+
+The point is to make the low-risk path **fast**, so teams don't route around governance, and to spend scarce expert review where harm is possible.
+
+**What the interviewer is looking for:**
+Impact-based tiers with concrete examples and controls, and awareness that over-governing low-risk use pushes people to shadow tools.
+
+**Follow-ups:**
+- Who decides which tier a use case is in?
+- A low-risk tool starts being used for a high-risk purpose. How would you notice?
+
+**Red flags:**
+- One heavyweight process for every AI use, or no process at all.
+
+### How can you measure fairness if you don't collect demographic data? {#fairness-without-demographics}
+
+**Level:** Senior
+
+**Model answer:**
+Not collecting the data doesn't make the model fair. It only makes unfairness invisible. The options, each with trade-offs:
+- **Voluntary, purpose-limited collection** for fairness monitoring only: kept separate from the model's inputs, access-controlled, and with a clear lawful basis. Under GDPR, special-category data needs an Article 9 condition, so involve privacy and legal early.
+- **Audit studies with a consenting panel or a third party** that holds the attributes and runs the analysis, so the product team never sees individual-level demographics.
+- **Proxy estimation**, such as inferring likely group membership from names and geography (BISG is used in US lending audits). It works for aggregate auditing only, is noisy, and must never be used for decisions about individuals.
+- **Outcome-based checks** that need no attributes: error rates by region, language, device, or by accessibility features in use, plus qualitative research with affected communities.
+- **Synthetic or counterfactual tests:** swap names or pronouns in otherwise identical inputs and compare the outputs. This is especially useful for LLM systems.
+
+Document which approach you chose and its limitations, and revisit it as the law and the product change.
+
+**What the interviewer is looking for:**
+Recognising that absence of data isn't fairness, legal awareness about special-category data, and practical alternatives with their caveats.
+
+**Follow-ups:**
+- What are the risks of proxy estimation?
+- How would you run a counterfactual name-swap test on a CV-screening LLM?
+
+**Red flags:**
+- "We don't store gender or ethnicity, so the model can't discriminate."
+
+### Under the EU AI Act, what's the difference between a provider and a deployer, and when can a company become a provider without meaning to? {#provider-vs-deployer}
+
+**Level:** Senior
+
+**Model answer:**
+- **Provider:** develops an AI system (or has one developed) and places it on the market or puts it into service **under its own name**. For high-risk systems, the provider carries the heaviest duties: risk management, data governance, technical documentation, logging capability, instructions for use, conformity assessment, CE marking and registration, and post-market monitoring.
+- **Deployer:** uses an AI system under its authority in a professional capacity. Its duties include using the system according to the instructions, assigning competent human oversight, making sure input data is relevant, monitoring and keeping the logs, informing affected workers and people, and (for public bodies and certain credit and insurance uses) carrying out a **fundamental rights impact assessment**.
+
+You can **become the provider** of a high-risk system if you:
+- put your name or trademark on a high-risk system;
+- make a **substantial modification** to one;
+- change the intended purpose of a system (including a general-purpose one) so that it becomes high-risk. Taking a general chatbot and using it to rank job applicants is the classic example.
+
+Engineering implication: the classification follows the **use**, so product changes need a compliance check, not only the initial launch.
+
+**What the interviewer is looking for:**
+Accurate roles and duties, and the repurposing and modification traps.
+
+**Follow-ups:**
+- You fine-tune a general-purpose model for credit scoring. Which obligations do you now have?
+- How would you catch an intended-purpose change in your product process?
+
+**Red flags:**
+- Believing that buying a vendor's model moves all the obligations to the vendor.
+
+### Design the guardrail architecture for a customer-facing generative AI assistant. {#guardrail-architecture}
+
+**Level:** Architect
+
+**Model answer:**
+Use layers, with each one cheap enough to run on every request and each one assumed to fail sometimes:
+1. **Before the model:** authentication and rate limits, input classifiers (abuse, self-harm signals, prompt-injection heuristics), PII detection and redaction where the use case doesn't need it, and topic scoping (refusing to give legal or medical advice if it's out of scope).
+2. **Shaping the model's behaviour:** a system prompt that states the policy and persona, **grounding** in approved content with citations, and tools with least privilege and server-side authorisation. Consequential actions require confirmation.
+3. **After the model:** output classifiers (toxicity, PII leakage, policy violations), citation and grounding checks, schema validation for structured output, and blocklists for specific claims (prices, legal promises).
+4. **Around the system:** disclosure and feedback in the UI, an easy route to a human, logging with redaction, dashboards for blocked and flagged rates, sampled human review, and a kill switch per feature.
+5. **Lifecycle:** red-teaming before launch and after major changes, regression evals in CI, an incident process, and regular review of over-blocking (refusals of legitimate requests are a harm too).
+
+Trade-offs: every layer adds latency and cost, so run classifiers in parallel where possible, tune their thresholds with real data, and measure false positives as carefully as misses.
+
+**What the interviewer is looking for:**
+Defence in depth across input, model, output and operations, with over-blocking and latency treated as first-class concerns.
+
+**Follow-ups:**
+- Your output filter adds 400 ms. What do you do?
+- How do you stop guardrails from being bypassed in a different language?
+
+**Red flags:**
+- Relying on the system prompt alone, or on one filter with no monitoring.
+
+### How do you decide how much autonomy to give an AI agent, and when to increase it? {#agent-autonomy}
+
+**Level:** Architect
+
+**Model answer:**
+Think of autonomy as a **ladder** that is climbed with evidence, separately for each type of action:
+1. **Suggest:** the agent drafts and a human acts (it writes the refund email, a human sends it).
+2. **Act with approval:** the agent prepares the action and a human approves each one.
+3. **Act within limits:** the agent acts alone below thresholds (refunds under £50, reversible changes) and escalates otherwise.
+4. **Act, with oversight after the fact:** the agent acts and humans review samples and exceptions.
+
+What decides the rung:
+- **Severity and reversibility:** moving money, deleting data or messaging customers sit low on the ladder for a long time. Tagging tickets can climb fast.
+- **Measured reliability:** the error rate on an evaluation set and in shadow mode, compared with the human baseline.
+- **Detectability:** whether a mistake would be noticed and corrected quickly.
+- **Regulatory context:** some decisions need meaningful human involvement by law.
+
+Climb when the evidence is good: a sustained error rate below the agreed bar, no serious incidents, monitoring and rollback in place. Descend immediately on incidents. Enforce the limits **in code** (API-level thresholds and permissions), not in the prompt.
+
+**What the interviewer is looking for:**
+A graduated, per-action model tied to severity, reversibility and measured performance, with enforcement in code.
+
+**Follow-ups:**
+- What metrics would convince you to move refunds from rung 2 to rung 3?
+- How do you prevent automation bias at rung 2?
+
+**Red flags:**
+- Granting full autonomy because a demo went well, or never revisiting the level.
+
 ## Cheat Sheet
 
 - **Responsible AI principles** — fairness, reliability and safety, privacy and security, transparency, accountability, inclusiveness.
@@ -492,6 +667,15 @@ Risk-proportionate processes, platforms that accelerate safely, staged autonomy 
 - **GDPR Article 22** — limits on solely automated decisions with legal or similarly significant effects.
 - **NIST AI RMF** — Govern, Map, Measure, Manage.
 - **ISO/IEC 42001** — certifiable AI management system standard.
+
+### Revisit
+- **Four-fifths rule** — a selection-rate ratio below 0.8 between groups is a common screen for adverse impact (US guidance).
+- **Parity vs equal opportunity** — the same model can fail one and pass the other when base rates differ.
+- **Counterfactual explanation** — "you'd have been approved if X were different"; actionable for the affected person.
+- **Provider vs deployer** — builds and markets the system vs uses it professionally; repurposing can make you the provider.
+- **FRIA** — fundamental rights impact assessment; required of certain deployers of high-risk AI (public bodies, credit, insurance).
+- **AI literacy (EU AI Act Art. 4)** — providers and deployers must ensure staff have sufficient AI literacy, since February 2025.
+- **Autonomy ladder** — suggest → act with approval → act within limits → act with after-the-fact oversight; climb with evidence.
 
 ## Further Reading
 
