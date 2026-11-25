@@ -27,6 +27,7 @@ FORMAT — the app parses this file, so follow the attached template EXACTLY:
 - Use H3 (###) and below for sub-headings inside sections.
 - Diagrams: fenced code blocks with language "mermaid". Wrap node labels containing punctuation in double quotes, e.g. A["Client (browser)"]. Never use semicolons inside sequence-diagram message text (Mermaid treats them as statement ends).
 - Code examples: fenced blocks with a language; TypeScript where relevant.
+- Prefer at least one sequence diagram or flowchart with 3+ steps that tells a story in order: the app turns it into a step-through animation. Add `%% step: <narration>` comment lines (n-th comment = n-th edge/message) when the auto caption ("A → B: label") isn't enough. To show data in motion, name an edge and animate it: `A e1@--> B` then `e1@{ animate: true }`.
 
 CONTENT:
 - TL;DR: 3–5 bullets.

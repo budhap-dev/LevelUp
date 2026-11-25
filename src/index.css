@@ -151,7 +151,8 @@ body {
 }
 .mermaid-diagram[data-state='rendered'] {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
 }
 .mermaid-diagram svg {
   max-width: 100%;
@@ -175,6 +176,129 @@ body {
 @keyframes mmd-fade {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Step-through player: steps not reached yet are dimmed, the current one is highlighted. */
+.mmd-stepping .mmd-step {
+  opacity: 0.12;
+  transition: opacity 320ms var(--ease-out-expo);
+}
+.mmd-stepping .mmd-step.is-shown {
+  opacity: 1;
+}
+/* Mermaid's own styles are scoped by the SVG's id, so these need !important to win. */
+.mmd-stepping :is(path, line).is-current {
+  stroke: var(--accent) !important;
+  stroke-width: 3px !important;
+}
+.mmd-stepping g.node.is-current :is(rect, path, circle, polygon, ellipse),
+.mmd-stepping rect.note.is-current {
+  stroke: var(--accent) !important;
+  stroke-width: 3px !important;
+}
+.mmd-stepping text.messageText.is-current {
+  font-weight: 700 !important;
+}
+.mmd-stepping g.edgeLabel.is-current .labelBkg,
+.mmd-stepping g.edgeLabel.is-current .edgeLabel {
+  font-weight: 700;
+}
+.mmd-player {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-sans, inherit);
+  font-size: 0.8125rem;
+  white-space: normal;
+}
+.mmd-player[data-active='false'] .mmd-controls,
+.mmd-player[data-active='false'] .mmd-caption,
+.mmd-player[data-active='true'] .mmd-start {
+  display: none;
+}
+.mmd-start,
+.mmd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background-color: var(--surface);
+  color: var(--fg-soft);
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms,
+    border-color 150ms,
+    transform 150ms var(--ease-out-expo);
+}
+.mmd-start {
+  padding: 0.3rem 0.8rem;
+  font-weight: 600;
+}
+.mmd-btn {
+  width: 2rem;
+  height: 2rem;
+}
+.mmd-start:hover,
+.mmd-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mmd-start:active,
+.mmd-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.mmd-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mmd-start svg,
+.mmd-btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mmd-start svg,
+.mmd-btn[data-action='play'] svg,
+.mmd-btn[data-action='pause'] svg {
+  fill: currentColor;
+}
+.mmd-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.mmd-count {
+  min-width: 3.5rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.mmd-caption {
+  flex-basis: 100%;
+  margin: 0;
+  min-height: 1.25rem;
+  color: var(--fg);
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mmd-stepping .mmd-step {
+    transition: none;
+  }
+  /* Mermaid's `animate: true` edges march continuously; stop them. */
+  .mermaid-diagram :is(.edge-animation-fast, .edge-animation-slow) {
+    animation: none !important;
+  }
 }
 
 /* ---------- <details> open/close animation (progressive enhancement) ---------- */

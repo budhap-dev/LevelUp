@@ -3,6 +3,7 @@
  * Mermaid is large, so it is loaded on demand the first time a diagram nears the viewport.
  */
 import type { Mermaid } from 'mermaid';
+import { attachPlayer } from './diagram-player';
 
 let mermaidPromise: Promise<Mermaid> | null = null;
 const loadMermaid = () =>
@@ -169,9 +170,13 @@ export async function renderDiagram(container: HTMLElement, themeId: string, dar
     container.innerHTML = await renderMermaidSvg(source, themeId, dark);
     container.dataset.state = 'rendered';
     container.dataset.renderedTheme = themeId;
-    container.setAttribute('role', 'img');
-    container.setAttribute('aria-label', `Diagram: ${source.split('\n')[0]?.trim() ?? 'diagram'}`);
+    // The label goes on the SVG, not the container: children of role="img" are hidden from assistive tech,
+    // and the step-through controls next to the SVG must stay reachable.
+    const svg = container.querySelector(':scope > svg');
+    svg?.setAttribute('role', 'img');
+    svg?.setAttribute('aria-label', `Diagram: ${source.split('\n')[0]?.trim() ?? 'diagram'}`);
     if (firstRender) animateIn(container);
+    attachPlayer(container, source);
   } catch (error) {
     container.dataset.state = 'error';
     container.textContent = `Diagram could not be rendered: ${(error as Error).message}\n\n${source}`;
