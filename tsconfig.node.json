@@ -18,5 +18,5 @@
     "noUnusedParameters": true,
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["vite.config.ts", "scripts", "api", "src/lib/notes/types.ts", "src/lib/content/schema.ts", "src/lib/content/constants.ts", "src/lib/themes.ts"]
+  "include": ["vite.config.ts", "middleware.ts", "scripts", "api", "src/lib/notes/types.ts", "src/lib/content/schema.ts", "src/lib/content/constants.ts", "src/lib/themes.ts"]
 }

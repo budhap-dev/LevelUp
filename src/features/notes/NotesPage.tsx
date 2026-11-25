@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { lockApp } from '@/lib/app-lock';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { NotesApiError, notesApi } from '@/lib/notes/client';
 import { SNIPPET_MARK_END, SNIPPET_MARK_START, type NoteSummary } from '@/lib/notes/types';
@@ -224,7 +225,7 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
   };
 
   const lock = async () => {
-    await notesApi.lock().catch(() => undefined);
+    await lockApp(); // in production this leaves for the unlock page
     onLocked();
   };
 
@@ -242,8 +243,8 @@ function Workspace({ onLocked }: { onLocked: () => void }) {
             <button
               type="button"
               onClick={() => void lock()}
-              aria-label="Lock notes"
-              title="Lock notes on this browser"
+              aria-label="Lock LevelUp"
+              title="Lock LevelUp on this browser"
               className="flex size-9 items-center justify-center rounded-lg text-fg-soft transition-colors hover:bg-subtle hover:text-fg"
             >
               <Icon name="lock" />

@@ -132,7 +132,11 @@ How it works:
 
 - **Storage:** notes live in **Neon Postgres**, created through the Vercel Marketplace and connected to the Vercel project. Attachments are stored in the database too (`bytea`). Search uses a generated `tsvector` column.
 - **API:** [`api/router.ts`](api/router.ts) handles every `/api/*` request on Vercel. `npm run dev` serves the same handler through a Vite middleware.
-- **Locking:** notes are locked behind a passphrase. A browser stays unlocked for 30 days, using a signed HttpOnly cookie. The rest of the site stays public.
+- **Locking:** the **whole app** is behind the passphrase, not only Notes.
+  - [`middleware.ts`](middleware.ts) (Vercel Routing Middleware, Edge runtime) checks the signed HttpOnly session cookie before any page or file is served. A locked browser gets a self-contained unlock page ([`api/_lib/gate.ts`](api/_lib/gate.ts)) that signs in through the rate-limited `POST /api/session`.
+  - A browser stays unlocked for 30 days.
+  - **Lock LevelUp** (in Settings, or the padlock on the Notes page) signs the browser out. It also removes the PWA's offline copy, so the cached app can't be opened without the passphrase.
+  - `npm run dev` has no gate. Only Notes asks for the passphrase locally.
 - **Environment variables:**
   - `DATABASE_URL` is set by the Neon integration.
   - `NOTES_PASSWORD` is the passphrase.
