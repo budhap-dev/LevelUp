@@ -20,6 +20,8 @@
   --color-accent-ink: var(--accent-ink);
   --color-code: var(--code);
   --color-scrim: var(--scrim);
+  --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
 }
 
 @theme {
@@ -341,6 +343,10 @@ dialog.palette[open]::backdrop {
 .notes-editor .note-diagram-button:hover {
   background-color: var(--canvas);
   color: var(--fg);
+}
+.notes-editor .note-diagram-button.is-danger,
+.notes-editor .note-diagram-button.is-danger:hover {
+  color: var(--danger);
 }
 .notes-editor .ProseMirror .note-diagram pre.note-diagram-source {
   margin: 0;

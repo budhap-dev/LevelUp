@@ -20,6 +20,8 @@
  *   --accent-ink   links and text on --accent-soft (≥ 4.5:1 on canvas and accent-soft)
  *   --code         code block background
  *   --scrim        overlay behind the mobile menu (shown at 50% opacity)
+ *   --danger       destructive actions: delete icons and buttons (≥ 4.5:1 on canvas, surface and subtle)
+ *   --on-danger    text/icons on --danger
  */
 
 :root,
@@ -37,6 +39,8 @@
   --accent-ink: #4338ca;
   --code: #f8fafc;
   --scrim: #0f172a;
+  --danger: #b91c1c;
+  --on-danger: #ffffff;
 }
 
 [data-theme='dark'] {
@@ -53,6 +57,8 @@
   --accent-ink: #c7d2fe;
   --code: #0b1222;
   --scrim: #000000;
+  --danger: #f87171;
+  --on-danger: #1c0606;
 }
 
 [data-theme='sepia'] {
@@ -69,6 +75,8 @@
   --accent-ink: #7a3517;
   --code: #f3e8d4;
   --scrim: #2b2118;
+  --danger: #a61b1b;
+  --on-danger: #ffffff;
 }
 
 [data-theme='forest'] {
@@ -85,6 +93,8 @@
   --accent-ink: #bbf7d0;
   --code: #0e2017;
   --scrim: #000000;
+  --danger: #fca5a5;
+  --on-danger: #2a0707;
 }
 
 [data-theme='ocean'] {
@@ -101,6 +111,8 @@
   --accent-ink: #a5f3fc;
   --code: #081a28;
   --scrim: #000000;
+  --danger: #fb7185;
+  --on-danger: #2a0710;
 }
 
 [data-theme='rose'] {
@@ -117,6 +129,8 @@
   --accent-ink: #9f1239;
   --code: #fff3f5;
   --scrim: #2a0f17;
+  --danger: #b42318;
+  --on-danger: #ffffff;
 }
 
 [data-theme='contrast'] {
@@ -133,4 +147,6 @@
   --accent-ink: #ffe34d;
   --code: #0d0d0d;
   --scrim: #000000;
+  --danger: #ff7070;
+  --on-danger: #000000;
 }

@@ -20,7 +20,7 @@ function Card({ title, description, children, tone }: { title: string; descripti
   return (
     <section
       aria-labelledby={id}
-      className={`rounded-xl border bg-surface p-5 sm:p-6 ${tone === 'danger' ? 'border-red-300 dark:border-red-900' : 'border-line'}`}
+      className={`rounded-xl border bg-surface p-5 sm:p-6 ${tone === 'danger' ? 'border-danger' : 'border-line'}`}
     >
       <h2 id={id} className="text-lg font-semibold text-fg">
         {title}
@@ -189,7 +189,7 @@ export function SettingsPage() {
       <Card title="Reset" description="Delete all progress, bookmarks, notes and review history from this browser." tone="danger">
         <button
           type="button"
-          className={`${button} border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950`}
+          className={`${button} border border-danger text-danger hover:bg-subtle`}
           onClick={() => {
             const d = resetRef.current;
             if (typeof d?.showModal === 'function') d.showModal();
@@ -219,7 +219,7 @@ export function SettingsPage() {
           </button>
           <button
             value="reset"
-            className={`${button} bg-red-700 text-white hover:bg-red-800`}
+            className={`${button} bg-danger text-on-danger hover:opacity-90`}
             onClick={() => {
               progress.reset();
               setMessage('All progress was reset.');
