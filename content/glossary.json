@@ -3058,5 +3058,397 @@
     "related": [
       "accessibility"
     ]
+  },
+  {
+    "id": "raft",
+    "term": "Raft",
+    "aka": [
+      "consensus algorithm"
+    ],
+    "group": "architecture-design",
+    "definition": "A consensus algorithm that keeps a replicated log identical across a majority of nodes using an elected leader, numbered terms and majority commits.",
+    "details": [
+      "A cluster of 2f + 1 nodes tolerates f crashes; an entry is committed once a majority stores it in the leader's current term.",
+      "Randomised election timeouts make split votes rare, and a node only votes for a candidate whose log is at least as up to date as its own.",
+      "Used by etcd, Consul, CockroachDB, TiKV and Kafka's KRaft mode."
+    ],
+    "useCases": [
+      "Leader election and configuration storage (etcd under Kubernetes).",
+      "Strongly consistent replication in distributed SQL databases."
+    ],
+    "related": [
+      "distributed-systems-fundamentals",
+      "system-design"
+    ]
+  },
+  {
+    "id": "logical-clock",
+    "term": "Logical Clock",
+    "aka": [
+      "Lamport clock",
+      "vector clock",
+      "hybrid logical clock",
+      "HLC"
+    ],
+    "group": "architecture-design",
+    "definition": "A counter-based timestamp that orders events by causality instead of by unreliable wall-clock time.",
+    "details": [
+      "Lamport clocks guarantee that if a happened before b then L(a) < L(b), but a smaller timestamp does not prove an event came first.",
+      "Vector clocks keep one counter per node and can tell causally ordered events from concurrent ones, which is how conflicts are detected.",
+      "Hybrid logical clocks combine physical time with a logical counter; CockroachDB uses them with a bounded maximum clock offset."
+    ],
+    "useCases": [
+      "Detecting conflicting writes in multi-leader or leaderless replication.",
+      "Ordering events across services without trusting NTP."
+    ],
+    "related": [
+      "distributed-systems-fundamentals"
+    ]
+  },
+  {
+    "id": "linearizability",
+    "term": "Linearizability",
+    "aka": [
+      "atomic consistency"
+    ],
+    "group": "architecture-design",
+    "definition": "A consistency guarantee that every operation on an object appears to take effect at a single instant between its start and end, so a completed write is visible to every later read.",
+    "details": [
+      "It is a recency guarantee about single objects; serializability is an isolation guarantee about multi-object transactions.",
+      "Strict serializability combines both; Spanner calls it external consistency.",
+      "Reading from an asynchronous follower is not linearizable."
+    ],
+    "useCases": [
+      "Leader election, locks and uniqueness checks such as usernames.",
+      "Account balances where a stale read would allow overspending."
+    ],
+    "related": [
+      "distributed-systems-fundamentals",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "quorum",
+    "term": "Quorum",
+    "aka": [
+      "majority quorum",
+      "W + R > N"
+    ],
+    "group": "architecture-design",
+    "definition": "The minimum number of nodes that must take part in an operation for it to count, chosen so that any two quorums overlap.",
+    "details": [
+      "Majority quorums on 2f + 1 nodes tolerate f failures, which is why clusters have 3 or 5 nodes rather than 4 or 6.",
+      "In leaderless stores, W + R > N makes read and write sets overlap, but sloppy quorums and concurrent writes still return stale data.",
+      "Larger quorums improve fault tolerance at the cost of write latency."
+    ],
+    "useCases": [
+      "Sizing etcd, ZooKeeper or Kafka controller clusters.",
+      "Choosing Cassandra consistency levels per query."
+    ],
+    "related": [
+      "distributed-systems-fundamentals",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "fencing-token",
+    "term": "Fencing Token",
+    "aka": [
+      "epoch number"
+    ],
+    "group": "architecture-design",
+    "definition": "A number that increases with every lock or lease grant, sent with each write so the resource can reject writes from a holder that has lost the lock.",
+    "details": [
+      "Needed because a lock holder can be paused (GC, VM freeze) past its lease and wake up still believing it holds the lock.",
+      "The storage layer, not the client, must enforce it, e.g. with a conditional update on the last token seen.",
+      "etcd revisions and ZooKeeper zxids can serve as fencing tokens; a Redis TTL lock provides none."
+    ],
+    "useCases": [
+      "Leader-only batch jobs that write to a database.",
+      "Protecting shared files or object storage from split-brain writers."
+    ],
+    "related": [
+      "distributed-systems-fundamentals"
+    ]
+  },
+  {
+    "id": "split-brain",
+    "term": "Split Brain",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A failure in which two nodes both believe they are the leader or primary, usually after a network partition or a falsely detected failure, and both accept writes.",
+    "details": [
+      "Prevented by requiring a majority quorum to act as leader, so a minority partition stops accepting writes.",
+      "Fencing (tokens, or STONITH for shared hardware) stops a deposed leader from corrupting data.",
+      "Even-sized clusters are vulnerable to symmetric splits where neither side has a majority."
+    ],
+    "useCases": [
+      "Designing database failover across data centres.",
+      "Reviewing leader election for schedulers and controllers."
+    ],
+    "related": [
+      "distributed-systems-fundamentals",
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "exponential-backoff-jitter",
+    "term": "Exponential Backoff with Jitter",
+    "aka": [
+      "full jitter"
+    ],
+    "group": "backend-apis",
+    "definition": "A retry delay that grows exponentially with each attempt and is randomised so clients that failed together do not retry together.",
+    "details": [
+      "Full jitter sleeps random(0, min(cap, base × 2^attempt)); AWS found it does the least total work under contention.",
+      "Without jitter, retries arrive in synchronised waves that can knock a recovering service over again.",
+      "The same idea applies to cache TTLs, reconnects and fleet-wide cron jobs."
+    ],
+    "useCases": [
+      "Client retries on 503 and connection resets.",
+      "Reconnecting thousands of clients after a broker restart."
+    ],
+    "related": [
+      "resilience-patterns",
+      "system-design"
+    ]
+  },
+  {
+    "id": "retry-budget",
+    "term": "Retry Budget",
+    "aka": [
+      "retry throttling"
+    ],
+    "group": "backend-apis",
+    "definition": "A cap on retries as a fraction of normal traffic, for example at most 10% extra, after which a client fails fast instead of retrying.",
+    "details": [
+      "Prevents retry amplification: k attempts across L layers can otherwise multiply load by k^L.",
+      "Often a token bucket where successes deposit a fraction of a token and each retry withdraws one.",
+      "gRPC retry throttling and Finagle implement this idea."
+    ],
+    "useCases": [
+      "Shared HTTP client libraries across many services.",
+      "Protecting a database from retry storms during an incident."
+    ],
+    "related": [
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "bulkhead",
+    "term": "Bulkhead",
+    "aka": [
+      "bulkhead pattern"
+    ],
+    "group": "backend-apis",
+    "definition": "Isolating resources such as connection pools or concurrency slots per dependency or workload, so one failing area cannot exhaust capacity needed by others.",
+    "details": [
+      "Size each compartment with Little's Law: concurrency ≈ throughput × latency, plus headroom.",
+      "When a compartment is full, reject or fall back immediately rather than queueing without limit.",
+      "Can be applied in code (semaphores), in infrastructure (separate pools or deployments) or as cells."
+    ],
+    "useCases": [
+      "Keeping a slow recommendations service from starving payments.",
+      "Separating batch exports from interactive traffic."
+    ],
+    "related": [
+      "resilience-patterns",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "load-shedding",
+    "term": "Load Shedding",
+    "aka": [
+      "admission control"
+    ],
+    "group": "backend-apis",
+    "definition": "Deliberately rejecting some requests early and cheaply when a server is at capacity, so the requests it accepts still succeed.",
+    "details": [
+      "Without it, overload raises latency until every request times out and goodput drops to zero.",
+      "Shed by priority and drop requests whose deadline has already passed.",
+      "Differs from rate limiting, which enforces per-client fairness even when the server is idle."
+    ],
+    "useCases": [
+      "Protecting checkout during traffic spikes.",
+      "API gateways returning 503 with Retry-After under overload."
+    ],
+    "related": [
+      "resilience-patterns",
+      "system-design"
+    ]
+  },
+  {
+    "id": "hedged-request",
+    "term": "Hedged Request",
+    "aka": [
+      "request hedging"
+    ],
+    "group": "backend-apis",
+    "definition": "Sending a duplicate of a slow idempotent request to another replica after a delay (around p95) and using whichever response arrives first.",
+    "details": [
+      "Cuts tail latency caused by an individually slow replica for a few percent of extra load.",
+      "Only for idempotent reads, and the losing request should be cancelled.",
+      "Counter-productive when the whole dependency is overloaded."
+    ],
+    "useCases": [
+      "Fan-out search or storage reads where the slowest shard dominates.",
+      "Latency-sensitive key-value lookups."
+    ],
+    "related": [
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "chaos-engineering",
+    "term": "Chaos Engineering",
+    "aka": [
+      "fault injection",
+      "game day"
+    ],
+    "group": "backend-apis",
+    "definition": "Running controlled experiments that inject failures into a system to test a hypothesis that its steady-state behaviour survives them.",
+    "details": [
+      "Define the steady state as a business metric, keep the blast radius small and set automatic abort conditions.",
+      "Start with game days in pre-production before running in production.",
+      "Tools include AWS Fault Injection Service, Azure Chaos Studio, Gremlin and LitmusChaos."
+    ],
+    "useCases": [
+      "Verifying timeouts, breakers and fallbacks actually work.",
+      "Rehearsing availability-zone or dependency failures."
+    ],
+    "related": [
+      "resilience-patterns",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "static-stability",
+    "term": "Static Stability",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "The property of continuing to work through a dependency failure without needing to change anything, such as scaling up or calling a control plane.",
+    "details": [
+      "Typically achieved by pre-provisioning capacity across zones rather than relying on auto-scaling during a failure.",
+      "Data planes should keep serving with cached configuration and credentials when the control plane is down.",
+      "The cost is idle headroom and occasionally stale configuration."
+    ],
+    "useCases": [
+      "Surviving the loss of an availability zone.",
+      "Services that depend on a configuration or secrets service."
+    ],
+    "related": [
+      "resilience-patterns",
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "metastable-failure",
+    "term": "Metastable Failure",
+    "aka": [
+      "retry storm"
+    ],
+    "group": "backend-apis",
+    "definition": "A degraded state that persists after its trigger has gone, because a feedback loop such as retries or cache misses keeps the system overloaded.",
+    "details": [
+      "Named in Bronson et al.'s 2021 HotOS paper.",
+      "Common loops: retry storms, cold caches sending all traffic to the database, and queues full of already-expired requests.",
+      "Defences: retry budgets, load shedding, request coalescing, constant-work designs and recovery headroom."
+    ],
+    "useCases": [
+      "Post-incident analysis of outages that outlasted their cause.",
+      "Designing cache warm-up and reconnection behaviour."
+    ],
+    "related": [
+      "resilience-patterns",
+      "caching"
+    ]
+  },
+  {
+    "id": "expand-contract",
+    "term": "Expand and Contract",
+    "aka": [
+      "parallel change"
+    ],
+    "group": "data",
+    "definition": "Splitting a breaking schema or contract change into backward-compatible steps: add the new structure, migrate writes, backfill and reads, then remove the old structure.",
+    "details": [
+      "Each phase is a separate release, so any one can be rolled back.",
+      "Needed because rolling and blue/green deploys run old and new code against the same schema.",
+      "Applies equally to API fields, event schemas and configuration keys."
+    ],
+    "useCases": [
+      "Renaming or retyping a column with zero downtime.",
+      "Removing a field from a public API."
+    ],
+    "related": [
+      "zero-downtime-migrations",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "backfill",
+    "term": "Backfill",
+    "aka": [],
+    "group": "data",
+    "definition": "Populating a new column, table or store with historical data after the structure has been added and new writes already fill it.",
+    "details": [
+      "Run in small primary-key-range batches, not one large UPDATE, to keep locks short and replication lag low.",
+      "Make it idempotent and checkpointed so it can pause and resume.",
+      "Throttle on replica lag or latency, and verify the result before adding constraints."
+    ],
+    "useCases": [
+      "Filling a new column during expand/contract.",
+      "Seeding a new service's database before switching reads."
+    ],
+    "related": [
+      "zero-downtime-migrations",
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "online-schema-change",
+    "term": "Online Schema Change",
+    "aka": [
+      "online DDL",
+      "lock_timeout"
+    ],
+    "group": "data",
+    "definition": "Changing a database schema while it keeps serving reads and writes, using non-blocking DDL variants or shadow-table tools.",
+    "details": [
+      "PostgreSQL: CREATE INDEX CONCURRENTLY, NOT VALID constraints followed by VALIDATE, and lock_timeout so DDL never blocks the lock queue.",
+      "MySQL: ALGORITHM=INSTANT or INPLACE with LOCK=NONE, or tools such as gh-ost and pt-online-schema-change.",
+      "Even an instant ALTER can cause an outage if it waits for a lock behind a long transaction."
+    ],
+    "useCases": [
+      "Adding indexes and constraints to large production tables.",
+      "Migrating integer primary keys to bigint."
+    ],
+    "related": [
+      "zero-downtime-migrations",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "shadow-read",
+    "term": "Shadow Read",
+    "aka": [
+      "dark read"
+    ],
+    "group": "data",
+    "definition": "Reading from a new data store in parallel with the current one during a migration, and comparing the results without serving the new store's answer to users.",
+    "details": [
+      "Mismatch rates show mapping and replication bugs before any user sees them.",
+      "Cut over reads only after mismatches stay at zero for an agreed period that includes peak and month-end.",
+      "Pairs with change data capture to keep the new store in sync."
+    ],
+    "useCases": [
+      "Moving a domain from MongoDB to PostgreSQL.",
+      "Extracting a table from a monolith into a new service."
+    ],
+    "related": [
+      "zero-downtime-migrations",
+      "architecture-patterns"
+    ]
   }
 ]

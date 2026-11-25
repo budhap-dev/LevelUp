@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from '@/app/router';
-import { paths } from '@/lib/content';
+import { getTopicMeta, paths } from '@/lib/content';
 import { pathProgress } from '@/lib/paths';
 import { PROGRESS_STORAGE_KEY } from '@/lib/progress/local-storage-store';
 import { emptyProgress, type TopicProgress } from '@/lib/progress/types';
@@ -19,13 +19,17 @@ function seedLearned(...ids: string[]) {
 beforeEach(() => localStorage.clear());
 
 const staff = paths.find((p) => p.id === 'senior-to-staff')!;
+// Derived from the path data so that adding or reordering steps doesn't break these tests.
+const requiredSteps = staff.steps.filter((s) => !s.optional);
+const secondRequired = getTopicMeta(requiredSteps[1]!.topicId)!;
 
 describe('pathProgress', () => {
   it('counts only required steps and picks the first unlearned required step as next', () => {
     const pp = pathProgress(staff, { 'system-design': learned(), 'llms-rag-agents': learned() });
-    expect(pp.required).toBe(13);
+    expect(requiredSteps[0]!.topicId).toBe('system-design');
+    expect(pp.required).toBe(requiredSteps.length);
     expect(pp.learned).toBe(1); // the optional LLM step doesn't count
-    expect(pp.next?.meta.id).toBe('architecture-patterns');
+    expect(pp.next?.meta.id).toBe(secondRequired.id);
   });
 
   it('reports a path complete once every required step is learned', () => {
@@ -51,8 +55,8 @@ describe('learning paths UI', () => {
     expect(await screen.findByRole('heading', { level: 1, name: staff.title })).toBeInTheDocument();
     const steps = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
     expect(steps).toHaveLength(staff.steps.length);
-    expect(screen.getByRole('link', { name: 'Continue with Architecture Patterns' })).toHaveAttribute('href', '/topics/architecture-patterns');
-    expect(within(steps[1]!).getByRole('link')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('link', { name: `Continue with ${secondRequired.title}` })).toHaveAttribute('href', `/topics/${secondRequired.id}`);
+    expect(within(steps[staff.steps.indexOf(requiredSteps[1]!)]!).getByRole('link')).toHaveAttribute('aria-current', 'step');
     expect(within(steps.at(-1)!).getByText('Optional')).toBeInTheDocument();
   });
 
