@@ -70,7 +70,7 @@ export async function answer(question: string, user: { id: string; groups: strin
 An agent is a loop: the model chooses an action (call a tool with arguments), your code executes it, the result goes back into context, and the loop repeats until the model answers or a limit is hit.
 
 ```ts
-type ToolCall = { name: string; input: unknown };
+type ToolCall = { id: string; name: string; input: unknown };
 const MAX_STEPS = 8;
 
 export async function runAgent(goal: string, tools: Record<string, (input: unknown) => Promise<string>>) {
@@ -94,7 +94,7 @@ Common workflow patterns (from simplest): **prompt chaining**, **routing**, **pa
 
 ### Model Context Protocol (MCP)
 
-An open protocol (introduced by Anthropic in late 2024 and adopted widely) that standardises how applications expose **tools, resources and prompts** to LLM clients. Write an integration once as an MCP server, and any MCP-capable client can use it. Treat third-party MCP servers like any dependency: review, pin and sandbox them.
+An open protocol (introduced by Anthropic in November 2024, adopted by the major AI vendors, and donated to the Linux Foundation's Agentic AI Foundation in December 2025) that standardises how applications expose **tools, resources and prompts** to LLM clients. Write an integration once as an MCP server, and any MCP-capable client can use it. Treat third-party MCP servers like any dependency: review, pin and sandbox them.
 
 ### Evaluation
 
@@ -135,6 +135,62 @@ flowchart TB
   end
   A -. feedback & traces .-> EV[Eval set & monitoring]
 ```
+
+### One question through the query path
+
+The flowchart shows the components. The sequence below follows one question through them. Watch where the **permission filter** is applied: inside the search request, before the model ever sees a document.
+
+```mermaid
+sequenceDiagram
+  participant U as Employee
+  participant App as Assistant API
+  participant IdP as Identity provider
+  participant Idx as Hybrid index
+  participant RR as Reranker
+  participant LLM as LLM
+  %% step: The employee asks a question in natural language.
+  %% step: The API resolves who is asking: their groups decide what they may read.
+  %% step: The groups come back from the identity provider (cached for a few minutes).
+  %% step: One hybrid query runs BM25 and vector search with the ACL filter inside the index, so restricted chunks never leave it.
+  %% step: The 40 or so candidates the user is allowed to see are returned.
+  %% step: A cross-encoder re-scores the candidates against the question and keeps the best six.
+  %% step: Only those six chunks, each tagged with an id, go into the prompt with instructions to cite them or abstain.
+  %% step: The model answers with [doc:ID] citations.
+  %% step: The API checks that every cited id was in the context, then returns the answer with its sources.
+  U->>App: How do I rotate the Kafka TLS certs?
+  App->>IdP: groups for user 4711
+  IdP-->>App: platform-eng, all-staff
+  App->>Idx: hybrid search + filter acl in groups
+  Idx-->>App: 40 permitted candidates
+  App->>RR: rerank(question, 40)
+  App->>LLM: instructions + 6 tagged chunks + question
+  LLM-->>App: answer citing doc 12 and doc 31
+  App-->>U: answer + verified sources
+```
+
+### Worked example: reciprocal rank fusion
+
+BM25 and vector search return scores on different scales, so you can't simply add them. **Reciprocal rank fusion (RRF)** ignores the scores and combines **ranks**: each document gets `Σ 1 / (k + rank)` over the lists it appears in, with `k = 60` by convention. A document that appears high in both lists beats one that tops only one of them.
+
+```ts
+function rrf(lists: string[][], k = 60): [string, number][] {
+  const scores = new Map<string, number>();
+  for (const list of lists) {
+    list.forEach((id, i) => scores.set(id, (scores.get(id) ?? 0) + 1 / (k + i + 1)));
+  }
+  return [...scores].sort((a, b) => b[1] - a[1]);
+}
+
+const bm25 = ['runbook-kafka-tls', 'adr-017', 'cert-faq'];   // exact term "TLS" matched
+const vector = ['cert-faq', 'runbook-kafka-tls', 'mtls-intro']; // paraphrase matched
+rrf([bm25, vector]);
+// runbook-kafka-tls: 1/61 + 1/62 = 0.03252  ← in both lists, ranks 1 and 2
+// cert-faq:          1/63 + 1/61 = 0.03227
+// adr-017:           1/62        = 0.01613
+// mtls-intro:        1/63        = 0.01587
+```
+
+RRF needs no tuning and is robust, which is why search engines (Azure AI Search, OpenSearch, Elasticsearch) offer it built in. A reranker then refines the fused top results.
 
 ## When to Use / Trade-offs
 
@@ -599,6 +655,135 @@ Evaluation-led selection, a realistic total cost of ownership for self-hosting, 
 - Self-hosting by default "for control" without the costs.
 - Hard-coding one provider's SDK across 30 services.
 
+### What is the difference between an embedding model and a reranker? {#bi-vs-cross-encoder}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Embedding model (bi-encoder):** encodes the query and each document **separately** into vectors. Documents are embedded once, at indexing time, so search across millions of them is a fast nearest-neighbour lookup. The price is that the query and document never "see" each other, so fine-grained relevance is lost.
+- **Reranker (cross-encoder):** takes the **query and one document together** and outputs a relevance score. It can weigh exact wording, negation and how well the document answers this particular question, so it is much more precise. But it must run once per (query, document) pair at query time, which is far too slow for a whole corpus.
+
+So production pipelines use both: the bi-encoder (plus BM25) for **recall** over everything, and the cross-encoder for **precision** over the top 50–100 candidates.
+
+**What the interviewer is looking for:**
+The architectural difference (separate versus joint encoding), and the recall-then-precision cascade it leads to.
+
+**Follow-ups:**
+- What latency does reranking 100 candidates add, and how would you cap it?
+- Could an LLM act as the reranker? What would it cost?
+
+**Red flags:**
+- Thinking a reranker replaces the index, or that both models do the same thing.
+
+### How do you handle conversation memory in a multi-turn assistant? {#conversation-memory}
+
+**Level:** Senior
+
+**Model answer:**
+The model is stateless: every request must carry whatever context it needs, and the context window is a budget. The usual layers are:
+- **Recent turns verbatim:** keep the last few exchanges as they are.
+- **Rolling summary:** compress older turns into a running summary that keeps decisions, facts the user supplied and open tasks. Regenerate it as the conversation grows.
+- **Query rewriting for retrieval:** turn "what about the second one?" into a standalone question before searching, otherwise retrieval fails on pronouns.
+- **Long-term memory (optional):** store durable facts ("prefers TypeScript", "works on the payments team") in a profile or a vector store, retrieve them when relevant, and let users see and delete them.
+- **Tool results:** keep summaries rather than whole payloads, and re-fetch when needed.
+
+Watch-outs:
+- Summaries can drop or distort facts, so evaluate them on long conversations.
+- Memory is personal data: retention rules, user controls, tenant isolation.
+- Stored memory is also an injection vector. A malicious document saved to memory keeps influencing future sessions.
+- Put stable content (system prompt, tools) first so prompt caching still works while the conversation grows.
+
+**What the interviewer is looking for:**
+Context as a budget, layered memory, retrieval query rewriting, and privacy and injection concerns.
+
+**Follow-ups:**
+- How would you test that summarisation doesn't lose important facts?
+- What should happen to memory when a user asks to be forgotten?
+
+**Red flags:**
+- Sending the full history on every turn until it hits the limit, then truncating the start.
+
+### How do you keep a RAG index in sync with its sources, including deletions and permission changes? {#index-freshness}
+
+**Level:** Senior
+
+**Model answer:**
+Treat the index as a **derived, eventually consistent copy** with an explicit freshness SLA:
+- **Change detection:** use source webhooks or change feeds where available (SharePoint and Confluence both offer them), otherwise incremental crawls by modified date. A periodic **full reconciliation** catches anything the incremental path missed.
+- **Stable ids:** derive chunk ids from document id + section path, so an update replaces chunks instead of adding duplicates. On an update, delete all of the document's old chunks, then insert the new ones.
+- **Deletions are first-class:** tombstones from the source, plus reconciliation that removes chunks whose source document is gone. A deleted document must not still be answerable.
+- **Permission changes:** re-sync ACLs on their own faster path (minutes), since they're cheap to update and the most sensitive part. For high-sensitivity content, also check permissions against the source system at query time for the final top results.
+- **Metadata:** `updated_at` on every chunk, freshness shown in citations, and an option to prefer recent documents.
+- **Monitoring:** lag per source, counts of failed documents, and orphan chunks.
+- **Re-embedding:** a new embedding model means a full rebuild, so do a blue/green index swap rather than an in-place update.
+
+**What the interviewer is looking for:**
+Incremental and reconciliation paths, deletions and ACLs treated as security events, idempotent chunk ids, and blue/green rebuilds.
+
+**Follow-ups:**
+- A user lost access to a document 5 minutes ago. Can the assistant still quote it?
+- How would you migrate to a new embedding model with zero downtime?
+
+**Red flags:**
+- A nightly full re-index as the only sync, with no handling of deletions.
+
+### How do you evaluate an agent whose path to the answer varies from run to run? {#agent-evaluation}
+
+**Level:** Architect
+
+**Model answer:**
+Evaluate **outcomes** first, then **trajectories**, and run each case more than once:
+- **Outcome checks:** did it achieve the goal? Prefer verifiable end states: the test suite passes, the ticket has the right fields, the database row is correct, the answer matches the reference.
+- **Trajectory checks:** were the tool calls allowed and sensible? No forbidden actions, no repeated identical calls, the required approvals requested, within the step and cost budgets. Use assertions on the trace rather than an exact expected sequence.
+- **Repeated trials:** agents are stochastic, so run each task several times and report the success rate (pass@k, or "passes all k" for reliability). A 70% success rate is a different product from 99%.
+- **Sandboxed environments:** replay tasks against fixtures or mocked tools so runs are reproducible and safe.
+- **LLM-as-judge for soft criteria** (helpfulness, tone, explanation quality), calibrated against human ratings on a sample.
+- **Cost and latency** per successful task, because an agent that succeeds slowly and expensively may lose to a simpler workflow.
+- **Adversarial cases:** injection attempts in tool outputs, ambiguous goals, tools that fail.
+
+Gate releases on these suites, and feed production failures back into them as new cases.
+
+**What the interviewer is looking for:**
+Outcome over exact path, trajectory assertions, repeated trials and success rates, sandboxed replay, and cost per successful task.
+
+**Follow-ups:**
+- Your agent passes 9 out of 10 runs. Is that good enough? For what?
+- How do you stop the eval suite itself from being gamed by prompt tweaks?
+
+**Red flags:**
+- Asserting an exact sequence of tool calls, or running each case once.
+
+### Design an internal LLM gateway for 40 product teams. {#llm-gateway}
+
+**Level:** Architect
+
+**Model answer:**
+**Goals:** one place for access, cost control, safety and observability, without becoming a bottleneck for teams.
+
+**Core capabilities:**
+- **A unified API** over providers (hosted frontier, smaller models, self-hosted). Keep it close to the common chat/tool-calling shape so teams can still use provider features through a passthrough.
+- **Auth and attribution:** per-team keys or workload identity, with every request tagged by team, feature and environment.
+- **Routing and resilience:** model aliases ("default-fast", "default-reasoning") mapped to concrete versions, fallbacks on provider errors or rate limits, retries with backoff, and regional routing for data residency.
+- **Budgets:** per-team quotas and spend limits, alerts, and hard stops for runaway loops.
+- **Observability:** OpenTelemetry traces with token counts, latency, cost and model version, plus sampled payload logging with PII redaction and retention rules.
+- **Safety:** central input and output filters (PII, secrets, policy) that teams can extend, and audit logs.
+- **Caching:** support for provider prompt caching, plus an optional exact-match response cache.
+- **Lifecycle:** deprecation notices, shadow traffic to evaluate new model versions against teams' eval sets, and a migration playbook.
+
+**Non-goals:** owning teams' prompts or evals. Product teams keep those, and the platform provides tooling for them.
+
+**Risks:** a single point of failure (run it multi-AZ, keep it stateless, keep failure modes simple), added latency (keep it to a few milliseconds), and lowest-common-denominator APIs that block new provider features.
+
+**What the interviewer is looking for:**
+Platform thinking: aliases and routing, cost attribution, observability, safety, lifecycle management, and clear ownership boundaries.
+
+**Follow-ups:**
+- A provider deprecates the model behind "default-fast". Walk through the migration.
+- One team's agent burns its monthly budget in a day. What should happen?
+
+**Red flags:**
+- A gateway that hides all provider features, or one that becomes the owner of every team's prompts.
+
 ## Cheat Sheet
 
 - **Token** — unit of model input/output and billing; ~¾ of an English word.
@@ -616,6 +801,15 @@ Evaluation-led selection, a realistic total cost of ownership for self-hosting, 
 - **Temperature** — sampling randomness; low for extraction and code, higher for ideation; 0 is still not a reproducibility guarantee.
 - **Structured outputs** — tool calling or schema-constrained decoding, then validate with Zod or Pydantic; never regex free text.
 - **Bounded autonomy** — the model chooses actions, but limits and authorisation are enforced in code behind the tools.
+
+### Revisit
+- **Reciprocal rank fusion** — score = Σ 1/(k + rank), k ≈ 60; merges BM25 and vector lists without comparing raw scores.
+- **Bi-encoder vs cross-encoder** — embed separately for fast recall over everything; score pairs jointly for precise reranking.
+- **Lost in the middle** — models use information at the start and end of long contexts more reliably than in the middle.
+- **Small-to-big retrieval** — match on small chunks, then hand the model the surrounding parent section.
+- **LLM-as-judge biases** — position, verbosity and self-preference; calibrate against human labels.
+- **Agent evals** — check outcomes and trace assertions, run each task several times, and report the success rate.
+- **Model aliases in a gateway** — teams call "default-fast"; the platform maps it to a concrete, tested model version.
 
 ## Further Reading
 

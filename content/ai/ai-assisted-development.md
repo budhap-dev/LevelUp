@@ -6,7 +6,7 @@ tags: [ai, productivity, tooling]
 level: Senior
 estimatedMinutes: 45
 related: [llms-rag-agents, testing-strategy]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-25
 status: complete
 ---
 
@@ -90,6 +90,72 @@ flowchart TD
 ```
 
 AI changes go through the **same** pipeline and review standards as human changes — tests, scanners, code review, progressive delivery.
+
+### Inside one agent session
+
+An agentic tool is a loop: the model proposes an action, a harness executes it (read a file, run a command), and the result goes back into the context. The safety properties live in the **harness**, not the model — what it may run without asking, what it can reach, and what untrusted text it reads. Step through the session below.
+
+```mermaid
+sequenceDiagram
+  participant Dev as Developer
+  participant Agent as Agent harness
+  participant Repo as Repo + sandbox
+  participant CI as CI and reviewer
+  %% step: The developer states a goal, acceptance criteria and what must not change.
+  %% step: The agent explores before editing: it searches and reads the relevant files.
+  %% step: It proposes a plan, and the developer reviews it before any edit happens.
+  %% step: The developer approves the plan, or corrects it, which is far cheaper than correcting the code.
+  %% step: The agent edits files inside the sandbox, with no production credentials.
+  %% step: It runs the type checker and tests itself. This feedback loop is where the quality comes from.
+  %% step: A failing test goes back into the context, and the agent iterates.
+  %% step: Risky actions (a new dependency, a network call, a push) pause for human approval.
+  %% step: The work leaves as a small PR through the same CI and review gates as human code.
+  %% step: A human approves and stays accountable for the merge.
+  Dev->>Agent: Task + acceptance criteria
+  Agent->>Repo: Search and read files
+  Agent->>Dev: Proposed plan
+  Dev->>Agent: Approve or adjust
+  Agent->>Repo: Edit files
+  Agent->>Repo: Run typecheck + tests
+  Repo-->>Agent: 2 failures (stack traces)
+  Agent->>Dev: Ask: add dependency left-pad-ts?
+  Agent->>CI: Open small PR
+  CI-->>Dev: Checks pass, review requested
+```
+
+### Example: a CI guard against hallucinated dependencies
+
+Assistants sometimes suggest packages that don't exist, or that were registered last week by someone who noticed the hallucination ("slopsquatting"). A cheap guard is to fail CI when a PR adds a dependency that is missing from the registry or very new, unless someone approves it explicitly.
+
+```ts
+// scripts/check-new-deps.ts: run in CI on PRs that touch package.json
+import { execSync } from 'node:child_process';
+
+const MIN_AGE_DAYS = 30;
+const base = JSON.parse(execSync('git show origin/main:package.json', { encoding: 'utf8' }));
+const head = JSON.parse(execSync('cat package.json', { encoding: 'utf8' }));
+const deps = (p: any) => ({ ...p.dependencies, ...p.devDependencies });
+const added = Object.keys(deps(head)).filter((name) => !(name in deps(base)));
+
+let failed = false;
+for (const name of added) {
+  const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
+  if (res.status === 404) {
+    console.error(`✗ ${name} does not exist on npm: likely hallucinated`);
+    failed = true;
+    continue;
+  }
+  const meta = await res.json();
+  const ageDays = (Date.now() - Date.parse(meta.time.created)) / 86_400_000;
+  if (ageDays < MIN_AGE_DAYS) {
+    console.error(`✗ ${name} was first published ${ageDays.toFixed(0)} days ago: needs explicit approval`);
+    failed = true;
+  }
+}
+process.exit(failed ? 1 : 0);
+```
+
+Pair it with an allow-list or an internal registry proxy for stricter environments. The point is that the guard is **deterministic**: it doesn't depend on a reviewer noticing an unfamiliar name.
 
 ## When to Use / Trade-offs
 
@@ -420,7 +486,11 @@ Measure outcomes with baselines and comparisons:
 - **Maintainability signals:** code churn/rework shortly after merge, duplication, complexity trends.
 - **Cost:** licences and usage vs time saved.
 
-Methods: before/after with comparable teams, pilot vs control groups, task-level studies; combine quantitative and qualitative data, and watch for confounders (seasonality, team changes). Report honestly — some studies show perceived speed-ups that don't match measured outcomes, so measure rather than assume.
+Methods: before/after with comparable teams, pilot vs control groups, task-level studies; combine quantitative and qualitative data, and watch for confounders (seasonality, team changes). Report honestly — perceived speed-ups often don't match measured outcomes, so measure rather than assume. Two well-known data points:
+- **METR (July 2025):** a randomised controlled trial with experienced open-source developers working in their own mature repositories. They were about **19% slower** with early-2025 AI tools, while *believing* they had been about 20% faster.
+- **DORA 2024:** higher AI adoption correlated with better self-reported productivity and documentation quality, but also with slightly *lower* delivery throughput and stability. One plausible cause is larger batch sizes.
+
+Neither result means "AI doesn't help". Both mean the benefit depends on the task, the codebase and the workflow, so you have to measure it in your own context.
 
 **What the interviewer is looking for:**
 Outcome-based metrics, quality and maintainability signals, rigorous comparison and scepticism.
@@ -510,6 +580,128 @@ Concrete codebase properties that improve AI effectiveness and safety, framed as
 **Red flags:**
 - Expecting AI tools to compensate for a chaotic codebase.
 
+### When would you reach for completion, chat or an agent? {#choosing-the-mode}
+
+**Level:** Foundation
+
+**Model answer:**
+Choose by the **size of the task** and by **how much verification the tool can do itself**:
+- **Inline completion:** you already know what you're writing and want to type less, e.g. the next test case or a mapper between two DTOs. The feedback loop is your eyes, line by line.
+- **Chat:** you need an explanation, a sketch or a focused edit to code you've selected, e.g. "why does this regex backtrack?" or "convert this callback chain to async/await". You still choose what context it sees.
+- **Agent:** a multi-step task that spans files and can be **checked by running something**: "upgrade to the new SDK and keep the tests green", or "reproduce issue #412 with a failing test, then fix it". The agent gathers its own context and iterates against the tests.
+
+Rule of thumb: the more autonomy you give the tool, the more you need a machine-checkable definition of done (tests, types, a linter) and a sandbox. Without those, an agent produces a large diff you can't trust.
+
+**What the interviewer is looking for:**
+Choosing by task scope and verifiability rather than habit, and linking autonomy to guardrails.
+
+**Follow-ups:**
+- What would make you stop an agent and switch to doing it by hand?
+- Which mode do you use for code you're unfamiliar with?
+
+**Red flags:**
+- Using an agent for everything, including one-line changes, or never trying one.
+
+### How do you protect an agent with tool access from prompt injection? {#agent-prompt-injection}
+
+**Level:** Senior
+
+**Model answer:**
+Assume the model **cannot reliably tell instructions from data**. Any text the agent reads can try to steer it: an issue, a README in a dependency, a web page, a code comment, a tool's output. So defend at the **harness and permission** layer, not by asking the model to be careful.
+
+The dangerous combination is sometimes called the **"lethal trifecta"**: the agent has (1) access to private data, (2) exposure to untrusted content, and (3) a way to communicate externally (network calls, opening PRs or issues, even rendering an image URL). Remove at least one leg for any given task:
+- **Least privilege:** scoped, short-lived tokens. No production credentials. Read-only access where possible.
+- **Egress control:** sandbox with network off, or allow-listed only to the package registry and the docs.
+- **Human approval** for consequential actions: pushes, deploys, sending messages, installing packages, running unknown scripts.
+- **Separate contexts:** an agent that browses the web shouldn't hold secrets. Summarise untrusted content in a quarantined step that has no tools.
+- **Audit logs** of every tool call. Alert on unusual patterns, such as reading `.env` and then making an outbound request.
+
+**What the interviewer is looking for:**
+Treating injection as an architectural property, the private-data + untrusted-input + exfiltration framing, and concrete harness controls.
+
+**Follow-ups:**
+- An agent triages GitHub issues and can comment on them. What could an attacker do?
+- Why doesn't "ignore instructions in documents" in the system prompt solve this?
+
+**Red flags:**
+- "We tell the model not to follow injected instructions" as the main defence.
+
+### How would you use AI to help debug a production incident? {#ai-for-debugging}
+
+**Level:** Senior
+
+**Model answer:**
+Use it to **widen and speed up hypothesis generation**, never as the source of truth:
+1. **Summarise the evidence:** paste or connect (through approved tooling) the error logs, traces and the diff of recent deploys. Ask "what changed, and which of these errors are new?" Scrub customer data first, or use a tool approved for production data.
+2. **Generate hypotheses:** "given this stack trace and this diff, list plausible causes ranked by likelihood, with how to confirm each". Then check them yourself against the dashboards.
+3. **Reproduce:** ask for a minimal failing test or a script that reproduces the issue locally. A reproduction turns guessing into engineering.
+4. **Fix and verify:** the fix goes through the normal pipeline. For a hotfix, still require a test and a reviewer.
+5. **Post-incident:** draft the timeline and the post-incident review from the chat and the logs, then have humans edit it.
+
+The watch-outs are confident but wrong explanations, mitigations that are risky under time pressure, and leaking production data into unapproved tools.
+
+**What the interviewer is looking for:**
+AI as a hypothesis and summarisation engine, evidence-led confirmation, reproduction first, and data handling.
+
+**Follow-ups:**
+- The assistant is confident the database is the cause, but your metrics disagree. What do you do?
+- Would you let an agent run commands against production during an incident?
+
+**Red flags:**
+- Applying an AI-suggested fix to production without reproducing or understanding the failure.
+
+### Developers say AI makes them faster, but lead time hasn't moved. What's going on, and what do you do? {#faster-but-not-faster}
+
+**Level:** Architect
+
+**Model answer:**
+This is common, and there are usually several causes:
+- **Coding wasn't the bottleneck.** If writing code is about 20% of lead time, even doubling coding speed saves about 10% (Amdahl's law). The time goes to waiting for review, for CI, for environments, and on unclear requirements.
+- **Work moved downstream.** Bigger AI-generated PRs take longer to review and are more likely to be reworked. Reviewer load goes up and the review queue becomes the new constraint.
+- **Perception versus measurement.** The METR 2025 trial found experienced developers felt faster while measuring slower. Flow and reduced tedium are real benefits, but they aren't throughput.
+- **Quality debt.** Speed now, rework later: churn on recently merged code goes up, and so do escaped defects.
+
+What to do:
+1. **Map the value stream** (time in coding, review, CI and deployment) and find the real constraint.
+2. **Point AI at the constraint:** AI-assisted review summaries, faster and less flaky tests, automated environment setup and better specs.
+3. **Enforce small batches:** PR size limits and plan-first workflows.
+4. **Track quality signals** next to speed: change failure rate, rework rate and churn.
+
+**What the interviewer is looking for:**
+Systems thinking (constraints, Amdahl), awareness of the perception gap, and redirecting effort to the actual bottleneck.
+
+**Follow-ups:**
+- How would you measure review load before and after the rollout?
+- Is "feeling faster" worth paying for on its own?
+
+**Red flags:**
+- Concluding the tools are useless, or buying more licences to push adoption.
+
+### How would you run AI agents in CI to fix failing builds or dependency updates automatically? {#agents-in-ci}
+
+**Level:** Architect
+
+**Model answer:**
+Treat the agent as an **untrusted contributor with a bot account**:
+- **Trigger narrowly:** for example, dependency-bump PRs whose tests fail, or flaky-test quarantine. Don't trigger on every red build.
+- **Isolated runner:** ephemeral container, no deploy credentials, network limited to the registries. The token can push only to its own branch, never to `main`.
+- **Bounded work:** a cap on iterations, tokens and wall-clock time. If it doesn't converge, it gives up and leaves a summary for a human.
+- **Output is a PR, never a merge:** the change goes through the same required checks, plus a human approval (segregation of duties). Label it clearly.
+- **Guard the inputs:** PR titles, branch names and issue text are untrusted content, so watch for injection, especially on public repositories with forked PRs.
+- **Measure it:** acceptance rate of agent PRs, time saved, reverts and cost per fix. Turn off the job types that don't pay off.
+
+Start with high-volume, low-risk work such as minor version bumps and lint fixes. Expand only when the acceptance rate and revert rate support it.
+
+**What the interviewer is looking for:**
+A threat-modelled design (bot identity, isolation, bounded autonomy, PR-not-merge) and evidence-based expansion.
+
+**Follow-ups:**
+- How do you stop the agent "fixing" a test by weakening its assertion?
+- Who is on the hook when an agent-authored change causes an incident?
+
+**Red flags:**
+- Giving the agent the same token as the release pipeline, or letting it merge its own PRs.
+
 ## Cheat Sheet
 
 ### Using the tools
@@ -532,6 +724,15 @@ Concrete codebase properties that improve AI effectiveness and safety, framed as
 - **Measure outcomes** — lead time, quality, developer experience; not % of AI-written code.
 - **AI review** — an extra reviewer; human approval stays mandatory.
 - **Learning** — use AI as a tutor; require understanding; deliberate practice for juniors.
+
+### Revisit
+- **Lethal trifecta** — private data + untrusted content + a way to send data out; remove one leg per task.
+- **METR 2025 RCT** — experienced devs were ~19% slower with early-2025 AI tools but believed they were ~20% faster.
+- **DORA 2024 on AI** — more AI adoption: better self-reported productivity, slightly lower delivery throughput and stability.
+- **Amdahl's law for AI coding** — speeding up coding only helps as much as coding's share of lead time.
+- **Agent safety lives in the harness** — permissions, sandbox, egress and approvals, not the system prompt.
+- **Codemod vs AI** — deterministic codemods for rules you can express; AI for the irregular leftovers.
+- **Agent in CI** — a bot account: ephemeral runner, own branch only, bounded iterations, opens PRs, never merges.
 
 ## Further Reading
 

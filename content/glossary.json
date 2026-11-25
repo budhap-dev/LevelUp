@@ -5149,5 +5149,153 @@
       "performance-load-testing",
       "system-design"
     ]
+  },
+  {
+    "id": "lethal-trifecta",
+    "term": "Lethal trifecta",
+    "aka": [],
+    "group": "ai",
+    "definition": "The combination that makes prompt injection dangerous for an AI agent: access to private data, exposure to untrusted content, and a way to communicate externally.",
+    "details": [
+      "Any text the agent reads can carry instructions, so assume injection will sometimes succeed.",
+      "Remove at least one leg per task: no secrets, no untrusted input, or no egress.",
+      "Enforce this in the harness (permissions, sandbox, network policy), not in the prompt."
+    ],
+    "useCases": [
+      "Threat-modelling a coding agent that browses the web.",
+      "Deciding which tools an email-triage agent may hold."
+    ],
+    "related": [
+      "ai-assisted-development",
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "slopsquatting",
+    "term": "Slopsquatting",
+    "aka": [
+      "Package hallucination squatting"
+    ],
+    "group": "ai",
+    "definition": "Registering package names that AI coding tools tend to hallucinate, so that developers who install the suggested dependency get the attacker's code.",
+    "details": [
+      "A variant of typosquatting driven by model hallucinations rather than human typos.",
+      "Mitigate with dependency allow-lists, registry proxies and CI checks on package age and existence."
+    ],
+    "useCases": [
+      "Justifying a CI check on newly added dependencies."
+    ],
+    "related": [
+      "ai-assisted-development",
+      "devsecops"
+    ]
+  },
+  {
+    "id": "cross-encoder-reranker",
+    "term": "Reranker (cross-encoder)",
+    "aka": [
+      "Cross-encoder"
+    ],
+    "group": "ai",
+    "definition": "A model that scores a query and a candidate document together, giving more precise relevance than embedding similarity, at the cost of running once per pair.",
+    "details": [
+      "Embedding models (bi-encoders) give recall over the whole corpus; rerankers give precision over the top 50–100 candidates.",
+      "Adds tens to hundreds of milliseconds, so cap the candidate count."
+    ],
+    "useCases": [
+      "Improving RAG answer quality without changing the index.",
+      "Ordering search results after hybrid retrieval."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "search-systems"
+    ]
+  },
+  {
+    "id": "model-calibration",
+    "term": "Calibration (ML)",
+    "aka": [
+      "Probability calibration"
+    ],
+    "group": "ai",
+    "definition": "How well a model's predicted probabilities match observed frequencies: of cases scored 0.2, about 20% should be positive.",
+    "details": [
+      "A model can rank well (high AUC) and still be badly calibrated.",
+      "Check with reliability diagrams or the Brier score; fix with Platt scaling or isotonic regression on held-out data.",
+      "Resampling and class weights distort probabilities, so recalibrate after using them."
+    ],
+    "useCases": [
+      "Expected-cost thresholds for fraud or credit decisions.",
+      "Comparing or combining scores across models and segments."
+    ],
+    "related": [
+      "ai-ml-fundamentals",
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "uplift-modelling",
+    "term": "Uplift modelling",
+    "aka": [
+      "Incremental modelling"
+    ],
+    "group": "ai",
+    "definition": "Predicting the change in an outcome caused by an action (contacting a customer, giving a discount), rather than the outcome itself.",
+    "details": [
+      "Needs randomised experiment data with treated and control groups.",
+      "Targets 'persuadables' and avoids spending on sure things, lost causes and people the action annoys."
+    ],
+    "useCases": [
+      "Retention campaigns.",
+      "Marketing offers with a limited budget."
+    ],
+    "related": [
+      "ai-ml-fundamentals",
+      "product-management"
+    ]
+  },
+  {
+    "id": "llm-gateway",
+    "term": "LLM gateway",
+    "aka": [
+      "Model gateway",
+      "AI gateway"
+    ],
+    "group": "ai",
+    "definition": "A shared service between applications and model providers that handles auth, routing, fallbacks, budgets, logging and safety filters for LLM calls.",
+    "details": [
+      "Model aliases (\"default-fast\") let the platform swap concrete model versions without code changes.",
+      "Attributes every request's token cost to a team and feature.",
+      "Should stay thin: product teams keep ownership of their prompts and evals."
+    ],
+    "useCases": [
+      "Cost control and observability across many teams.",
+      "Migrating off a deprecated model version."
+    ],
+    "related": [
+      "llms-rag-agents",
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "four-fifths-rule",
+    "term": "Four-fifths rule",
+    "aka": [
+      "80% rule",
+      "Adverse impact ratio"
+    ],
+    "group": "ai",
+    "definition": "A screening heuristic from US employment guidance: a group's selection rate below 80% of the highest group's rate suggests adverse impact worth investigating.",
+    "details": [
+      "It's a screen, not a legal safe harbour or proof of discrimination.",
+      "Measures demographic parity only; check error-rate metrics too."
+    ],
+    "useCases": [
+      "Auditing a CV-screening or promotion model."
+    ],
+    "related": [
+      "responsible-ai",
+      "hiring-interviewing"
+    ]
   }
 ]

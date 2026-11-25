@@ -59,6 +59,33 @@ For classification:
 
 Regression: MAE, RMSE, MAPE. Ranking/recommendation: precision@k, NDCG. Always compare with a **baseline** (simple heuristic or current process).
 
+### Worked example: choosing a threshold by cost, not by F1
+
+A model outputs a fraud probability, and the **threshold** turns that into an action. The right threshold comes from the business costs and the team's capacity, not from a default of 0.5. Suppose a missed fraud costs £200, a manual review costs £4, and the review team can handle 300 cases a day:
+
+```ts
+type Scored = { p: number; isFraud: boolean };
+
+const COST_FN = 200; // missed fraud: chargeback + fees
+const COST_REVIEW = 4; // analyst time per flagged case (true or false positive)
+const CAPACITY = 300; // reviews per day
+
+function bestThreshold(scored: Scored[]) {
+  let best = { threshold: 1, cost: Infinity, flagged: 0, recall: 0 };
+  const positives = scored.filter((s) => s.isFraud).length;
+  for (let t = 0.01; t < 1; t += 0.01) {
+    const flagged = scored.filter((s) => s.p >= t);
+    if (flagged.length > CAPACITY) continue; // over capacity, so the excess goes unreviewed
+    const caught = flagged.filter((s) => s.isFraud).length;
+    const cost = (positives - caught) * COST_FN + flagged.length * COST_REVIEW;
+    if (cost < best.cost) best = { threshold: t, cost, flagged: flagged.length, recall: caught / positives };
+  }
+  return best;
+}
+```
+
+Run on a day of validation data, this typically picks a threshold well below 0.5, because one missed fraud costs as much as fifty reviews. The capacity constraint then caps how low it can go. Two things make this trustworthy: the probabilities must be **calibrated** (see the questions below), and you must choose the threshold on validation data, never on the test set.
+
 ```text
 Confusion matrix (fraud model, 10,000 transactions, 100 frauds)
                 Predicted fraud   Predicted legit
@@ -97,6 +124,35 @@ flowchart LR
   G --> H["Monitor: drift, performance, latency, cost"]
   H -->|"degradation or new data"| I["Retrain and re-evaluate"]
   I --> F
+```
+
+### One prediction, end to end
+
+The lifecycle above repeats over weeks. The sequence below is one online prediction, and how its label eventually comes back to improve the next model. The important detail is that features are **logged at prediction time** and the label is joined later, which keeps training data point-in-time correct.
+
+```mermaid
+sequenceDiagram
+  participant App as Checkout
+  participant Svc as Scoring service
+  participant FS as Online feature store
+  participant Log as Prediction log
+  participant Train as Training pipeline
+  %% step: Checkout asks for a risk score inside its 100 ms budget.
+  %% step: The service fetches fresh aggregates (card velocity, device history), computed with the same definitions as training.
+  %% step: The features come back in a few milliseconds.
+  %% step: The model scores; the threshold maps the score to approve, step-up or review.
+  %% step: The features exactly as served, the score and the model version are logged. This is the future training row.
+  %% step: Weeks later a chargeback (or its absence) supplies the label.
+  %% step: The pipeline joins labels to logged features, so the training data is what the model really saw.
+  %% step: A challenger is trained, evaluated against the champion, and promoted only through a gate.
+  App->>Svc: score(payment)
+  Svc->>FS: get features(card, device)
+  FS-->>Svc: velocity, geo, history
+  Svc-->>App: 0.83, step-up auth
+  Svc->>Log: features + score + model v12
+  Log->>Train: label arrives (chargeback)
+  Train->>Train: join labels to logged features
+  Train->>Svc: promote v13 after evaluation gate
 ```
 
 ## When to Use / Trade-offs
@@ -508,6 +564,126 @@ Stage-appropriate structures, platform + embedded model, roles and the data/MLOp
 **Red flags:**
 - Isolated data science teams producing notebooks no one deploys.
 
+### What is cross-validation, and when is ordinary k-fold the wrong choice? {#cross-validation}
+
+**Level:** Foundation
+
+**Model answer:**
+**k-fold cross-validation** splits the training data into k folds. It trains on k−1 of them and validates on the remaining one, rotating k times, and averages the scores. This gives a more stable estimate than one validation split, especially on small datasets, and the spread across folds shows how sensitive the model is to the data.
+
+Ordinary k-fold assumes the rows are **independent and identically distributed**, so it is wrong when:
+- **Time matters** (forecasting, fraud, churn). Use **forward-chaining / time-series splits**: train on the past and validate on the next period, rolling forward. Random folds let the model peek at the future.
+- **Rows are grouped** (many rows per customer, patient or device). Use **group k-fold**, so the same entity never appears in both the training and validation folds.
+- **Classes are imbalanced.** Use **stratified** folds, so every fold has positives.
+
+Preprocessing (scaling, imputation, target encoding) must be fitted **inside** each fold. Fitting it on the full dataset first leaks information.
+
+**What the interviewer is looking for:**
+Mechanics, plus knowing when the IID assumption breaks: time, groups and imbalance.
+
+**Follow-ups:**
+- How many folds would you use, and what does it cost?
+- Why is a final held-out test set still needed?
+
+**Red flags:**
+- Random k-fold on a time-series forecasting problem.
+
+### How do you choose the decision threshold for a classifier? {#choosing-threshold}
+
+**Level:** Senior
+
+**Model answer:**
+The model gives a score. The **threshold** is a business decision about what to do with it:
+1. **Price the errors:** what a false positive costs (a blocked good customer, a wasted review) and what a false negative costs (a fraud loss, a missed churner).
+2. **Add constraints:** review capacity per day, a maximum false-decline rate agreed with the business, and any regulatory limits.
+3. **Sweep thresholds on validation data** and pick the one that minimises expected cost within the constraints. Then confirm it on the untouched test set.
+4. **Use more than one threshold** when there are more than two actions: auto-approve below *a*, step-up authentication between *a* and *b*, decline or review above *b*.
+5. **Revisit it.** Costs, capacity and the score distribution drift, and so does the best threshold. Monitor the flag rate as an early warning.
+
+Calibration matters: if a score of 0.3 doesn't mean "about a 30% chance", expected-cost reasoning breaks.
+
+**What the interviewer is looking for:**
+Cost- and capacity-based selection, multiple action bands, validation discipline and ongoing review.
+
+**Follow-ups:**
+- The fraud team can review 300 cases a day but the model flags 900. What do you do?
+- Would you use a different threshold per market?
+
+**Red flags:**
+- "0.5, because that's the default."
+
+### What is model calibration, and when does it matter? {#calibration}
+
+**Level:** Senior
+
+**Model answer:**
+A model is **calibrated** when its predicted probabilities match observed frequencies: of all the cases scored around 0.2, roughly 20% are positive. A model can **rank** well (high AUC) and still be badly calibrated. Gradient-boosted trees, models trained on resampled data, and neural networks trained with some losses are often over- or under-confident.
+
+It matters when you **use the number itself**, not just the order:
+- expected-cost decisions and thresholds;
+- pricing and risk (an expected loss is probability × exposure);
+- combining scores from several models, or comparing them across segments;
+- showing probabilities to users or regulators.
+
+**Check it** with a reliability diagram (predicted against observed, per bin) or with the Brier score / expected calibration error. **Fix it** with Platt scaling (a logistic fit on the scores) or isotonic regression, fitted on a held-out calibration set. After resampling or class weighting, recalibrate to the real base rate.
+
+**What the interviewer is looking for:**
+The distinction between ranking and calibration, when it matters, and how to measure and fix it.
+
+**Follow-ups:**
+- You oversampled fraud 10× in training. What happens to the predicted probabilities?
+- Can calibration differ between demographic groups? Why would that matter?
+
+**Red flags:**
+- Treating raw model scores as probabilities without checking.
+
+### Labels arrive 60 days after the prediction. How do you monitor and retrain the model in the meantime? {#delayed-labels}
+
+**Level:** Architect
+
+**Model answer:**
+You can't measure accuracy in real time, so use **leading indicators** and **proxy labels**, and design the retraining process around the delay:
+- **Input drift:** feature distributions against the training baseline (PSI, KS tests), per segment. A PSI above about 0.25 on an important feature deserves a look.
+- **Prediction drift:** the score distribution, the flag rate and the share in each action band. A sudden jump usually means an upstream data problem, not a change in the world.
+- **Data quality:** nulls, schema changes, stale features, and the freshness of feature pipelines.
+- **Proxy and early labels:** manual review outcomes, customer confirmations and the first chargebacks (partial but early). Track performance on these and correct for the bias of seeing only the early ones.
+- **Operational KPIs:** false-decline complaints, review-queue backlog and approval rate.
+- **When labels mature:** compute the true metrics by cohort (prediction week) and backfill the dashboards.
+- **Retraining:** train on mature cohorts only, so immature negatives aren't mislabelled. Keep a holdout or champion–challenger so you can compare models fairly.
+
+**What the interviewer is looking for:**
+Layered monitoring without labels, awareness of label-maturity bias, and cohort-based evaluation and retraining.
+
+**Follow-ups:**
+- Your model blocks fraud, so you never see the outcome of blocked transactions. How does that bias training?
+- What alert would you page someone for, and what would you just ticket?
+
+**Red flags:**
+- Waiting 60 days to find out the model broke, or training on unlabelled recent rows as negatives.
+
+### A churn model predicts well, but contacting high-risk customers doesn't reduce churn. Why, and what would you build instead? {#uplift-and-experiments}
+
+**Level:** Architect
+
+**Model answer:**
+**Prediction is not causation.** A churn model finds customers likely to leave, not customers whose minds you can change. Some will leave whatever you do ("lost causes"), some would have stayed anyway ("sure things"), and some are *annoyed* by being contacted ("sleeping dogs"). Targeting by risk spends the budget on the wrong people.
+
+What to do:
+- **Measure with an experiment:** randomly hold out part of the high-risk group and compare retention between the contacted and uncontacted groups. That difference is the real effect of the intervention.
+- **Model uplift**, not risk: estimate the *change* in the probability of churning if the customer is contacted, using experiment data (two-model or meta-learner approaches such as T-learners). Target the "persuadables".
+- **Optimise the decision:** expected value = uplift × customer value − cost of the offer, within the capacity limit.
+- **Keep a permanent holdout,** so you can keep measuring the incremental effect as the offers and the population change.
+
+**What the interviewer is looking for:**
+Separating prediction from causal impact, randomised holdouts, uplift modelling and value-based targeting.
+
+**Follow-ups:**
+- How big does the holdout group need to be?
+- The business won't accept a holdout ("we're losing customers"). How do you argue for it?
+
+**Red flags:**
+- Judging the programme by the model's AUC rather than by incremental retention.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -531,6 +707,15 @@ Stage-appropriate structures, platform + embedded model, roles and the data/MLOp
 - **Shadow mode** — run a model alongside production without acting, to evaluate safely.
 - **MLOps** — versioned data and models, pipelines, registries, evaluation gates, monitoring.
 - **Tabular data** — gradient-boosted trees are often the strongest choice.
+
+### Revisit
+- **k-fold vs time-series split** — random folds for IID data; forward-chaining when time matters; group k-fold for repeated entities.
+- **Threshold choice** — minimise expected cost (FP cost × FP + FN cost × FN) within capacity, on validation data.
+- **Calibration** — predicted 0.2 should mean ~20% positive; check with a reliability diagram; fix with Platt or isotonic.
+- **PSI rule of thumb** — below 0.1 stable, 0.1–0.25 moderate shift, above 0.25 significant shift worth investigating.
+- **Label maturity** — with delayed labels, train and evaluate only on cohorts old enough for their labels to be final.
+- **Uplift vs risk** — target the people an action changes (persuadables), not the people most likely to churn.
+- **Champion–challenger** — a new model earns promotion by beating the current one on live or held-out traffic.
 
 ## Further Reading
 
