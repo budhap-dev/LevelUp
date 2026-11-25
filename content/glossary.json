@@ -4244,5 +4244,450 @@
       "devsecops",
       "ci-cd-pipelines"
     ]
+  },
+  {
+    "id": "quic",
+    "term": "QUIC",
+    "aka": [
+      "HTTP/3"
+    ],
+    "group": "backend-apis",
+    "definition": "A UDP-based transport protocol with built-in TLS 1.3, independent streams and connection migration; HTTP/3 runs on top of it.",
+    "details": [
+      "Removes TCP-level head-of-line blocking: a lost packet only stalls its own stream.",
+      "Combines transport and TLS handshakes into one round trip, or zero on resumption.",
+      "Connection IDs let a connection survive the client's IP address changing."
+    ],
+    "useCases": [
+      "Mobile and lossy networks.",
+      "Global websites and APIs served from a CDN."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "web-performance"
+    ]
+  },
+  {
+    "id": "head-of-line-blocking",
+    "term": "Head-of-line Blocking",
+    "aka": [
+      "HOL blocking"
+    ],
+    "group": "backend-apis",
+    "definition": "A delay where later data or requests wait behind an earlier one that is stalled, such as a lost packet in a TCP stream.",
+    "details": [
+      "HTTP/1.1 suffers it per connection; HTTP/2 removes it at the HTTP layer but not at the TCP layer.",
+      "HTTP/3 over QUIC removes it at the transport layer.",
+      "Also appears in queues where one slow message blocks the rest of a partition."
+    ],
+    "useCases": [
+      "Explaining HTTP/2 performance on lossy networks.",
+      "Designing message consumers that don't stall a partition."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "tls-handshake",
+    "term": "TLS Handshake",
+    "aka": [
+      "TLS 1.3",
+      "0-RTT"
+    ],
+    "group": "backend-apis",
+    "definition": "The exchange in which a client and server agree keys and authenticate the server (and optionally the client) before sending encrypted data.",
+    "details": [
+      "TLS 1.3 needs one round trip for a full handshake, down from two in TLS 1.2, and mandates forward secrecy.",
+      "0-RTT resumption sends early data that can be replayed, so allow it only for idempotent requests.",
+      "SNI and ALPN in the ClientHello choose the certificate and the application protocol."
+    ],
+    "useCases": [
+      "Diagnosing slow connection setup.",
+      "Configuring TLS policies at load balancers and CDNs."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "mutual-tls",
+    "term": "Mutual TLS",
+    "aka": [
+      "mTLS"
+    ],
+    "group": "backend-apis",
+    "definition": "TLS in which both client and server present certificates, so each side authenticates the other.",
+    "details": [
+      "Common for service-to-service authentication, often automated by a service mesh with short-lived certificates.",
+      "Workload identities often follow the SPIFFE standard.",
+      "Encrypts and authenticates, but authorisation policies are still needed."
+    ],
+    "useCases": [
+      "Zero-trust networks inside a platform.",
+      "B2B integrations between organisations."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "anycast",
+    "term": "Anycast",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "Announcing the same IP address from many locations so that network routing sends each user to the nearest one.",
+    "details": [
+      "Used by CDNs, public DNS resolvers and global load balancers.",
+      "Failover happens in the network, without waiting for DNS TTLs to expire.",
+      "Also absorbs DDoS traffic across many points of presence."
+    ],
+    "useCases": [
+      "Global API edges.",
+      "DNS services."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "system-design"
+    ]
+  },
+  {
+    "id": "connection-pooling",
+    "term": "Connection Pooling",
+    "aka": [
+      "keep-alive"
+    ],
+    "group": "backend-apis",
+    "definition": "Keeping a set of open, reusable connections to a destination so requests avoid the cost of new TCP and TLS handshakes.",
+    "details": [
+      "Size pools by concurrency (Little's Law) and set a timeout for acquiring a connection.",
+      "Keep the client's idle timeout below the server's and the load balancer's.",
+      "In serverless functions, create clients outside the handler so connections are reused."
+    ],
+    "useCases": [
+      "HTTP clients calling other services.",
+      "Database access from application servers."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "nodejs"
+    ]
+  },
+  {
+    "id": "server-sent-events",
+    "term": "Server-Sent Events",
+    "aka": [
+      "SSE",
+      "EventSource"
+    ],
+    "group": "backend-apis",
+    "definition": "A simple HTTP-based protocol for a server to stream events to a browser over a long-lived response, with automatic reconnection.",
+    "details": [
+      "One direction only: server to client; the client uses normal requests to send data.",
+      "Works with standard HTTP infrastructure and HTTP/2 multiplexing.",
+      "Simpler than WebSockets for notifications and streaming output such as LLM tokens."
+    ],
+    "useCases": [
+      "Live dashboards and notifications.",
+      "Streaming generated text to a chat UI."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "same-origin-policy",
+    "term": "Same-origin Policy",
+    "aka": [
+      "SOP",
+      "origin"
+    ],
+    "group": "quality-security",
+    "definition": "The browser rule that a page from one origin (scheme, host and port) cannot read data from another origin unless that origin allows it.",
+    "details": [
+      "It restricts reading responses, not sending requests, which is why CSRF is possible.",
+      "app.example.com and api.example.com are different origins but the same site.",
+      "CORS and postMessage relax it safely; CORP, COOP and CSP strengthen it."
+    ],
+    "useCases": [
+      "Understanding why a fetch to another origin fails.",
+      "Designing where to host a frontend and its API."
+    ],
+    "related": [
+      "browser-security",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "cors",
+    "term": "CORS",
+    "aka": [
+      "Cross-Origin Resource Sharing",
+      "preflight request"
+    ],
+    "group": "quality-security",
+    "definition": "A protocol in which a server tells browsers which other origins may read its responses, using Access-Control-* headers and, for non-simple requests, an OPTIONS preflight.",
+    "details": [
+      "Credentialed requests need an exact allowed origin and Access-Control-Allow-Credentials: true.",
+      "It does not protect servers: non-browser clients ignore it.",
+      "Reflecting any Origin with credentials is a serious vulnerability."
+    ],
+    "useCases": [
+      "Single-page apps calling APIs on another origin.",
+      "Public APIs used directly from browsers."
+    ],
+    "related": [
+      "browser-security",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "content-security-policy",
+    "term": "Content Security Policy",
+    "aka": [
+      "CSP",
+      "strict CSP"
+    ],
+    "group": "quality-security",
+    "definition": "A response header that tells the browser which scripts, styles, frames and connections a page may use, providing strong defence in depth against XSS.",
+    "details": [
+      "A strict CSP uses per-response nonces or hashes with 'strict-dynamic' rather than host allow-lists.",
+      "frame-ancestors controls who may frame the page, preventing clickjacking.",
+      "Roll out with Content-Security-Policy-Report-Only before enforcing."
+    ],
+    "useCases": [
+      "Hardening web apps against XSS and script injection.",
+      "Limiting data exfiltration by third-party scripts."
+    ],
+    "related": [
+      "browser-security",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "trusted-types",
+    "term": "Trusted Types",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A browser API, enabled through CSP, that makes dangerous DOM sinks such as innerHTML reject plain strings unless they come from a reviewed policy.",
+    "details": [
+      "Turns DOM XSS prevention from code review into enforcement.",
+      "Policies typically wrap a sanitiser such as DOMPurify.",
+      "Roll out in report-only mode first, then refactor the sinks."
+    ],
+    "useCases": [
+      "Large frontends with many DOM manipulation paths.",
+      "Micro-frontend platforms with code from many teams."
+    ],
+    "related": [
+      "browser-security",
+      "micro-frontends"
+    ]
+  },
+  {
+    "id": "samesite-cookie",
+    "term": "SameSite Cookie",
+    "aka": [
+      "SameSite=Lax",
+      "SameSite=Strict"
+    ],
+    "group": "quality-security",
+    "definition": "A cookie attribute controlling whether the browser sends the cookie on cross-site requests, a key defence against CSRF.",
+    "details": [
+      "Lax blocks cross-site subrequests but allows top-level navigations with safe methods.",
+      "It works at the site level, so subdomains count as same-site.",
+      "Combine with Origin or Fetch Metadata checks for complete CSRF protection."
+    ],
+    "useCases": [
+      "Session cookies for web apps.",
+      "Deciding how embedded widgets authenticate."
+    ],
+    "related": [
+      "browser-security",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "hsts",
+    "term": "HSTS",
+    "aka": [
+      "HTTP Strict Transport Security",
+      "HSTS preload"
+    ],
+    "group": "quality-security",
+    "definition": "A response header telling browsers to use only HTTPS for a domain for a set period, defeating protocol downgrade and SSL-stripping attacks.",
+    "details": [
+      "includeSubDomains applies it to every subdomain, so check they all support HTTPS first.",
+      "The preload list builds the policy into browsers; removal takes months.",
+      "Typical max-age is one or two years."
+    ],
+    "useCases": [
+      "Any production web domain.",
+      "Banking and other sensitive sites."
+    ],
+    "related": [
+      "browser-security",
+      "networking-fundamentals"
+    ]
+  },
+  {
+    "id": "subresource-integrity",
+    "term": "Subresource Integrity",
+    "aka": [
+      "SRI"
+    ],
+    "group": "quality-security",
+    "definition": "An integrity attribute on script and link tags containing a hash of the expected file, so the browser refuses a file that has been modified.",
+    "details": [
+      "Protects against compromised CDNs or third-party hosts.",
+      "Only works for static, versioned files whose content doesn't change.",
+      "Requires crossorigin for cross-origin resources."
+    ],
+    "useCases": [
+      "Loading libraries from public CDNs.",
+      "Micro-frontend manifests with known bundle hashes."
+    ],
+    "related": [
+      "browser-security",
+      "devsecops"
+    ]
+  },
+  {
+    "id": "inverted-index",
+    "term": "Inverted Index",
+    "aka": [
+      "postings list"
+    ],
+    "group": "data",
+    "definition": "A search data structure mapping each term to the list of documents, and positions, that contain it.",
+    "details": [
+      "Queries look up only the postings lists for their terms instead of scanning documents.",
+      "Built from analysed text, so analysis decides what can be found.",
+      "Lucene stores it in immutable segments that merge over time."
+    ],
+    "useCases": [
+      "Full-text search engines.",
+      "PostgreSQL GIN indexes for full-text search."
+    ],
+    "related": [
+      "search-systems",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "bm25",
+    "term": "BM25",
+    "aka": [
+      "Okapi BM25"
+    ],
+    "group": "data",
+    "definition": "The standard text relevance scoring function in Lucene-based engines, combining saturating term frequency, inverse document frequency and length normalisation.",
+    "details": [
+      "k1 controls term-frequency saturation and b controls length normalisation.",
+      "Rare terms count more than common ones.",
+      "Usually a baseline combined with boosts, business signals and vector similarity."
+    ],
+    "useCases": [
+      "Ranking full-text search results.",
+      "Keyword half of hybrid retrieval for RAG."
+    ],
+    "related": [
+      "search-systems",
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "text-analysis",
+    "term": "Text Analysis",
+    "aka": [
+      "analyzer",
+      "stemming",
+      "tokenisation"
+    ],
+    "group": "data",
+    "definition": "The pipeline that turns raw text into index terms: character filtering, tokenising, lowercasing, stemming, synonyms and n-grams.",
+    "details": [
+      "The same or compatible analysis must apply at index and query time.",
+      "Aggressive stemming and synonyms raise recall but can hurt precision.",
+      "Changing an analyser for existing data requires a reindex."
+    ],
+    "useCases": [
+      "Multilingual search.",
+      "Matching users' vocabulary to catalogue terms."
+    ],
+    "related": [
+      "search-systems"
+    ]
+  },
+  {
+    "id": "reciprocal-rank-fusion",
+    "term": "Reciprocal Rank Fusion",
+    "aka": [
+      "RRF",
+      "hybrid search"
+    ],
+    "group": "data",
+    "definition": "A method for merging ranked lists from different retrievers by summing 1 / (k + rank) for each document, avoiding the need to normalise scores.",
+    "details": [
+      "k is commonly around 60.",
+      "Used to combine keyword (BM25) and vector search in hybrid retrieval.",
+      "Often followed by a cross-encoder re-ranker on the top results."
+    ],
+    "useCases": [
+      "Hybrid product or document search.",
+      "RAG retrieval."
+    ],
+    "related": [
+      "search-systems",
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "ndcg",
+    "term": "NDCG",
+    "aka": [
+      "normalised discounted cumulative gain",
+      "MRR"
+    ],
+    "group": "data",
+    "definition": "An offline search relevance metric that rewards highly relevant results near the top of the list, normalised against the ideal ordering.",
+    "details": [
+      "Uses graded relevance judgements for each query's results.",
+      "MRR, a simpler alternative, measures only the position of the first relevant result.",
+      "Run on a judged query set for every ranking change."
+    ],
+    "useCases": [
+      "Evaluating relevance changes before A/B testing.",
+      "Comparing retrieval strategies for RAG."
+    ],
+    "related": [
+      "search-systems"
+    ]
+  },
+  {
+    "id": "index-alias",
+    "term": "Index Alias",
+    "aka": [
+      "alias swap"
+    ],
+    "group": "data",
+    "definition": "A stable name pointing at one or more concrete search indexes, letting applications switch indexes atomically.",
+    "details": [
+      "Enables zero-downtime reindexing: build a new index, then move the alias.",
+      "Keep the old index briefly for rollback.",
+      "Filtered aliases can scope queries, for example per tenant."
+    ],
+    "useCases": [
+      "Mapping or analyser changes.",
+      "Re-embedding documents with a new model."
+    ],
+    "related": [
+      "search-systems",
+      "zero-downtime-migrations"
+    ]
   }
 ]
