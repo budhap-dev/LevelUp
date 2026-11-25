@@ -3450,5 +3450,454 @@
       "zero-downtime-migrations",
       "architecture-patterns"
     ]
+  },
+  {
+    "id": "incident-commander",
+    "term": "Incident Commander",
+    "aka": [
+      "IC"
+    ],
+    "group": "cloud-devops",
+    "definition": "The person who owns an incident response: sets priorities, assigns roles, makes decisions and runs communication, without doing the hands-on debugging.",
+    "details": [
+      "Derived from the Incident Command System used by emergency services.",
+      "Separating coordination from investigation stops large incidents becoming many people working at cross purposes.",
+      "The role can be handed over explicitly during long incidents."
+    ],
+    "useCases": [
+      "Leading SEV1 and SEV2 incidents that span several teams.",
+      "Deciding when to roll back or fail over under uncertainty."
+    ],
+    "related": [
+      "incident-management",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "incident-severity",
+    "term": "Incident Severity",
+    "aka": [
+      "SEV1",
+      "SEV2",
+      "severity level"
+    ],
+    "group": "cloud-devops",
+    "definition": "A classification of an incident by customer and business impact that determines who responds, how fast and how widely it is communicated.",
+    "details": [
+      "Define levels by impact, not by suspected cause, so anyone can classify an incident.",
+      "Use measurable triggers where possible, such as an error rate on a core journey.",
+      "When unsure, pick the higher severity; downgrading is cheap."
+    ],
+    "useCases": [
+      "Deciding whether to page an incident commander and publish a status page.",
+      "Triggering regulatory checks such as GDPR breach assessment."
+    ],
+    "related": [
+      "incident-management"
+    ]
+  },
+  {
+    "id": "post-incident-review",
+    "term": "Post-incident Review",
+    "aka": [
+      "blameless postmortem",
+      "PIR",
+      "incident retrospective"
+    ],
+    "group": "cloud-devops",
+    "definition": "A structured, blameless analysis after an incident that reconstructs what happened, identifies contributing factors and agrees a small number of improvements.",
+    "details": [
+      "Asks how decisions made sense at the time rather than who made a mistake.",
+      "Prefers strong actions such as automation and guardrails over training or 'be careful'.",
+      "Value comes from follow-through and from sharing the learning widely."
+    ],
+    "useCases": [
+      "After every SEV1 and SEV2, and after near misses with high potential impact.",
+      "Feeding recurring themes into the engineering roadmap."
+    ],
+    "related": [
+      "incident-management",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "contributing-factor",
+    "term": "Contributing Factor",
+    "aka": [
+      "Swiss cheese model"
+    ],
+    "group": "cloud-devops",
+    "definition": "One of several conditions that together allowed an incident to happen, grow or go undetected, used instead of a single 'root cause'.",
+    "details": [
+      "Complex failures need several holes to line up, as in the Swiss cheese model.",
+      "Stopping at 'human error' hides the system conditions that made the error easy and costly.",
+      "Factors span technology, process and organisation."
+    ],
+    "useCases": [
+      "Writing post-incident reviews.",
+      "Finding themes across many incidents."
+    ],
+    "related": [
+      "incident-management"
+    ]
+  },
+  {
+    "id": "mean-time-to-restore",
+    "term": "Mean Time to Restore",
+    "aka": [
+      "MTTR",
+      "failed deployment recovery time"
+    ],
+    "group": "cloud-devops",
+    "definition": "The average time to restore service after an incident or failed change; one of the DORA stability metrics.",
+    "details": [
+      "Incident durations are heavily skewed, so the mean of a few incidents is noisy and easy to game.",
+      "Prefer medians and percentiles per severity, plus time to detect and time to mitigate separately.",
+      "DORA now calls the change-related version 'failed deployment recovery time'."
+    ],
+    "useCases": [
+      "Tracking response capability over long periods.",
+      "Comparing before and after a change to incident tooling, with care."
+    ],
+    "related": [
+      "incident-management",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "runbook",
+    "term": "Runbook",
+    "aka": [
+      "playbook"
+    ],
+    "group": "cloud-devops",
+    "definition": "Step-by-step guidance, linked from an alert, that helps an on-call responder understand, diagnose and mitigate a specific problem.",
+    "details": [
+      "Written for a tired responder who did not build the system.",
+      "Kept current by updating it after every incident where it was wrong or missing.",
+      "Steps that are always the same should become automated remediation."
+    ],
+    "useCases": [
+      "Every paging alert.",
+      "Onboarding new on-call engineers through shadow shifts."
+    ],
+    "related": [
+      "incident-management",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "alert-fatigue",
+    "term": "Alert Fatigue",
+    "aka": [
+      "pager fatigue"
+    ],
+    "group": "cloud-devops",
+    "definition": "Desensitisation caused by frequent, non-actionable or noisy alerts, which leads responders to ignore or delay real ones.",
+    "details": [
+      "Every page should be urgent and need a human; everything else should be a ticket or dashboard.",
+      "Alert on symptoms users feel, such as SLO burn rate, rather than causes like CPU.",
+      "Review every page weekly and tune or delete noisy alerts."
+    ],
+    "useCases": [
+      "Designing on-call for a new service.",
+      "Diagnosing burnout in an on-call rotation."
+    ],
+    "related": [
+      "incident-management",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "platform-engineering",
+    "term": "Platform Engineering",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "Designing and building self-service capabilities and workflows that let product teams build, deploy and run software without being experts in every underlying technology.",
+    "details": [
+      "Its main purpose is reducing stream-aligned teams' cognitive load.",
+      "Run as a product: developers are customers and adoption is earned.",
+      "Success is measured by adoption, speed and developer satisfaction, not features shipped."
+    ],
+    "useCases": [
+      "Standardising CI/CD, environments and observability for many teams.",
+      "Making compliance the default through secure templates and policy as code."
+    ],
+    "related": [
+      "platform-engineering",
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "internal-developer-platform",
+    "term": "Internal Developer Platform",
+    "aka": [
+      "IDP"
+    ],
+    "group": "cloud-devops",
+    "definition": "The set of self-service capabilities a platform team provides: pipelines, environments, infrastructure provisioning, runtime, observability, secrets and policy.",
+    "details": [
+      "Distinct from a developer portal, which is one interface to these capabilities.",
+      "Can be consumed through a portal, CLI, APIs or Git-based workflows.",
+      "Should offer layered abstractions with escape hatches."
+    ],
+    "useCases": [
+      "Self-service databases and environments for product teams.",
+      "Standard deployment paths across many services."
+    ],
+    "related": [
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "developer-portal",
+    "term": "Developer Portal",
+    "aka": [
+      "Backstage",
+      "software catalogue"
+    ],
+    "group": "cloud-devops",
+    "definition": "A user interface over the internal platform offering a software catalogue, templates for new components, documentation and scorecards.",
+    "details": [
+      "Backstage, open-sourced by Spotify, is the most common open-source portal.",
+      "A portal without working capabilities behind it adds little value.",
+      "Catalogue metadata (owner, system, dependencies) usually lives in each repository."
+    ],
+    "useCases": [
+      "Finding who owns a service and where its docs are.",
+      "Creating new services from golden-path templates."
+    ],
+    "related": [
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "golden-path",
+    "term": "Golden Path",
+    "aka": [
+      "paved road"
+    ],
+    "group": "cloud-devops",
+    "definition": "An opinionated, supported, end-to-end way to do a common task, such as creating and deploying a new service, that is secure and observable by default.",
+    "details": [
+      "The easiest route, so teams choose it, but optional: teams can diverge and own the difference.",
+      "Maintained by the platform team so improvements flow to every user.",
+      "Delivered as templates, reusable pipelines, IaC modules and docs."
+    ],
+    "useCases": [
+      "New services reaching production in hours instead of weeks.",
+      "Automatic compliance evidence for services on the path."
+    ],
+    "related": [
+      "platform-engineering",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "thinnest-viable-platform",
+    "term": "Thinnest Viable Platform",
+    "aka": [
+      "TVP"
+    ],
+    "group": "cloud-devops",
+    "definition": "The smallest set of platform capabilities that meaningfully accelerates teams, grown only as demand is proven.",
+    "details": [
+      "A Team Topologies concept; sometimes it is only a curated wiki of practices and existing services.",
+      "Typical first capabilities are CI/CD templates, service templates and self-service infrastructure modules.",
+      "Avoids building a large platform for imagined users."
+    ],
+    "useCases": [
+      "Starting a platform team.",
+      "Deciding what not to build yet."
+    ],
+    "related": [
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "policy-as-code",
+    "term": "Policy as Code",
+    "aka": [
+      "OPA",
+      "Kyverno"
+    ],
+    "group": "quality-security",
+    "definition": "Expressing security, compliance and operational rules as versioned, testable code that tools enforce automatically.",
+    "details": [
+      "Examples: OPA/Gatekeeper and Kyverno for Kubernetes, Azure Policy, AWS SCPs, Terraform policy checks.",
+      "Replaces manual review gates with automatic, consistent checks that explain how to fix violations.",
+      "Roll out new policies in audit mode before enforcing."
+    ],
+    "useCases": [
+      "Blocking privileged containers or public storage.",
+      "Enforcing required tags and allowed regions."
+    ],
+    "related": [
+      "platform-engineering",
+      "devsecops",
+      "infrastructure-as-code"
+    ]
+  },
+  {
+    "id": "service-control-policy",
+    "term": "Service Control Policy",
+    "aka": [
+      "SCP",
+      "resource control policy",
+      "RCP"
+    ],
+    "group": "cloud-devops",
+    "definition": "An AWS Organizations policy that caps the maximum permissions available in member accounts; it never grants permissions itself.",
+    "details": [
+      "Used for organisation-wide guardrails such as region allow-lists and protecting logging and security services.",
+      "Resource control policies (2024) cap what can be done to resources, such as access from outside the organisation.",
+      "Test changes in a staging OU before applying to production accounts."
+    ],
+    "useCases": [
+      "Preventing anyone from disabling CloudTrail.",
+      "Restricting workloads to approved regions."
+    ],
+    "related": [
+      "aws",
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "iam-role",
+    "term": "IAM Role",
+    "aka": [
+      "assume role",
+      "STS"
+    ],
+    "group": "cloud-devops",
+    "definition": "An AWS identity with permissions but no long-term credentials, assumed by trusted principals to obtain temporary credentials.",
+    "details": [
+      "Workloads get roles via instance profiles, ECS task roles, Lambda execution roles or EKS Pod Identity.",
+      "CI systems can assume roles with OIDC federation instead of storing access keys.",
+      "Cross-account access works by assuming a role whose trust policy allows the caller."
+    ],
+    "useCases": [
+      "Giving a service access to S3 without secrets.",
+      "Letting a deployment pipeline deploy into many accounts."
+    ],
+    "related": [
+      "aws",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "vpc-endpoint",
+    "term": "VPC Endpoint",
+    "aka": [
+      "PrivateLink",
+      "gateway endpoint",
+      "interface endpoint"
+    ],
+    "group": "cloud-devops",
+    "definition": "A private connection from a VPC to an AWS service or PrivateLink provider without traversing the internet or a NAT gateway.",
+    "details": [
+      "Gateway endpoints for S3 and DynamoDB are free route-table entries.",
+      "Interface endpoints are network interfaces with private IPs, charged per hour per AZ and per GB.",
+      "They reduce NAT costs and improve security posture."
+    ],
+    "useCases": [
+      "Keeping S3 and ECR traffic off the NAT gateway.",
+      "Consuming a partner's service privately via PrivateLink."
+    ],
+    "related": [
+      "aws",
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "nat-gateway",
+    "term": "NAT Gateway",
+    "aka": [
+      "network address translation"
+    ],
+    "group": "cloud-devops",
+    "definition": "A managed service that lets workloads in private subnets make outbound connections to the internet without being reachable from it.",
+    "details": [
+      "On AWS it is charged per hour and per GB processed, making it a common cost surprise.",
+      "Deploy one per AZ for resilience and to avoid cross-AZ charges.",
+      "Use VPC endpoints for AWS service traffic instead."
+    ],
+    "useCases": [
+      "Calling third-party APIs from private services.",
+      "Centralised egress with inspection in a network hub account."
+    ],
+    "related": [
+      "aws",
+      "finops"
+    ]
+  },
+  {
+    "id": "savings-plans",
+    "term": "Savings Plans",
+    "aka": [
+      "reserved instances",
+      "commitment discounts"
+    ],
+    "group": "cloud-devops",
+    "definition": "AWS pricing commitments to a steady hourly spend for one or three years in exchange for discounted rates.",
+    "details": [
+      "Compute Savings Plans apply across EC2, Fargate and Lambda; EC2 Instance Savings Plans are cheaper but less flexible.",
+      "Right-size first, then commit to the stable baseline.",
+      "Review coverage and utilisation regularly."
+    ],
+    "useCases": [
+      "Reducing the cost of steady production workloads.",
+      "Planning commitments as part of FinOps."
+    ],
+    "related": [
+      "aws",
+      "finops"
+    ]
+  },
+  {
+    "id": "well-architected-framework",
+    "term": "Well-Architected Framework",
+    "aka": [
+      "WAF (AWS)"
+    ],
+    "group": "cloud-devops",
+    "definition": "AWS's set of design principles and review questions organised into six pillars: operational excellence, security, reliability, performance efficiency, cost optimisation and sustainability.",
+    "details": [
+      "The Well-Architected Tool runs structured reviews and tracks improvement items.",
+      "Azure has an equivalent Well-Architected Framework with five pillars.",
+      "Useful as a checklist in architecture reviews, not as a scorecard."
+    ],
+    "useCases": [
+      "Reviewing a design before a major launch.",
+      "Periodic workload health checks."
+    ],
+    "related": [
+      "aws",
+      "adrs-nfrs"
+    ]
+  },
+  {
+    "id": "partition-key",
+    "term": "Partition Key",
+    "aka": [
+      "hash key",
+      "hot partition"
+    ],
+    "group": "data",
+    "definition": "The attribute a distributed store hashes to decide which partition holds an item, determining both data locality and load distribution.",
+    "details": [
+      "A low-cardinality or skewed key creates hot partitions that throttle under load.",
+      "Combine with a sort key to support range queries within a partition, as in DynamoDB.",
+      "Changing the key later usually means migrating all data."
+    ],
+    "useCases": [
+      "Designing DynamoDB or Cosmos DB tables.",
+      "Choosing Kafka message keys for ordering and load spread."
+    ],
+    "related": [
+      "aws",
+      "databases-sql-nosql",
+      "data-modelling"
+    ]
   }
 ]
