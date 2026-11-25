@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NotesApiError, formatBytes, notesApi } from '@/lib/notes/client';
 import { MAX_ATTACHMENT_BYTES, type AttachmentMeta, type Note, type NoteInput, type NoteSummary } from '@/lib/notes/types';
 import { Icon } from '@/components/Icon';
+import { useConfirm } from '@/components/ConfirmDialog';
 import { RichTextEditor } from './RichTextEditor';
 
 const SAVE_DELAY_MS = 800;
@@ -39,6 +40,7 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
   const [fileError, setFileError] = useState<string | null>(null);
   const [save, setSave] = useState<{ state: SaveState; error?: string }>({ state: 'idle' });
   const [dragging, setDragging] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   const pending = useRef<NoteInput>({});
   const latestText = useRef<string | null>(null);
@@ -164,19 +166,23 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
     [noteId, handleError],
   );
 
-  const uploadFolder = (picked: File[]) => {
+  const uploadFolder = async (picked: File[]) => {
     const files = picked.filter((f) => !FOLDER_JUNK.test(f.name));
     if (!files.length) {
       setFileError('That folder has no files to attach.');
       return;
     }
     const folder = files[0]!.webkitRelativePath.split('/')[0] || 'this folder';
-    if (files.length > FOLDER_CONFIRM_OVER && !window.confirm(`Attach all ${files.length} files from “${folder}”?`)) return;
+    if (
+      files.length > FOLDER_CONFIRM_OVER &&
+      !(await confirm({ title: `Attach ${files.length} files?`, message: `Every file in “${folder}” will be uploaded to this note.`, confirmLabel: 'Attach all', tone: 'default' }))
+    )
+      return;
     void upload(files);
   };
 
   const removeAttachment = async (a: AttachmentMeta) => {
-    if (!window.confirm(`Delete “${a.filename}”?`)) return;
+    if (!(await confirm({ title: 'Delete this attachment?', message: `“${a.filename}” will be removed from this note. This can’t be undone.`, confirmLabel: 'Delete attachment' }))) return;
     try {
       await notesApi.removeAttachment(a.id);
       setAttachments((list) => {
@@ -191,7 +197,8 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
   };
 
   const deleteNote = async () => {
-    if (!window.confirm(`Delete “${title || 'Untitled'}” and its attachments? This can’t be undone.`)) return;
+    const files = attachments.length ? ` and its ${attachments.length === 1 ? 'attachment' : `${attachments.length} attachments`}` : '';
+    if (!(await confirm({ title: 'Delete this note?', message: `“${title || 'Untitled'}”${files} will be deleted. This can’t be undone.`, confirmLabel: 'Delete note' }))) return;
     clearTimeout(timer.current);
     pending.current = {};
     try {
@@ -285,7 +292,7 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
           onClick={() => void deleteNote()}
           aria-label="Delete note"
           title="Delete note"
-          className="flex size-8 items-center justify-center rounded-lg text-fg-soft transition-colors hover:bg-subtle hover:text-fg"
+          className="flex size-8 items-center justify-center rounded-lg text-danger transition-colors hover:bg-subtle"
         >
           <Icon name="trash" />
         </button>
@@ -377,9 +384,9 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
                   onClick={() => void removeAttachment(a)}
                   aria-label={`Delete ${a.filename}`}
                   title="Delete attachment"
-                  className="flex size-8 items-center justify-center rounded-lg text-fg-soft hover:bg-subtle hover:text-fg"
+                  className="flex size-8 items-center justify-center rounded-lg text-danger transition-colors hover:bg-subtle"
                 >
-                  <Icon name="x" />
+                  <Icon name="trash" />
                 </button>
               </li>
             ))}
@@ -414,7 +421,7 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
             onChange={(e) => {
               const files = [...(e.target.files ?? [])];
               e.target.value = '';
-              if (files.length) uploadFolder(files);
+              if (files.length) void uploadFolder(files);
             }}
           />
         )}
@@ -428,6 +435,7 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
           Drop to attach
         </div>
       )}
+      {confirmDialog}
     </article>
   );
 }

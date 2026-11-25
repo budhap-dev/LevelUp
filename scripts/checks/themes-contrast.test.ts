@@ -30,7 +30,7 @@ function contrast(a: string, b: string): number {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 
-const TOKENS = ['canvas', 'surface', 'subtle', 'line', 'fg', 'fg-soft', 'muted', 'accent', 'on-accent', 'accent-soft', 'accent-ink', 'code', 'scrim'];
+const TOKENS = ['canvas', 'surface', 'subtle', 'line', 'fg', 'fg-soft', 'muted', 'accent', 'on-accent', 'accent-soft', 'accent-ink', 'code', 'scrim', 'danger', 'on-danger'];
 
 /** [foreground, background, minimum ratio] — WCAG AA: 4.5 for text, 3 for UI components. */
 const PAIRS: [string, string, number][] = [
@@ -51,6 +51,10 @@ const PAIRS: [string, string, number][] = [
   ['accent', 'canvas', 3],
   ['accent', 'surface', 3],
   ['fg', 'code', 7],
+  ['danger', 'canvas', 4.5],
+  ['danger', 'surface', 4.5],
+  ['danger', 'subtle', 4.5],
+  ['on-danger', 'danger', 4.5],
 ];
 
 const themes = parseThemes(css);

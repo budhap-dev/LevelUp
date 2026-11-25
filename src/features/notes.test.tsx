@@ -33,6 +33,13 @@ function fakeApi() {
       attachments.push(attachment);
       return reply({ attachment }, 201);
     }
+    const removed = /^attachments\/([^/]+)$/.exec(path);
+    if (removed && method === 'DELETE' && unlocked) {
+      const i = attachments.findIndex((a) => a.id === removed[1]);
+      if (i < 0) return reply({ error: 'Not found' }, 404);
+      attachments.splice(i, 1);
+      return reply(null, 204);
+    }
     const body = init.body ? (JSON.parse(String(init.body)) as Record<string, string>) : {};
     if (path === 'session') {
       if (method === 'POST') {
@@ -125,7 +132,6 @@ describe('notes section', () => {
   it('attaches several files, or a whole folder, from the picker buttons', async () => {
     // jsdom has no folder picking; pretend the browser supports it so the button shows.
     Object.defineProperty(HTMLInputElement.prototype, 'webkitdirectory', { configurable: true, writable: true, value: false });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     try {
       const user = userEvent.setup();
       renderAt('/notes');
@@ -151,9 +157,22 @@ describe('notes section', () => {
       expect(await section.findByRole('link', { name: 'notes.txt' })).toBeInTheDocument();
       expect(await section.findByRole('alert')).toHaveTextContent('Skipped video.mov: files can be up to 4 MB.');
       expect(api.attachments.map((a) => a.filename)).toEqual(['diagram.png', 'spec.pdf', 'notes.txt']);
-      expect(confirm).not.toHaveBeenCalled(); // only asks above 20 files
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(); // only asks above 20 files
+
+      // Deleting asks in an in-app dialog: Cancel keeps the file, Delete removes it.
+      await user.click(section.getByRole('button', { name: 'Delete spec.pdf' }));
+      const dialog = await screen.findByRole('alertdialog', { name: 'Delete this attachment?' });
+      expect(dialog).toHaveTextContent('“spec.pdf” will be removed from this note.');
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(api.attachments).toHaveLength(3);
+
+      await user.click(section.getByRole('button', { name: 'Delete spec.pdf' }));
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete attachment' }));
+      await waitFor(() => expect(section.queryByRole('link', { name: 'spec.pdf' })).not.toBeInTheDocument());
+      expect(api.attachments.map((a) => a.filename)).toEqual(['diagram.png', 'notes.txt']);
     } finally {
-      confirm.mockRestore();
       delete (HTMLInputElement.prototype as { webkitdirectory?: boolean }).webkitdirectory;
     }
   });

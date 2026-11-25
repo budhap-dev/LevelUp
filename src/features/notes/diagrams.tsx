@@ -17,6 +17,7 @@ import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type Editor, t
 import { renderMermaidSvg } from '@/lib/mermaid';
 import { useTheme } from '@/lib/theme';
 import { Icon } from '@/components/Icon';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 /** Position of a just-inserted Mermaid block that should mount with its code open. */
 const openOnMount = new WeakMap<Editor, number>();
@@ -239,6 +240,10 @@ function DrawioView({ node, updateAttributes, deleteNode, selected }: ReactNodeV
   const src = node.attrs.src as string | null;
   const onSave = useCallback((next: string) => updateAttributes({ src: next }), [updateAttributes]);
   const onClose = useCallback(() => setOpen(false), []);
+  const [confirm, confirmDialog] = useConfirm();
+  const remove = async () => {
+    if (await confirm({ title: 'Remove this diagram?', message: 'The draw.io diagram will be removed from the note. You can undo this with Ctrl/Cmd+Z.', confirmLabel: 'Remove diagram' })) deleteNode();
+  };
 
   return (
     <NodeViewWrapper className={`note-diagram ${selected ? 'is-selected' : ''}`} data-diagram="drawio">
@@ -250,7 +255,7 @@ function DrawioView({ node, updateAttributes, deleteNode, selected }: ReactNodeV
           <button type="button" className="note-diagram-button" onClick={() => setOpen(true)}>
             Edit diagram
           </button>
-          <button type="button" className="note-diagram-button" aria-label="Remove diagram" title="Remove diagram" onClick={deleteNode}>
+          <button type="button" className="note-diagram-button is-danger" aria-label="Remove diagram" title="Remove diagram" onClick={() => void remove()}>
             <Icon name="trash" className="size-3.5" />
           </button>
         </span>
@@ -259,6 +264,7 @@ function DrawioView({ node, updateAttributes, deleteNode, selected }: ReactNodeV
         {src && DRAWIO_SRC.test(src) ? <img src={src} alt="draw.io diagram" draggable={false} /> : <p className="text-sm text-muted">This diagram is empty.</p>}
       </div>
       {open && <DrawioDialog src={src} onSave={onSave} onClose={onClose} />}
+      {confirmDialog}
     </NodeViewWrapper>
   );
 }
