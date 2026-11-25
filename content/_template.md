@@ -18,6 +18,11 @@ RULES THE BUILD ENFORCES
 - stub: no sections required. draft: missing sections are warnings. complete: everything below is required.
 - Plain Markdown only (GitHub-flavoured: tables, task lists). No JSX/MDX, no raw HTML (it is stripped).
 - Diagrams: fenced code blocks with the language `mermaid`. Quote labels containing punctuation (A["Client (web)"]); no semicolons in sequence-diagram messages (they end the statement).
+- Step-through: flowcharts, state diagrams and sequence diagrams with 3+ edges/messages get a "Step through" player
+  (edge by edge in source order; messages and notes top to bottom). Captions are generated ("A → B: label");
+  override them with `%% step: …` comment lines, where the n-th comment narrates the n-th step.
+- Flowing edges: give a flowchart edge an id and animate it to show data in motion:
+  `A e1@--> B` then `e1@{ animate: true }`. Use sparingly (one or two hot paths per diagram).
 - Mark any fact you are not sure of with "VERIFY:" — the app counts and flags these.
 -->
 
