@@ -330,6 +330,7 @@
       "Planning platform upgrades."
     ],
     "related": [
+      "technical-debt",
       "technical-strategy",
       "prioritisation"
     ]
@@ -2538,6 +2539,7 @@
       "Designing platform teams."
     ],
     "related": [
+      "org-design-team-topologies",
       "domain-driven-design",
       "technical-strategy"
     ]
@@ -3898,6 +3900,349 @@
       "aws",
       "databases-sql-nosql",
       "data-modelling"
+    ]
+  },
+  {
+    "id": "conways-law",
+    "term": "Conway's Law",
+    "aka": [
+      "inverse Conway manoeuvre"
+    ],
+    "group": "leadership-people",
+    "definition": "The observation (Mel Conway, 1968) that systems mirror the communication structure of the organisations that build them.",
+    "details": [
+      "Layered teams tend to produce layered systems with hand-offs between them.",
+      "The inverse Conway manoeuvre designs team boundaries for the architecture you want.",
+      "Changing team structure without changing code ownership rarely changes the architecture."
+    ],
+    "useCases": [
+      "Designing team boundaries alongside service boundaries.",
+      "Explaining why a reorganisation did or didn't improve flow."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "stream-aligned-team",
+    "term": "Stream-aligned Team",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A long-lived, cross-functional team aligned to a flow of business change, such as a product, journey or domain, able to deliver it end to end.",
+    "details": [
+      "The primary team type in Team Topologies; most teams should be stream-aligned.",
+      "Supported by platform, enabling and complicated-subsystem teams to limit its cognitive load.",
+      "Should own its services, data and on-call for its stream."
+    ],
+    "useCases": [
+      "Organising product engineering around customer journeys.",
+      "Reducing hand-offs between frontend, backend and QA teams."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "team-cognitive-load",
+    "term": "Team Cognitive Load",
+    "aka": [
+      "intrinsic, extraneous and germane load"
+    ],
+    "group": "leadership-people",
+    "definition": "The total mental effort a team needs to understand, change and operate what it owns, used in Team Topologies as a constraint on team scope.",
+    "details": [
+      "Intrinsic load comes from the domain, extraneous load from friction such as manual deploys, and germane load is valuable learning.",
+      "Overload shows up as slow onboarding, context switching, incidents and burnout.",
+      "Remedies: narrow scope, remove extraneous load with platforms, or add a complicated-subsystem team."
+    ],
+    "useCases": [
+      "Deciding whether to split a team.",
+      "Justifying platform investment."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "fracture-plane",
+    "term": "Fracture Plane",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A natural seam along which a system and its team can be split so the parts evolve mostly independently.",
+    "details": [
+      "Common planes: business domain, regulatory compliance, change cadence, risk, performance isolation, user persona and location.",
+      "Business domain (bounded context) is usually the best default.",
+      "Splitting by technology layer usually creates hand-offs."
+    ],
+    "useCases": [
+      "Splitting a team that has grown too large.",
+      "Breaking up a monolith alongside its teams."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "team-api",
+    "term": "Team API",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A team's published description of what it owns, what it offers as a service, how to engage with it and which teams it currently works closely with.",
+    "details": [
+      "Reduces ad-hoc coordination and interruptions.",
+      "Makes ownership gaps and overlapping claims visible.",
+      "Kept in a discoverable place, such as the repository or developer portal, and reviewed regularly."
+    ],
+    "useCases": [
+      "Onboarding other teams to a platform capability.",
+      "Clarifying interaction modes between teams."
+    ],
+    "related": [
+      "org-design-team-topologies"
+    ]
+  },
+  {
+    "id": "span-of-control",
+    "term": "Span of Control",
+    "aka": [
+      "spans and layers"
+    ],
+    "group": "leadership-people",
+    "definition": "The number of people reporting directly to a manager; together with the number of management layers it shapes decision speed and management capacity.",
+    "details": [
+      "Around 5–8 direct reports is common for first-line engineering managers, depending on seniority and other duties.",
+      "Narrow spans add layers and invite micromanagement; very wide spans leave no time for coaching.",
+      "Each extra layer adds latency and distortion to communication."
+    ],
+    "useCases": [
+      "Designing a growing engineering organisation.",
+      "Deciding whether to add a management layer."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "people-management"
+    ]
+  },
+  {
+    "id": "hotspot-analysis",
+    "term": "Hotspot Analysis",
+    "aka": [
+      "change coupling",
+      "behavioural code analysis"
+    ],
+    "group": "architecture-design",
+    "definition": "Finding code that is both frequently changed and complex, using version-control history, to locate the technical debt with the highest interest.",
+    "details": [
+      "Change is concentrated: a small share of files usually receives most changes.",
+      "Change coupling shows files that change together across module or team boundaries.",
+      "Popularised by Adam Tornhill and tools such as CodeScene."
+    ],
+    "useCases": [
+      "Prioritising refactoring.",
+      "Building a business case for paying down debt."
+    ],
+    "related": [
+      "technical-debt",
+      "solid-clean-code"
+    ]
+  },
+  {
+    "id": "technical-debt-quadrant",
+    "term": "Technical Debt Quadrant",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "Martin Fowler's classification of technical debt as reckless or prudent, and deliberate or inadvertent.",
+    "details": [
+      "Prudent inadvertent debt ('now we know how we should have done it') is unavoidable.",
+      "Prudent deliberate debt should be recorded with a plan to repay.",
+      "Reckless debt is prevented through skills, standards and automation."
+    ],
+    "useCases": [
+      "Discussing debt without blame.",
+      "Deciding whether a shortcut is acceptable."
+    ],
+    "related": [
+      "technical-debt"
+    ]
+  },
+  {
+    "id": "characterisation-test",
+    "term": "Characterisation Test",
+    "aka": [
+      "golden master test",
+      "approval test"
+    ],
+    "group": "quality-security",
+    "definition": "A test that captures what existing code currently does, rather than what it should do, so legacy code can be refactored safely.",
+    "details": [
+      "Written before refactoring untested code.",
+      "Snapshot or approval testing tools make large outputs easy to capture.",
+      "Once behaviour is pinned, intended behaviour can be tested and corrected separately."
+    ],
+    "useCases": [
+      "Refactoring a hotspot in a legacy codebase.",
+      "Replacing a component with the strangler fig pattern."
+    ],
+    "related": [
+      "technical-debt",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "libyear",
+    "term": "Libyear",
+    "aka": [
+      "dependency freshness"
+    ],
+    "group": "architecture-design",
+    "definition": "A measure of dependency freshness: the total years by which a project's dependencies lag behind their latest releases.",
+    "details": [
+      "Simple to compute and trend over time.",
+      "Complements vulnerability scanning and end-of-life tracking.",
+      "Small, frequent upgrades keep it low and avoid painful forced upgrades."
+    ],
+    "useCases": [
+      "Tracking dependency debt across many services.",
+      "Prioritising upgrade work."
+    ],
+    "related": [
+      "technical-debt",
+      "devsecops"
+    ]
+  },
+  {
+    "id": "codeowners",
+    "term": "CODEOWNERS",
+    "aka": [
+      "code owners"
+    ],
+    "group": "delivery",
+    "definition": "A repository file mapping paths to the teams or people who must review changes to them, enforced through branch protection.",
+    "details": [
+      "Use teams rather than individuals so review load spreads.",
+      "Keep it to genuinely owned or sensitive areas, or it becomes a bottleneck.",
+      "Protect the file itself and CI configuration with owner review."
+    ],
+    "useCases": [
+      "Monorepos shared by many teams.",
+      "Requiring security review of authentication code."
+    ],
+    "related": [
+      "code-review",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "stacked-pull-requests",
+    "term": "Stacked Pull Requests",
+    "aka": [
+      "stacked diffs"
+    ],
+    "group": "delivery",
+    "definition": "A chain of small, dependent pull requests, each reviewed separately and merged in order, used to keep large features reviewable.",
+    "details": [
+      "The author keeps working while earlier steps are reviewed.",
+      "Tooling such as Graphite, ghstack, Sapling or Gerrit makes rebasing stacks practical.",
+      "Each step should be safe to merge on its own, behind a flag if incomplete."
+    ],
+    "useCases": [
+      "Building a feature across database, domain, API and UI layers.",
+      "Large refactors."
+    ],
+    "related": [
+      "code-review",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "ship-show-ask",
+    "term": "Ship / Show / Ask",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A branching and review strategy where each change is either merged directly (ship), merged then shared for feedback (show), or opened for review before merging (ask).",
+    "details": [
+      "Chooses the review mode by risk instead of reviewing everything the same way.",
+      "Needs strong automated checks and high trust.",
+      "May not satisfy compliance controls that require pre-merge approval."
+    ],
+    "useCases": [
+      "Mature teams wanting faster flow for trivial changes.",
+      "Balancing review effort against risk."
+    ],
+    "related": [
+      "code-review",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "conventional-comments",
+    "term": "Conventional Comments",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A convention for labelling code review comments, such as nit, suggestion, question, issue (blocking) and praise, so authors know what matters.",
+    "details": [
+      "Separates blocking concerns from preferences.",
+      "Improves tone in asynchronous written feedback.",
+      "Easy to adopt incrementally in any review tool."
+    ],
+    "useCases": [
+      "Team review guidelines.",
+      "Reducing friction between reviewers and authors."
+    ],
+    "related": [
+      "code-review",
+      "mentorship"
+    ]
+  },
+  {
+    "id": "pair-programming",
+    "term": "Pair Programming",
+    "aka": [
+      "mob programming",
+      "ensemble programming"
+    ],
+    "group": "delivery",
+    "definition": "Two people (or a whole team, in mob programming) writing code together at one workstation, giving continuous review as the code is written.",
+    "details": [
+      "Most valuable for complex or risky work, onboarding and knowledge transfer.",
+      "Can replace or lighten asynchronous review if the team and auditors agree.",
+      "Rotating pairs spreads knowledge and reduces key-person risk."
+    ],
+    "useCases": [
+      "Designing a tricky algorithm or migration.",
+      "Bringing a new team member up to speed."
+    ],
+    "related": [
+      "code-review",
+      "mentorship"
+    ]
+  },
+  {
+    "id": "separation-of-duties",
+    "term": "Separation of Duties",
+    "aka": [
+      "four-eyes principle",
+      "two-person rule"
+    ],
+    "group": "quality-security",
+    "definition": "A control requiring that no single person can both make and release a change to production without independent review.",
+    "details": [
+      "Required by frameworks such as SOC 2 and PCI DSS.",
+      "Best enforced with branch protection and pipeline controls, with pull request and deployment records as audit evidence.",
+      "Needs a documented, audited break-glass path for emergencies."
+    ],
+    "useCases": [
+      "Compliance audits.",
+      "Designing CI/CD controls for regulated systems."
+    ],
+    "related": [
+      "code-review",
+      "devsecops",
+      "ci-cd-pipelines"
     ]
   }
 ]
