@@ -1,6 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
-export const SESSION_COOKIE = 'notes_session';
+import { SESSION_COOKIE } from './session-cookie.js';
+
+export { SESSION_COOKIE };
 export const SESSION_DAYS = 30;
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest();
@@ -36,12 +38,20 @@ export function readCookie(request: Request, name: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Path=/ because the session unlocks the whole app: the gate in middleware.ts checks it on every page and asset.
+ * SameSite=Lax (not Strict) so following a link to the app from email or chat still sends it; cross-site
+ * requests can't forge API writes anyway, because they need the custom client header.
+ */
 export function sessionCookie(token: string, secure: boolean): string {
-  const attrs = [`${SESSION_COOKIE}=${token}`, 'Path=/api', 'HttpOnly', 'SameSite=Strict', `Max-Age=${SESSION_DAYS * 24 * 60 * 60}`];
+  const attrs = [`${SESSION_COOKIE}=${token}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${SESSION_DAYS * 24 * 60 * 60}`];
   if (secure) attrs.push('Secure');
   return attrs.join('; ');
 }
 
-export function clearedSessionCookie(secure: boolean): string {
-  return [`${SESSION_COOKIE}=`, 'Path=/api', 'HttpOnly', 'SameSite=Strict', 'Max-Age=0', ...(secure ? ['Secure'] : [])].join('; ');
+/** Clears the cookie, plus the Path=/api cookie issued before the whole-app gate existed. */
+export function clearedSessionCookies(secure: boolean): string[] {
+  return ['/', '/api'].map((path) =>
+    [`${SESSION_COOKIE}=`, `Path=${path}`, 'HttpOnly', 'SameSite=Lax', 'Max-Age=0', ...(secure ? ['Secure'] : [])].join('; '),
+  );
 }

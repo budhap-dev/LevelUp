@@ -99,9 +99,19 @@ describe('sessions', () => {
     const ok = await call('session', { auth: false, ...json('POST', { password: PASSWORD }) });
     expect(ok.status).toBe(204);
     const cookie = ok.headers.get('set-cookie')!;
-    expect(cookie).toMatch(/^notes_session=\d+\.[\w-]+; Path=\/api; HttpOnly; SameSite=Strict; Max-Age=\d+; Secure$/);
+    expect(cookie).toMatch(/^notes_session=\d+\.[\w-]+; Path=\/; HttpOnly; SameSite=Lax; Max-Age=\d+; Secure$/);
     const token = cookie.split(';')[0]!;
     expect((await call('session', { auth: false, headers: { cookie: token } })).status).toBe(200);
+  });
+
+  it('locks by clearing the cookie on / and on the legacy /api path', async () => {
+    const { call } = setup();
+    const res = await call('session', { method: 'DELETE' });
+    expect(res.status).toBe(204);
+    const cleared = res.headers.getSetCookie();
+    expect(cleared).toHaveLength(2);
+    expect(cleared[0]).toMatch(/^notes_session=; Path=\/; .*Max-Age=0/);
+    expect(cleared[1]).toMatch(/^notes_session=; Path=\/api; .*Max-Age=0/);
   });
 
   it('rate-limits repeated wrong passphrases', async () => {

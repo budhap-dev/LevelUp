@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { useProgress, useProgressController, useSaveStatus } from '@/lib/progress/react';
 import { ProgressFormatError } from '@/lib/progress/normalise';
 import type { ProgressData } from '@/lib/progress/types';
+import { lockApp } from '@/lib/app-lock';
 
 function counts(d: ProgressData) {
   const topics = Object.values(d.topics);
@@ -184,6 +185,12 @@ export function SettingsPage() {
             </div>
           </div>
         )}
+      </Card>
+
+      <Card title="Privacy" description="LevelUp is protected by a passphrase. Locking signs this browser out and removes its offline copy; your progress stays saved here.">
+        <button type="button" className={secondary} onClick={() => void lockApp()}>
+          Lock LevelUp on this browser
+        </button>
       </Card>
 
       <Card title="Reset" description="Delete all progress, bookmarks, notes and review history from this browser." tone="danger">

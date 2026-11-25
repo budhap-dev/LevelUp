@@ -1,7 +1,7 @@
 import { CLIENT_HEADER, MAX_ATTACHMENT_BYTES, type NoteInput } from '../../src/lib/notes/types.js';
 import {
   SESSION_COOKIE,
-  clearedSessionCookie,
+  clearedSessionCookies,
   createSessionToken,
   passwordMatches,
   readCookie,
@@ -126,7 +126,11 @@ export function createApp(config: AppConfig) {
         }
         return empty(204, { 'set-cookie': sessionCookie(createSessionToken(secret), secure) });
       }
-      if (method === 'DELETE') return empty(204, { 'set-cookie': clearedSessionCookie(secure) });
+      if (method === 'DELETE') {
+        const headers = new Headers({ 'cache-control': 'no-store' });
+        for (const cookie of clearedSessionCookies(secure)) headers.append('set-cookie', cookie);
+        return new Response(null, { status: 204, headers });
+      }
       return fail(405, 'Method not allowed');
     }
 
