@@ -16,6 +16,8 @@
       { "topicId": "adrs-nfrs" },
       { "topicId": "diagrams-c4-uml-sequence" },
       { "topicId": "testing-strategy" },
+      { "topicId": "code-review" },
+      { "topicId": "technical-debt" },
       { "topicId": "dora-metrics" },
       { "topicId": "platform-engineering" },
       { "topicId": "technical-strategy" },
@@ -58,6 +60,7 @@
     "steps": [
       { "topicId": "people-management" },
       { "topicId": "leadership" },
+      { "topicId": "org-design-team-topologies", "note": "Design teams and boundaries for fast flow." },
       { "topicId": "mentorship" },
       { "topicId": "hiring-interviewing" },
       { "topicId": "behavioural-interviews-star", "note": "EM loops lean heavily on behavioural rounds." },
