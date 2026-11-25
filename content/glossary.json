@@ -4689,5 +4689,465 @@
       "search-systems",
       "zero-downtime-migrations"
     ]
+  },
+  {
+    "id": "multi-tenancy",
+    "term": "Multi-tenancy",
+    "aka": [
+      "tenant",
+      "silo, pool and bridge"
+    ],
+    "group": "architecture-design",
+    "definition": "Serving many customers (tenants) from one software system, with isolation choices per layer: silo (dedicated), pool (shared) or bridge (a mix).",
+    "details": [
+      "Choose isolation per layer and per tier, usually pooled by default and siloed where needed.",
+      "Tenant context must flow through requests, events, jobs, logs and caches.",
+      "Noisy neighbours and cross-tenant leaks are the main pooled-model risks."
+    ],
+    "useCases": [
+      "B2B SaaS platforms.",
+      "Internal platforms serving many teams."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "row-level-security",
+    "term": "Row-level Security",
+    "aka": [
+      "RLS"
+    ],
+    "group": "data",
+    "definition": "A database feature that filters rows according to a policy, such as matching a tenant id in the session, so isolation is enforced by the database rather than by every query.",
+    "details": [
+      "In PostgreSQL, use FORCE ROW LEVEL SECURITY so table owners are also subject to policies.",
+      "Set the tenant per transaction (set_config with is_local true) to stay safe with connection pools.",
+      "Roles with BYPASSRLS or superuser rights skip policies, so the application must not use them."
+    ],
+    "useCases": [
+      "Pooled multi-tenant databases.",
+      "Restricting analysts to permitted rows."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "noisy-neighbour",
+    "term": "Noisy Neighbour",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A tenant or workload that consumes so much of a shared resource that others' performance suffers.",
+    "details": [
+      "Mitigate with per-tenant rate limits and quotas, fair queues and separate pools for heavy work.",
+      "Per-tenant usage visibility shows who the neighbours are.",
+      "Outsized tenants may need to move to dedicated capacity or their own cell."
+    ],
+    "useCases": [
+      "Pooled SaaS databases and job queues.",
+      "Shared Kubernetes clusters."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "control-plane",
+    "term": "Control Plane",
+    "aka": [
+      "application plane",
+      "data plane"
+    ],
+    "group": "architecture-design",
+    "definition": "The part of a system that manages configuration and lifecycle (in SaaS: tenants, tiers, onboarding, billing), as opposed to the plane that serves the actual workload.",
+    "details": [
+      "In SaaS, the application plane reads tenant context and entitlements from the control plane.",
+      "Data planes should keep working on cached configuration if the control plane is unavailable.",
+      "Control planes are usually more complex and less available than data planes."
+    ],
+    "useCases": [
+      "Tenant onboarding and routing in SaaS.",
+      "Cloud provider and Kubernetes architecture discussions."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "cell-based-architecture",
+    "term": "Cell-based Architecture",
+    "aka": [
+      "cells",
+      "deployment stamps"
+    ],
+    "group": "architecture-design",
+    "definition": "Splitting a system into multiple identical, independent copies (cells or stamps), each serving a subset of customers, to limit the blast radius of failures and scale by adding cells.",
+    "details": [
+      "A routing layer maps each tenant or customer to its cell.",
+      "Cells are sized by blast-radius tolerance and tested capacity.",
+      "Requires tenant placement and migration tooling for rebalancing."
+    ],
+    "useCases": [
+      "Large multi-tenant SaaS fleets.",
+      "Regional deployments for data residency."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "entitlements",
+    "term": "Entitlements",
+    "aka": [
+      "plans and tiers"
+    ],
+    "group": "product-business",
+    "definition": "The features, limits and isolation level a tenant is allowed under its plan or contract, stored as data and checked through a single service.",
+    "details": [
+      "Keep commercial entitlements separate from temporary release feature flags.",
+      "Enforce on the server, not just by hiding UI.",
+      "Usage metering shows tenants their consumption and feeds billing."
+    ],
+    "useCases": [
+      "Free, standard and enterprise SaaS tiers.",
+      "Contract-specific limits for large customers."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "product-management"
+    ]
+  },
+  {
+    "id": "personal-data",
+    "term": "Personal Data",
+    "aka": [
+      "PII",
+      "personally identifiable information"
+    ],
+    "group": "quality-security",
+    "definition": "Any information relating to an identified or identifiable living person, including online identifiers such as IP addresses and cookie ids.",
+    "details": [
+      "Special category data (health, biometrics, ethnicity, religion and others) needs extra conditions and protection.",
+      "Combinations of ordinary attributes can identify someone.",
+      "The US term PII is often narrower than GDPR's definition."
+    ],
+    "useCases": [
+      "Classifying fields in schemas.",
+      "Deciding what can be logged or shared with vendors."
+    ],
+    "related": [
+      "data-privacy",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "pseudonymisation",
+    "term": "Pseudonymisation",
+    "aka": [
+      "anonymisation",
+      "tokenisation"
+    ],
+    "group": "quality-security",
+    "definition": "Replacing direct identifiers with tokens or keys held separately; unlike anonymisation, the data remains personal data under GDPR.",
+    "details": [
+      "Reduces risk and is encouraged by GDPR, but re-identification remains possible.",
+      "True anonymisation must make re-identification not reasonably possible, which is hard.",
+      "A hashed email is a pseudonym, not anonymous data."
+    ],
+    "useCases": [
+      "Analytics environments.",
+      "Sharing data with lower-trust systems."
+    ],
+    "related": [
+      "data-privacy",
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "data-minimisation",
+    "term": "Data Minimisation",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "The GDPR principle of collecting, keeping and sharing only the personal data needed for a specific purpose.",
+    "details": [
+      "Question every field in forms, APIs and logs.",
+      "Store derived values (an age band, a verification result) instead of raw data where possible.",
+      "Reduces breach impact, storage and the work of subject requests."
+    ],
+    "useCases": [
+      "Designing sign-up forms and APIs.",
+      "Deciding what to send to analytics vendors."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "lawful-basis",
+    "term": "Lawful Basis",
+    "aka": [
+      "legal basis for processing"
+    ],
+    "group": "quality-security",
+    "definition": "One of the six GDPR grounds that make processing personal data lawful: consent, contract, legal obligation, vital interests, public task or legitimate interests.",
+    "details": [
+      "Consent is wrong for processing the service can't work without; use contract instead.",
+      "Legitimate interests needs a balancing test and an opt-out.",
+      "Record the basis per purpose in the data inventory."
+    ],
+    "useCases": [
+      "Designing a new feature that uses personal data.",
+      "Reusing data for a new purpose such as model training."
+    ],
+    "related": [
+      "data-privacy",
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "data-subject-request",
+    "term": "Data Subject Request",
+    "aka": [
+      "DSAR",
+      "subject access request"
+    ],
+    "group": "quality-security",
+    "definition": "A request from a person exercising their privacy rights, such as access, correction, erasure or portability, which must be answered within legal deadlines.",
+    "details": [
+      "Under GDPR, the default deadline is one month, extendable by two months for complex requests.",
+      "Verify the requester's identity before releasing data.",
+      "Automate with a central workflow and export and erase handlers in each service."
+    ],
+    "useCases": [
+      "Account deletion features.",
+      "Download-my-data exports."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "right-to-erasure",
+    "term": "Right to Erasure",
+    "aka": [
+      "right to be forgotten"
+    ],
+    "group": "quality-security",
+    "definition": "The GDPR right (Article 17) for people to have their personal data deleted when there is no longer a valid reason to keep it.",
+    "details": [
+      "Exceptions include legal retention obligations such as invoices.",
+      "Deletion must cover derived copies, vendors and, by some means, backups.",
+      "Records kept for aggregates can be anonymised instead of deleted."
+    ],
+    "useCases": [
+      "Account deletion across microservices.",
+      "Tenant offboarding."
+    ],
+    "related": [
+      "data-privacy",
+      "multi-tenant-saas"
+    ]
+  },
+  {
+    "id": "crypto-shredding",
+    "term": "Crypto-shredding",
+    "aka": [
+      "crypto-erasure"
+    ],
+    "group": "quality-security",
+    "definition": "Erasing data by encrypting it with a dedicated key (per person or tenant) and destroying the key, making every copy unreadable.",
+    "details": [
+      "The standard approach for erasure from immutable event logs and backups.",
+      "Needs a highly available key management service and short key caching.",
+      "Consumers must handle events whose key no longer exists."
+    ],
+    "useCases": [
+      "Event-sourced systems holding personal data.",
+      "Tenant offboarding with backups."
+    ],
+    "related": [
+      "data-privacy",
+      "multi-tenant-saas"
+    ]
+  },
+  {
+    "id": "dpia",
+    "term": "Data Protection Impact Assessment",
+    "aka": [
+      "DPIA"
+    ],
+    "group": "quality-security",
+    "definition": "An assessment required by GDPR before processing likely to result in high risk to people, describing the processing, its necessity, the risks and the mitigations.",
+    "details": [
+      "Triggers include large-scale special category data, systematic monitoring, profiling and new technologies such as AI.",
+      "Engineers contribute data flows and technical mitigations.",
+      "Best done during design and updated as the design changes."
+    ],
+    "useCases": [
+      "Launching AI features using customer data.",
+      "New tracking or profiling features."
+    ],
+    "related": [
+      "data-privacy",
+      "responsible-ai"
+    ]
+  },
+  {
+    "id": "data-residency",
+    "term": "Data Residency",
+    "aka": [
+      "data localisation"
+    ],
+    "group": "quality-security",
+    "definition": "Requirements, from law, regulation or contract, that data is stored and processed in specific geographic locations.",
+    "details": [
+      "Covers backups, logs, telemetry, support access and vendors, not just the main database.",
+      "Often met with regional deployment stamps and a minimal global control plane.",
+      "GDPR permits transfers with safeguards, so many residency demands are contractual."
+    ],
+    "useCases": [
+      "Serving EU enterprise customers.",
+      "Public sector and financial services workloads."
+    ],
+    "related": [
+      "data-privacy",
+      "multi-tenant-saas"
+    ]
+  },
+  {
+    "id": "differential-privacy",
+    "term": "Differential Privacy",
+    "aka": [
+      "privacy budget",
+      "epsilon"
+    ],
+    "group": "quality-security",
+    "definition": "A mathematical guarantee that the output of an analysis changes very little whether or not any one person's data is included, achieved by adding calibrated noise.",
+    "details": [
+      "The privacy budget (epsilon) trades accuracy against privacy.",
+      "Used by the US Census Bureau and in large-scale telemetry.",
+      "Needs expertise to apply correctly."
+    ],
+    "useCases": [
+      "Publishing aggregate statistics.",
+      "Training models on sensitive data."
+    ],
+    "related": [
+      "data-privacy",
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "workload-model",
+    "term": "Workload Model",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A description of the load a performance test reproduces: operation mix, arrival rates, user behaviour, data variety and payloads, ideally derived from production data.",
+    "details": [
+      "A test is only as useful as its workload model.",
+      "Include spike shapes, bots and client retry behaviour for launches.",
+      "Refresh it as usage changes."
+    ],
+    "useCases": [
+      "Planning load tests for a launch.",
+      "Capacity planning."
+    ],
+    "related": [
+      "performance-load-testing",
+      "system-design"
+    ]
+  },
+  {
+    "id": "open-closed-load-model",
+    "term": "Open and Closed Load Models",
+    "aka": [
+      "arrival-rate executor",
+      "virtual users"
+    ],
+    "group": "quality-security",
+    "definition": "Two ways of generating load: open models send requests at a fixed arrival rate regardless of response time; closed models use a fixed number of users who wait for each response.",
+    "details": [
+      "Closed models reduce load as the system slows, hiding overload.",
+      "Open models reproduce real internet traffic, where requests pile up when the system slows.",
+      "In k6, use constant-arrival-rate or ramping-arrival-rate executors for open models."
+    ],
+    "useCases": [
+      "Load testing public APIs.",
+      "Modelling a fixed pool of batch workers (closed)."
+    ],
+    "related": [
+      "performance-load-testing"
+    ]
+  },
+  {
+    "id": "coordinated-omission",
+    "term": "Coordinated Omission",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A measurement error where a load generator waits for slow responses before sending more requests, so it under-records the latency real users would see during stalls.",
+    "details": [
+      "Named by Gil Tene.",
+      "Avoid with open-model generators that measure from the intended send time.",
+      "Cross-check client results with server-side and real-user latency."
+    ],
+    "useCases": [
+      "Validating load test results.",
+      "Reviewing latency monitoring tools."
+    ],
+    "related": [
+      "performance-load-testing",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "use-method",
+    "term": "USE Method",
+    "aka": [
+      "utilisation, saturation, errors"
+    ],
+    "group": "quality-security",
+    "definition": "Brendan Gregg's method for finding bottlenecks: for every resource, check utilisation, saturation (queued work) and errors.",
+    "details": [
+      "Covers CPU, memory, disks, network, pools, queues and locks.",
+      "The first saturated resource usually explains rising latency.",
+      "Complements the RED method for request-driven services."
+    ],
+    "useCases": [
+      "Diagnosing a load test that fails at a certain throughput.",
+      "Production performance investigations."
+    ],
+    "related": [
+      "performance-load-testing",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "universal-scalability-law",
+    "term": "Universal Scalability Law",
+    "aka": [
+      "USL",
+      "Amdahl's law"
+    ],
+    "group": "quality-security",
+    "definition": "Neil Gunther's model of how throughput scales with load or nodes, accounting for contention (serialised work) and coherency (coordination) costs.",
+    "details": [
+      "Explains why throughput flattens and can even fall as nodes are added.",
+      "Fit it to measured throughput at several instance counts to predict limits.",
+      "Amdahl's law is the special case with contention only."
+    ],
+    "useCases": [
+      "Deciding whether scaling out will help.",
+      "Capacity planning for shared stateful resources."
+    ],
+    "related": [
+      "performance-load-testing",
+      "system-design"
+    ]
   }
 ]
