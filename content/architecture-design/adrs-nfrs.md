@@ -6,7 +6,7 @@ tags: [adr, nfr, documentation]
 level: Architect
 estimatedMinutes: 45
 related: [architecture-patterns, diagrams-c4-uml-sequence, technical-strategy]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-25
 status: complete
 ---
 
@@ -90,6 +90,25 @@ Common categories (ISO/IEC 25010 is the formal model; its 2023 revision renamed 
 | Cost | Infra cost per 1,000 orders < £0.40 |
 | Accessibility | WCAG 2.2 AA for all customer-facing pages |
 
+### Worked example: availability arithmetic
+
+Availability targets only mean something once you account for **dependencies**. Components in series multiply their availabilities; redundant replicas in parallel multiply their *unavailabilities*:
+
+```ts
+const serial = (...a: number[]) => a.reduce((x, y) => x * y, 1);
+const parallel = (a: number, n: number) => 1 - (1 - a) ** n; // independent failures assumed
+
+// Checkout path: CDN → API → payments provider → database
+serial(0.9999, 0.999, 0.9995, 0.999);       // ≈ 0.9974, i.e. ~1.9 h of downtime a month
+// Two API instances across zones, database with a synchronous standby
+serial(0.9999, parallel(0.999, 2), 0.9995, parallel(0.999, 2)); // ≈ 0.9994
+```
+
+Three lessons:
+- **The weakest serial dependency caps you.** Here the payments provider (99.95%) dominates once the rest is redundant. You can't promise 99.99% on top of a 99.95% dependency without a fallback, such as a second provider or queue-and-retry.
+- **Redundancy only helps for independent failures.** Two replicas behind one shared config, one region or one deploy pipeline fail together. Correlated failure is why real numbers are worse than the formula.
+- **Per-month budgets make it concrete:** 99.9% is about 43 minutes, 99.95% about 22 minutes and 99.99% about 4.3 minutes.
+
 ### Quality-attribute scenarios
 
 The SEI's format from *Software Architecture in Practice* makes requirements testable. It has six parts: **source, stimulus, artefact, environment, response, response measure**.
@@ -141,6 +160,31 @@ A lightweight cadence that works in practice:
 2. Record each significant design choice as an ADR that references the scenarios it serves.
 3. Turn scenarios into automated checks where possible, and into SLOs in production.
 4. Revisit at milestones, or when a revisit trigger fires.
+
+### An ADR's life, step by step
+
+```mermaid
+sequenceDiagram
+  participant Eng as Proposing engineer
+  participant Repo as Repo (docs/adr)
+  participant Rev as Affected teams
+  participant Dec as Decider
+  participant CI as CI fitness functions
+  %% step: The engineer writes ADR-0021 with status Proposed and opens a pull request, so the discussion happens where the code lives.
+  %% step: Affected teams review asynchronously. Their comments, including dissent, become part of the record.
+  %% step: The author revises the options and consequences in response, often adding a revisit trigger for the main objection.
+  %% step: The named decider accepts by merging, inside the agreed time-box.
+  %% step: The decision is encoded as a fitness function where possible, for example a dependency rule or a latency budget.
+  %% step: Months later the check fails, or a revisit trigger fires because the context changed.
+  %% step: A new ADR supersedes the old one. The old file only gets its status changed and a link, never a rewrite.
+  Eng->>Repo: PR: ADR-0021 (Proposed)
+  Rev->>Repo: review comments + dissent
+  Eng->>Repo: revise options, add revisit trigger
+  Dec->>Repo: merge = Accepted
+  Repo->>CI: add dependency rule + latency budget
+  CI-->>Eng: rule violated, trigger fired
+  Eng->>Repo: ADR-0034 supersedes ADR-0021
+```
 
 ## When to Use / Trade-offs
 
@@ -588,6 +632,128 @@ Stage-appropriate prioritisation, non-negotiable baselines, revisit triggers in 
 - Kubernetes, microservices and multi-region for a product with 100 users.
 - Treating security as something to add later.
 
+### What's the difference between an ADR and an RFC or design doc? {#adr-vs-rfc}
+
+**Level:** Foundation
+
+**Model answer:**
+- **An RFC or design doc** is a **proposal** used to explore a problem before deciding. It describes the problem, goals and non-goals, a proposed design, alternatives and open questions. It's long-ish, invites wide comment, and its job ends once the decision is made. After that it's a historical artefact and drifts out of date as the implementation evolves.
+- **An ADR** is the **record of the decision**: short, focused on one choice, its context, the options and the consequences. It is immutable and superseded rather than edited, so it stays accurate as history.
+
+They work together: a big change usually starts as an RFC, and the decisions that come out of it are captured as one or more ADRs that link back to the RFC for detail. Small decisions can skip the RFC and go straight to an ADR pull request.
+
+**What the interviewer is looking for:**
+Proposal versus record, the different lifecycles, and how they link.
+
+**Follow-ups:**
+- Should an RFC be updated after implementation?
+- When is an RFC overkill?
+
+**Red flags:**
+- Using one 40-page design doc as both the proposal and the permanent record.
+
+### Your service depends on four others. How do you work out what availability you can promise? {#availability-math}
+
+**Level:** Senior
+
+**Model answer:**
+1. **Map the critical path:** which dependencies must succeed for the user journey to succeed, and which are optional (recommendations, analytics) and can degrade gracefully.
+2. **Multiply the serial dependencies:** 99.9% × 99.95% × 99.99% × 99.9% ≈ 99.74%. That's the ceiling before you add your own failures, and it's lower than any single component.
+3. **Use measured numbers, not SLA pages:** a provider's 99.95% SLA is a credit threshold, not a forecast. Your measured reliability of that dependency is what counts.
+4. **Raise the ceiling with design:**
+   - Remove dependencies from the critical path (asynchronous processing, caching with stale-if-error).
+   - Add redundancy for independent failures (multi-zone).
+   - Add fallbacks (a second provider, accepting orders and retrying payment later).
+   - Set timeouts and circuit breakers so slow dependencies don't cascade.
+5. **Set your SLO** a little inside what the architecture achieves, and the contractual SLA looser still.
+
+Also account for **correlated failures** (a shared region, DNS, an identity provider), which the multiplication hides.
+
+**What the interviewer is looking for:**
+Critical-path thinking, serial multiplication, measured versus contractual numbers, and design levers to improve the ceiling.
+
+**Follow-ups:**
+- How does accepting orders asynchronously change the availability of checkout?
+- Why might two "independent" replicas not be independent?
+
+**Red flags:**
+- Promising your own SLA without accounting for dependencies.
+
+### How do you make cost a first-class non-functional requirement? {#cost-as-nfr}
+
+**Level:** Senior
+
+**Model answer:**
+- **Express it as a unit cost tied to business value:** "infrastructure cost per 1,000 orders below £0.40", or "cost per active tenant per month below £3". Absolute monthly budgets alone hide whether growth is efficient.
+- **Make it measurable:** tag resources by service and tenant, allocate shared costs, and publish a cost dashboard per team (FinOps showback).
+- **Design to it:** cost appears in ADRs as a decision driver alongside latency and availability (for example "active-passive meets the RTO at 40% of the active-active cost").
+- **Check it continuously:** cost anomaly alerts, a cost estimate in infrastructure pull requests (Infracost-style tools), and review when unit cost drifts above the target.
+- **Trade it off explicitly:** sometimes higher cost buys reliability or speed to market. Record that choice rather than letting spend creep.
+
+**What the interviewer is looking for:**
+Unit economics, attribution, cost in design decisions and continuous checks.
+
+**Follow-ups:**
+- The cost per order doubled after a migration. How do you investigate?
+- Who should own the cost NFR: product, engineering or finance?
+
+**Red flags:**
+- Treating cost as finance's problem discovered from the monthly invoice.
+
+### The business sets an RPO of 5 minutes and an RTO of 1 hour for the orders database. What architecture follows? {#rto-rpo-design}
+
+**Level:** Architect
+
+**Model answer:**
+First, the definitions: **RPO** (recovery point objective) is the maximum acceptable data loss, measured in time. **RTO** (recovery time objective) is the maximum time to restore service.
+
+- **RPO 5 min** rules out nightly backups alone. You need continuous protection: point-in-time recovery from write-ahead log or transaction log shipping (managed databases typically offer about 5 minutes or better), or asynchronous replication to another region whose lag is monitored and alerted well inside 5 minutes.
+- **RTO 1 h** rules out "restore a multi-terabyte backup into a new region from scratch" unless it has been tested to finish in time. That points to a **warm standby or pilot light**: a replica database already running in the recovery region, infrastructure defined as code, and application capacity that can scale up quickly.
+- **Active-active** would beat both targets but costs much more and brings conflict-resolution complexity. It isn't justified by these numbers.
+
+Then make it real:
+- runbooks and automated failover steps;
+- DNS or traffic-manager switching;
+- **regular restore and failover drills** that measure the actual RPO and RTO;
+- alerting on replication lag;
+- an ADR that records the choice and its cost.
+
+Also confirm what's in scope: the database alone, or also queues, caches, object storage and third-party integrations? Each needs its own answer.
+
+**What the interviewer is looking for:**
+Correct definitions, mapping the numbers to DR tiers, cost awareness, and insisting on tested drills.
+
+**Follow-ups:**
+- Replication lag spikes to 12 minutes during batch jobs. What do you do?
+- How do you test failover without risking production?
+
+**Red flags:**
+- "We have backups" with no tested restore time.
+
+### A decision recorded two years ago (say, event sourcing for the core domain) now looks wrong. How do you lead reversing it? {#decision-reversal}
+
+**Level:** Architect
+
+**Model answer:**
+1. **Re-read the original ADR fairly.** What context and drivers justified it? Has the context changed (new requirements, team turnover, scale), or was it a mistake? People defend decisions more fiercely when they feel blamed, so frame it as "the context changed".
+2. **Gather evidence:** the costs it's causing now (delivery speed, incidents, onboarding time, operational load) and what it still provides that you'd lose (audit history, temporal queries).
+3. **Explore the options,** including partial ones: keep it for the subdomain where it earns its keep and use CRUD plus an audit log elsewhere, or freeze it and migrate gradually.
+4. **Estimate the reversal cost and risk honestly:** data migration, dual-running, and the opportunity cost of not building features.
+5. **Write a superseding ADR** through the normal review, with the original authors involved if they're still around.
+6. **Plan an incremental migration** (strangler-style) with checkpoints and a way to stop halfway if the value isn't showing up.
+
+The leadership part is sponsorship and narrative: explain why reversing now is good engineering rather than an admission of failure, and protect the people who made the original call.
+
+**What the interviewer is looking for:**
+Evidence-based re-evaluation, partial options, honest cost of reversal, psychological safety, and incremental execution.
+
+**Follow-ups:**
+- The original author is now your VP and disagrees. How do you proceed?
+- How do you know when to stop a migration halfway?
+
+**Red flags:**
+- A big-bang rewrite, or blaming the original decision-makers.
+
 ## Cheat Sheet
 
 ### ADRs
@@ -607,6 +773,15 @@ Stage-appropriate prioritisation, non-negotiable baselines, revisit triggers in 
 - **Fitness function** — automated check that an architectural characteristic still holds.
 - **ATAM** — SEI method to evaluate architecture against prioritised quality scenarios.
 - **ISO/IEC 25010** — the standard quality model listing product quality characteristics.
+
+### Revisit
+- **Parallel availability** — 1 − (1 − a)ⁿ for n independent replicas; two 99.9% replicas ≈ 99.9999% before correlated failure.
+- **Downtime budgets** — 99.9% ≈ 43 min/month, 99.95% ≈ 22 min, 99.99% ≈ 4.3 min.
+- **RPO vs RTO** — maximum data loss (time) vs maximum time to restore service.
+- **DR tiers** — backup and restore → pilot light → warm standby → active-active: rising cost, falling RTO and RPO.
+- **ADR vs RFC** — the RFC proposes and explores; the ADR records the decision and is never rewritten.
+- **Y-statement** — "In the context of…, facing…, we decided for… and neglected…, to achieve…, accepting…".
+- **Unit-cost NFR** — cost per order or tenant, not just a monthly total; it shows whether growth is efficient.
 
 ## Further Reading
 

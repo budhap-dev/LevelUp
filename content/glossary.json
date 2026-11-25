@@ -5297,5 +5297,123 @@
       "responsible-ai",
       "hiring-interviewing"
     ]
+  },
+  {
+    "id": "rpo-rto",
+    "term": "RPO and RTO",
+    "aka": [
+      "Recovery point objective",
+      "Recovery time objective"
+    ],
+    "group": "architecture-design",
+    "definition": "RPO is the maximum acceptable data loss, measured in time; RTO is the maximum acceptable time to restore service after a disruption.",
+    "details": [
+      "They drive the disaster-recovery tier: backup and restore, pilot light, warm standby or active-active.",
+      "Only tested restores and failover drills tell you your real RPO and RTO."
+    ],
+    "useCases": [
+      "Setting DR requirements for a database.",
+      "Comparing the cost of DR options in an ADR."
+    ],
+    "related": [
+      "adrs-nfrs",
+      "cloud-fundamentals",
+      "incident-management"
+    ]
+  },
+  {
+    "id": "inbox-pattern",
+    "term": "Inbox pattern",
+    "aka": [
+      "Idempotent consumer"
+    ],
+    "group": "architecture-design",
+    "definition": "A consumer records each processed message id in the same transaction as its own state change, so redelivered messages are detected and skipped.",
+    "details": [
+      "The partner of the transactional outbox: the outbox gives at-least-once delivery, the inbox makes it effectively-once.",
+      "Prune ids older than the broker's maximum redelivery window."
+    ],
+    "useCases": [
+      "Billing reacting to OrderPaid events without double-invoicing."
+    ],
+    "related": [
+      "architecture-patterns",
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "service-mesh",
+    "term": "Service mesh",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "An infrastructure layer that handles service-to-service (east–west) traffic: mutual TLS, retries, timeouts, traffic splitting and telemetry, without application code changes.",
+    "details": [
+      "Implemented with sidecar proxies or, in newer designs, node-level (sidecar-less) proxies.",
+      "A significant operational investment; justified at real service counts or with zero-trust requirements.",
+      "Keep business logic out of it, as with an API gateway."
+    ],
+    "useCases": [
+      "Enforcing mTLS between all services.",
+      "Canary releases by percentage of traffic."
+    ],
+    "related": [
+      "architecture-patterns",
+      "docker-kubernetes",
+      "networking-fundamentals"
+    ]
+  },
+  {
+    "id": "schema-registry",
+    "term": "Schema registry",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A service that stores versioned event or message schemas and enforces compatibility rules when producers register new versions.",
+    "details": [
+      "Compatibility modes include backward, forward and full.",
+      "Fails a breaking change at publish time or in CI, rather than in a consumer at runtime."
+    ],
+    "useCases": [
+      "Evolving a Kafka event that many teams consume."
+    ],
+    "related": [
+      "messaging-event-streaming",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "unit-of-work",
+    "term": "Unit of Work",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A pattern that tracks the changes made during one business operation and commits them together in a single transaction.",
+    "details": [
+      "ORMs such as Entity Framework and Hibernate already implement it, together with repositories.",
+      "Wrapping an ORM in another generic unit of work usually adds layers without benefit."
+    ],
+    "useCases": [
+      "Saving an aggregate and its outbox row atomically."
+    ],
+    "related": [
+      "design-patterns",
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "arc42",
+    "term": "arc42",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A free template for architecture documentation with 12 sections, from goals and constraints through views, decisions and quality requirements to risks and a glossary.",
+    "details": [
+      "Meant to be used selectively: fill in only the sections that help.",
+      "C4 diagrams fit its context, building-block and deployment views; ADRs fit its decisions section."
+    ],
+    "useCases": [
+      "Structuring the docs/architecture folder of a new system."
+    ],
+    "related": [
+      "diagrams-c4-uml-sequence",
+      "adrs-nfrs"
+    ]
   }
 ]

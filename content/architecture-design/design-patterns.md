@@ -6,7 +6,7 @@ tags: [gof, patterns]
 level: Senior
 estimatedMinutes: 75
 related: [solid-clean-code, architecture-patterns]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-25
 status: complete
 ---
 
@@ -33,8 +33,8 @@ status: complete
 ```ts
 type ShippingStrategy = (order: Order) => Money;
 
-const standard: ShippingStrategy = (o) => (o.total.minor >= 50_00 ? Money.zero('GBP') : Money.of(3_95n, 'GBP'));
-const express: ShippingStrategy = () => Money.of(9_95n, 'GBP');
+const standard: ShippingStrategy = (o) => (o.total.minor >= 5000 ? Money.zero('GBP') : Money.of(395, 'GBP'));
+const express: ShippingStrategy = () => Money.of(995, 'GBP');
 const strategies: Record<ShippingMethod, ShippingStrategy> = { standard, express };
 
 export const shippingCost = (order: Order) => strategies[order.shippingMethod](order);
@@ -99,12 +99,81 @@ export function withCache(repo: ProductRepository, cache: Cache): ProductReposit
 }
 ```
 
+### Decorators in motion
+
+Each wrapper has the same interface as the thing it wraps, so they stack. A call travels inward through every layer and the result travels back out. That's why **order matters**: here the metrics layer sees the time the cache saves, and retries happen inside the cache, so a cached value is never retried.
+
+```mermaid
+sequenceDiagram
+  participant C as Caller
+  participant M as withMetrics
+  participant Ca as withCache
+  participant R as withRetry
+  participant Repo as Postgres repo
+  %% step: The caller asks for product 42. It sees one ProductRepository, not four layers.
+  %% step: The metrics layer starts a timer and passes the call inward unchanged.
+  %% step: The cache misses, so it delegates to the next layer.
+  %% step: The retry layer makes the first attempt against the real repository.
+  %% step: Postgres times out. A transient error, worth retrying.
+  %% step: The retry layer backs off with jitter and tries again.
+  %% step: The second attempt succeeds.
+  %% step: The cache stores the product for 300 seconds on the way out.
+  %% step: The cache returns the product to the metrics layer.
+  %% step: The metrics layer records latency, including the retry, and returns the product to the caller.
+  C->>M: get(42)
+  M->>Ca: get(42)
+  Ca->>R: get(42), cache miss
+  R->>Repo: attempt 1
+  Repo-->>R: timeout
+  R->>Repo: attempt 2 after backoff
+  Repo-->>R: product 42
+  R-->>Ca: product 42, cache set (TTL 300 s)
+  Ca-->>M: product 42
+  M-->>C: product 42 (latency recorded)
+```
+
 ### Behavioural patterns: command, state, template method, chain of responsibility
 
 - **Command:** encapsulate a request as an object — queueing, retries, undo/redo, audit logs.
 - **State:** behaviour depends on internal state; each state is an object (or explicit state machine) defining allowed transitions.
 - **Template method:** a fixed algorithm skeleton with overridable steps (in TS often replaced by passing functions).
 - **Chain of responsibility:** pass a request along handlers until one handles it — HTTP middleware pipelines are the everyday example.
+
+### Worked example: visitor without the boilerplate
+
+The classic visitor lets you add operations over a fixed set of types without editing them, at the cost of double dispatch and `accept` methods everywhere. In TypeScript, a **discriminated union plus an exhaustive switch** gives the same benefit, and the compiler tells you every place to update when you add a variant:
+
+```ts
+type Discount =
+  | { kind: 'percentage'; percent: number }
+  | { kind: 'fixed'; amountMinor: number }
+  | { kind: 'buyXgetY'; buy: number; free: number; unitPriceMinor: number };
+
+function assertNever(x: never): never {
+  throw new Error(`Unhandled variant: ${JSON.stringify(x)}`);
+}
+
+// One "visitor" = one function. Adding an operation never touches the types.
+function savingMinor(d: Discount, subtotalMinor: number, qty: number): number {
+  switch (d.kind) {
+    case 'percentage': return Math.round((subtotalMinor * d.percent) / 100);
+    case 'fixed': return Math.min(d.amountMinor, subtotalMinor);
+    case 'buyXgetY': return Math.floor(qty / (d.buy + d.free)) * d.free * d.unitPriceMinor;
+    default: return assertNever(d); // add a 4th kind and this line stops compiling
+  }
+}
+
+function describe(d: Discount): string {
+  switch (d.kind) {
+    case 'percentage': return `${d.percent}% off`;
+    case 'fixed': return `£${(d.amountMinor / 100).toFixed(2)} off`;
+    case 'buyXgetY': return `Buy ${d.buy}, get ${d.free} free`;
+    default: return assertNever(d);
+  }
+}
+```
+
+The trade-off flips depending on what changes more often. If you add **operations** often, unions and switches are ideal. If you add **types** often (plugins from other teams), polymorphism, where each type implements the interface, scales better. This is the "expression problem".
 
 ### Singleton — and why it's usually avoided
 
@@ -561,6 +630,149 @@ Contextual documentation, examples, ADRs, reviews as teaching, automated guardra
 **Red flags:**
 - Mandating a pattern catalogue without context.
 
+### What is the composite pattern, and where does it show up? {#composite-pattern}
+
+**Level:** Foundation
+
+**Model answer:**
+Composite lets you treat **individual objects and groups of objects uniformly**: a leaf and a container implement the same interface, and the container delegates to its children. Clients don't need to know whether they're dealing with one item or a tree.
+
+Everyday examples:
+- **UI component trees:** React elements, the DOM and layout engines.
+- **Product bundles:** a price is computed the same way for a single SKU and for a bundle of SKUs and sub-bundles.
+- **File systems:** files and folders both have a size, and a folder's size is the sum of its children.
+- **Organisation charts, permission groups, and expression trees** in rule engines and query builders.
+
+```ts
+type Item = { kind: 'sku'; priceMinor: number } | { kind: 'bundle'; items: Item[]; discountPercent: number };
+const price = (i: Item): number =>
+  i.kind === 'sku' ? i.priceMinor : Math.round(i.items.reduce((s, c) => s + price(c), 0) * (1 - i.discountPercent / 100));
+```
+
+Watch for deep recursion on very large trees, cycles if the structure can be user-defined, and operations that only make sense for leaves.
+
+**What the interviewer is looking for:**
+The uniform-treatment idea, recognisable examples and practical caveats.
+
+**Follow-ups:**
+- How would you prevent cycles in a user-built group hierarchy?
+- How does composite combine with visitor?
+
+**Red flags:**
+- Type checks at every call site to tell leaves from containers.
+
+### When do Repository and Unit of Work help, and when do they get in the way? {#repository-unit-of-work}
+
+**Level:** Senior
+
+**Model answer:**
+- **Repository** gives the domain a **collection-like interface** for aggregates (`orders.get(id)`, `orders.save(order)`), hiding the persistence technology. It's the port in hexagonal architecture.
+- **Unit of Work** tracks the changes made during a business operation and commits them in **one transaction**, in the right order.
+
+They help when:
+- there is a rich domain model with invariants, and you want use cases testable with in-memory fakes;
+- you need aggregate-level loading rules (load the whole aggregate, save it atomically);
+- persistence may change, or several stores are involved.
+
+They get in the way when:
+- the ORM already *is* a repository plus unit of work (Entity Framework's `DbContext`, Hibernate's session) and you wrap it in a thin generic `IRepository<T>` that only forwards calls. That adds layers and hides useful features (projections, eager loading);
+- the service is mostly CRUD or reporting. Query directly, or use a query object, rather than forcing reads through aggregate repositories;
+- generic repositories leak queries (`find(predicate)`), so the abstraction no longer hides anything.
+
+Rule of thumb: one repository **per aggregate root**, with domain-named methods (`findOverdueInvoices`), and a separate read path for queries (a light form of CQRS).
+
+**What the interviewer is looking for:**
+Purpose, aggregate alignment, awareness that ORMs already implement these patterns, and separate read paths.
+
+**Follow-ups:**
+- How do you test a repository implementation?
+- Where does the transaction boundary live in a hexagonal application?
+
+**Red flags:**
+- A generic `Repository<T>` with `getAll()` wrapping every table "for testability".
+
+### How would you design a middleware pipeline, and why does the order of middleware matter? {#middleware-pipeline}
+
+**Level:** Senior
+
+**Model answer:**
+A pipeline is **chain of responsibility plus decorator**: each middleware receives the request and a `next` function, can act before and after calling `next`, or can short-circuit by not calling it.
+
+```ts
+type Handler = (req: Req) => Promise<Res>;
+type Middleware = (next: Handler) => Handler;
+const compose = (...mws: Middleware[]) => (h: Handler) => mws.reduceRight((acc, mw) => mw(acc), h);
+const app = compose(requestId, logging, errors, auth, rateLimit, validate)(handler);
+```
+
+Order is behaviour:
+- **Request id and tracing first,** so everything after them, including errors, is correlated.
+- **The error handler outside the business layers,** so it catches their failures, but inside logging, so the error response is logged.
+- **Auth before rate limiting by user** (you need the identity), but a coarse IP rate limit *before* auth protects the auth service from floods.
+- **Validation before the handler,** and **caching** placed where it can short-circuit expensive work but after authorisation, so you never serve one user's cached data to another.
+- **Compression and response transforms** on the way out.
+
+Keep each middleware single-purpose, make it testable in isolation, and document the order as a deliberate decision.
+
+**What the interviewer is looking for:**
+The composition mechanics, before/after/short-circuit, and concrete ordering reasoning, especially around caching and auth.
+
+**Follow-ups:**
+- Where would you put a response cache relative to authentication, and why?
+- How do you test the composed pipeline rather than each middleware?
+
+**Red flags:**
+- Caching before authorisation, or treating the order as arbitrary.
+
+### How do you design error handling across a large codebase: exceptions, Result types, or both? {#error-handling-design}
+
+**Level:** Architect
+
+**Model answer:**
+Separate **expected domain outcomes** from **unexpected failures**:
+- **Expected outcomes** (insufficient funds, validation failure, item out of stock) are part of the business contract. Model them explicitly: a `Result<T, E>` or a discriminated union return type, so callers *must* handle them and the compiler helps. They're not exceptional, and using exceptions for them hides control flow.
+- **Unexpected failures** (bugs, a database down, broken invariants) should throw. Let them propagate to a boundary (the HTTP middleware, the message consumer) that logs with context, maps them to a 500 or a retry, and keeps the process healthy.
+
+Conventions that make this work at scale:
+- a small set of **error types with stable codes** that map to HTTP status codes and to problem details (RFC 9457) at the edge;
+- **never swallow errors**: wrap them with context (`cause`) when rethrowing;
+- **retryable versus non-retryable** marked explicitly, so retry decorators and message consumers behave correctly;
+- **no exceptions across asynchronous boundaries without handling**: unhandled promise rejections crash Node.js by default;
+- **logging once**, at the boundary, not at every layer (avoids duplicated stack traces).
+
+**What the interviewer is looking for:**
+Expected versus unexpected, type-checked domain outcomes, boundary handling, stable error codes, and the retry classification.
+
+**Follow-ups:**
+- How do Result types interact with async/await ergonomics?
+- How would you migrate a codebase that throws strings everywhere?
+
+**Red flags:**
+- Exceptions for control flow everywhere, or catching and ignoring errors.
+
+### The business keeps adding pricing and eligibility rules. Strategy pattern, rules engine, or a DSL? {#rules-engine-vs-code}
+
+**Level:** Architect
+
+**Model answer:**
+It depends on **who changes the rules, how often, and how risky a mistake is**:
+- **Code plus strategy or specification patterns:** engineers change the rules and ship through the pipeline. You get type safety, tests, code review and versioning for free. It's the best default when rules change weekly or less and need engineering judgement.
+- **Configuration-driven rules** (tables of thresholds, eligibility matrices in a database with an admin UI): for parameters that change often (prices, limits, regional toggles) while the logic stays the same. Validate configuration changes and keep an audit history.
+- **A rules engine or decision tables** (DMN-based tools, Drools, cloud decision services): when business analysts must author complex logic themselves, at high frequency, under compliance audit. You pay in tooling, testing difficulty, performance and a second "programming language" that's hard to version and debug.
+- **A custom DSL:** rarely worth it. Only when the domain is stable, the authors are expert, and nothing off-the-shelf fits.
+
+Whatever you choose, give rules **tests and an audit trail**: every rule change versioned, with a record of which rule version produced each decision (needed for disputes and regulators). Also provide a **simulation mode** that replays last month's orders against proposed rules before they go live.
+
+**What the interviewer is looking for:**
+A decision driven by authorship, change rate and risk; the hidden costs of rules engines; and testing, audit and simulation whichever approach is chosen.
+
+**Follow-ups:**
+- How do you test rules that business users edit in production?
+- How would you migrate 400 hard-coded rules into configuration?
+
+**Red flags:**
+- Buying a rules engine because "the business wants flexibility", with no plan for testing or ownership.
+
 ## Cheat Sheet
 
 ### Families
@@ -583,6 +795,15 @@ Contextual documentation, examples, ADRs, reviews as teaching, automated guardra
 - **Dependency injection** — receive dependencies; wire at the composition root.
 - **Rule of three** — refactor towards a pattern when variation actually appears.
 - **Wrong abstraction** — costlier than duplication; patterns must earn their indirection.
+
+### Revisit
+- **Composite** — leaves and containers share one interface; containers delegate to children.
+- **Repository** — collection-like access per aggregate root; don't wrap an ORM in a generic `Repository<T>`.
+- **Unit of Work** — tracks changes in one business operation and commits them in one transaction.
+- **Exhaustive switch** — discriminated union + `never` default; the compiler flags every unhandled variant.
+- **Expression problem** — unions make new operations cheap; polymorphism makes new types cheap.
+- **Middleware order** — tracing first, error handler outside business layers, caching after authorisation.
+- **Result vs exception** — expected domain outcomes as typed results; unexpected failures throw to a boundary.
 
 ## Further Reading
 
