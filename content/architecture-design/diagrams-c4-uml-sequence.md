@@ -6,7 +6,7 @@ tags: [c4, uml, documentation]
 level: Senior
 estimatedMinutes: 45
 related: [adrs-nfrs, architecture-patterns]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-25
 status: complete
 ---
 
@@ -84,6 +84,40 @@ flowchart TB
 
 Mermaid also has dedicated `C4Context` and `C4Container` syntax (PlantUML-compatible, with limited control over layout). Structurizr DSL lets you define the **model once** and generate several consistent views from it, which matters once you have many diagrams.
 
+### Worked example: one model, many views (Structurizr DSL)
+
+Hand-drawn diagrams drift apart because each one repeats the model. Structurizr DSL separates the **model** (elements and relationships, defined once) from the **views** (which subset to show at which zoom level):
+
+```text
+workspace "Order Platform" {
+  model {
+    customer = person "Customer"
+    psp = softwareSystem "Payment provider" "External"
+    orders = softwareSystem "Order Platform" {
+      spa = container "Web shop" "React SPA"
+      api = container "Order API" "Node.js"
+      db = container "Orders DB" "PostgreSQL" "Database"
+      bus = container "Order events" "Kafka topics" "Queue"
+    }
+    customer -> spa "Browses and orders" "HTTPS"
+    spa -> api "Calls" "HTTPS/JSON"
+    api -> db "Reads and writes" "SQL"
+    api -> psp "Authorises payments" "HTTPS"
+    api -> bus "Publishes OrderPlaced" "Kafka"
+  }
+  views {
+    systemContext orders "Context" { include * autolayout lr }
+    container orders "Containers" { include * autolayout lr }
+    styles {
+      element "Database" { shape cylinder }
+      element "Queue" { shape pipe }
+    }
+  }
+}
+```
+
+Rename "Order API" once and every view updates. Relationships declared at container level are implied at context level, so the context diagram automatically shows "Customer uses Order Platform". The workspace file lives in Git and is reviewed like code.
+
 ### Sequence diagrams
 
 Sequence diagrams show **interactions over time** between participants. Use them for:
@@ -99,6 +133,17 @@ sequenceDiagram
   participant API as Order API
   participant PSP as Payment provider
   participant DB as Orders DB
+  %% step: The client sends the order with an idempotency key, so a retry can never create a second order.
+  %% step: The API records the order as PENDING before touching money, so there is always a row to reconcile.
+  %% step: It asks the payment provider to authorise, passing the same key.
+  %% step: Happy path: the provider authorises.
+  %% step: The order is confirmed.
+  %% step: The client gets 201 Created.
+  %% step: Failure path: the provider doesn't answer within 3 seconds. The API can't know whether the charge happened.
+  %% step: It retries with the same key. Without the key, this retry could charge the customer twice.
+  %% step: The provider recognises the key and returns the original result instead of charging again.
+  %% step: The order is confirmed exactly once.
+  %% step: The client sees the same outcome as on the happy path. This is why the diagram shows the failure branch.
   C->>API: POST /orders (Idempotency-Key k1)
   API->>DB: insert order PENDING
   API->>PSP: authorise payment (key k1)
@@ -611,6 +656,138 @@ Understanding of event storming as a collaborative discovery method and how its 
 - Treating it as a diagramming notation rather than a workshop.
 - Running it with engineers only.
 
+### How do you read the notation in a sequence diagram? {#sequence-notation}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Participants** across the top, with **lifelines** running down. Time flows downwards.
+- **Solid line, filled arrowhead:** a synchronous call (the caller waits). In Mermaid: `->>`.
+- **Dashed line:** a reply or return value (`-->>`).
+- **Open arrowhead or a dedicated async style:** an asynchronous message the sender doesn't wait for. In Mermaid: `-)`.
+- **A cross at the end:** a lost or failed message, such as a timeout (`-x` or `--x`).
+- **Activation bars:** the period a participant is busy handling a call.
+- **Combined fragments:** `alt`/`else` for branches, `opt` for optional steps, `loop` for repetition, `par` for parallel work, and `critical`/`break` for special cases.
+- **Notes** for invariants, timing or state ("order is now PENDING").
+- **autonumber** numbers the messages, which helps when discussing "step 7".
+
+Readers should be able to answer: who starts the interaction, who waits, what happens if a step fails, and what runs in parallel.
+
+**What the interviewer is looking for:**
+Accurate notation for sync, async, reply and failure, and confident use of fragments.
+
+**Follow-ups:**
+- How would you show a message that is published once and consumed by three services?
+- When would you split one sequence diagram into two?
+
+**Red flags:**
+- Using the same arrow for synchronous calls and asynchronous messages.
+
+### What should a deployment view show, and who is it for? {#deployment-view}
+
+**Level:** Senior
+
+**Model answer:**
+A deployment view maps **containers onto infrastructure**. It's for operations and SRE, security, and engineers working on resilience or cost. Include:
+- **Environments and regions,** with availability zones where they matter for resilience.
+- **Runtime platforms:** Kubernetes clusters and namespaces, serverless functions, managed services (the database service, the queue service).
+- **Instances and replication:** how many replicas, the primary and replica databases, active-active or active-passive.
+- **Network boundaries:** VNets or VPCs, subnets, private endpoints, ingress and egress paths, firewalls and WAFs, and where TLS terminates.
+- **Failover paths:** what takes over when a zone or region fails, and how traffic is switched (DNS, global load balancer).
+- **External dependencies,** with their regions and SLAs.
+
+Leave out application logic. A good test is whether an on-call engineer can answer "if zone B dies, what breaks?" and "how does traffic reach the database?" from it. Generate as much as possible from infrastructure-as-code state, and keep it on the same C4 vocabulary so it links to the container view.
+
+**What the interviewer is looking for:**
+The audience, failure-oriented content, network and trust boundaries, and generation from IaC.
+
+**Follow-ups:**
+- How would you show a multi-region active-passive setup?
+- Where do secrets and identity appear on this view?
+
+**Red flags:**
+- A deployment view that is a screenshot of the cloud console's resource list.
+
+### What diagrams should an on-call engineer have during an incident, and what makes them useful under pressure? {#incident-diagrams}
+
+**Level:** Senior
+
+**Model answer:**
+Under pressure, people need diagrams that answer **"what depends on what, and where can it break?"**:
+- **A dependency map for the service:** upstream callers and downstream dependencies, sync versus async, with links to each dependency's dashboard and owner.
+- **Critical-flow sequence diagrams with the failure branches:** where the retries, timeouts, queues and dead-letter queues are, so responders know where work piles up.
+- **The data flow** for the affected business process (who produces and who consumes the settlement events).
+- **The deployment view,** for zone, region or network incidents.
+
+What makes them useful:
+- **Linked from the runbook and the alert**, not buried in a wiki.
+- **Current:** generated from the service catalogue or tracing where possible, with a last-reviewed date.
+- **Small:** one question per diagram. A 60-box landscape doesn't help at 3 a.m.
+- **Annotated with operational facts:** timeouts, queue names, feature flags and the kill switches available.
+
+Review them in post-incident reviews: "did the diagrams help, and were they right?"
+
+**What the interviewer is looking for:**
+An incident-oriented selection, failure paths, linking from alerts and runbooks, freshness, and feedback from incidents.
+
+**Follow-ups:**
+- How would you get these diagrams for 150 services without asking every team to draw them?
+- What's the risk of auto-generated dependency maps?
+
+**Red flags:**
+- "The architecture diagram is on Confluence somewhere."
+
+### How do C4 diagrams, arc42 and an ADR log fit together in one documentation set? {#documentation-set}
+
+**Level:** Architect
+
+**Model answer:**
+They answer different questions, and together they form a lightweight but complete set:
+- **arc42** is the **structure**: a template with 12 sections (introduction and goals, constraints, context, solution strategy, building blocks, runtime view, deployment view, cross-cutting concepts, decisions, quality requirements, risks and technical debt, glossary). It tells you *what* to document.
+- **C4** provides the **diagrams** for several of those sections: context (section 3), building blocks (container and component, section 5), deployment (section 7). Sequence diagrams go in the runtime view (section 6).
+- **ADRs** are the **decisions** section (section 9): one record per decision rather than a prose chapter that gets rewritten.
+- **Quality scenarios** (section 10) link to the ADRs that address them and to the SLOs and fitness functions that verify them.
+
+In practice: a `docs/architecture/` folder in the repository, Markdown files per arc42 section (most of them short), diagrams as code embedded in them, and the ADR directory alongside. Skip the sections that add nothing for your system. arc42 is explicitly meant to be used selectively.
+
+**What the interviewer is looking for:**
+Knowing what each tool contributes (structure, visuals, decisions), how they map to each other, and pragmatic tailoring.
+
+**Follow-ups:**
+- Which arc42 sections would you fill in first for a new service?
+- How do you avoid the documentation set going stale?
+
+**Red flags:**
+- Treating them as competing alternatives, or filling in every section by default.
+
+### Can you generate architecture diagrams from runtime data instead of drawing them? What are the limits? {#runtime-generated-views}
+
+**Level:** Architect
+
+**Model answer:**
+Partly, and it's a powerful complement:
+- **Distributed tracing** (OpenTelemetry service graphs) shows which services actually call which, with request rates, latency and error rates per edge. It's always current, and it reveals undocumented dependencies.
+- **Broker metadata** shows the producers and consumers per topic, and **infrastructure state** (Terraform, cloud APIs) shows the deployment topology.
+- **The service catalogue** adds ownership and tier.
+
+Limits:
+- **Only observed behaviour:** rarely used paths (month-end batch jobs, disaster-recovery flows) may be missing from the sampled traces.
+- **No intent:** it shows that A calls B, not *why*, whether it should, or what the target architecture is.
+- **Too much detail:** every health check and sidecar appears. You need filtering and grouping into C4 containers and systems.
+- **Instrumentation gaps:** uninstrumented services and third parties are blind spots.
+
+The best setup combines both: a **declared model** (Structurizr, or catalogue metadata) for intent and target state, **observed graphs** for reality, and an automated **diff** between them that flags undeclared dependencies or declared ones that never carry traffic.
+
+**What the interviewer is looking for:**
+The concrete sources, honest limits, and the declared-versus-observed reconciliation idea.
+
+**Follow-ups:**
+- An undeclared dependency shows up in traces. What process kicks in?
+- How would you handle sampling when building the graph?
+
+**Red flags:**
+- Believing generated diagrams make design documentation unnecessary.
+
 ## Cheat Sheet
 
 ### C4
@@ -633,6 +810,15 @@ Understanding of event storming as a collaborative discovery method and how its 
 - **Data-flow diagram** — processes, stores, flows and trust boundaries; the basis for STRIDE threat modelling.
 - **Transition architecture** — intermediate states of a migration; where the real risk lives.
 - **Event storming** — collaborative sticky-note workshop that discovers domain events and boundaries.
+
+### Revisit
+- **Sync vs async in Mermaid** — `->>` call, `-->>` reply, `-)` async message, `-x` lost message.
+- **Combined fragments** — alt/else, opt, loop, par, critical and break make branches and failures explicit.
+- **Structurizr workspace** — model defined once, many views generated; renames propagate everywhere.
+- **Deployment view** — containers mapped to regions, zones, clusters and networks; answers "if zone B dies, what breaks?"
+- **arc42** — 12-section documentation template; C4 fills its views, ADRs fill its decisions section.
+- **Declared vs observed architecture** — compare the model with trace-derived service graphs and flag the differences.
+- **Trust boundary** — a line on a data-flow diagram where the level of trust changes; threats cluster there.
 
 ## Further Reading
 

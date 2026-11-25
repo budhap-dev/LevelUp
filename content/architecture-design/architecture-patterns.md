@@ -6,7 +6,7 @@ tags: [microservices, event-driven, modular-monolith]
 level: Architect
 estimatedMinutes: 90
 related: [system-design, domain-driven-design, messaging-event-streaming, adrs-nfrs]
-lastReviewed: 2026-11-20
+lastReviewed: 2026-11-25
 status: complete
 ---
 
@@ -141,6 +141,46 @@ await db.transaction(async (tx) => {
 // so consumers must be idempotent (dedupe on the event id).
 ```
 
+### Worked example: the relay and the idempotent consumer
+
+The outbox only works with its two partners: a **relay** that publishes rows at least once, and **consumers** that tolerate duplicates. A polling relay in PostgreSQL can run several instances safely with `SKIP LOCKED`:
+
+```ts
+// Relay: several instances can run; each claims a different batch.
+async function relayOnce(db: Db, broker: Broker) {
+  await db.transaction(async (tx) => {
+    const rows = await tx.query(
+      `SELECT id, aggregate_id, type, payload FROM outbox
+       WHERE published_at IS NULL ORDER BY occurred_at LIMIT 100
+       FOR UPDATE SKIP LOCKED`,
+    );
+    for (const r of rows) {
+      // Key by aggregate id: events for one order stay ordered within a partition.
+      await broker.publish(r.type, { key: r.aggregate_id, id: r.id, payload: r.payload });
+    }
+    await tx.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1)', [rows.map((r) => r.id)]);
+  });
+  // Crash after publish, before commit: rows are re-sent next time. That's at-least-once, by design.
+}
+
+// Consumer: the "inbox" makes processing idempotent.
+async function onOrderPaid(db: Db, event: { id: string; payload: { orderId: string; amountMinor: number } }) {
+  await db.transaction(async (tx) => {
+    const fresh = await tx.query(
+      'INSERT INTO inbox (event_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING event_id',
+      [event.id],
+    );
+    if (fresh.length === 0) return; // duplicate delivery, already handled
+    await tx.query('INSERT INTO invoices (order_id, amount_minor) VALUES ($1, $2)', [
+      event.payload.orderId,
+      event.payload.amountMinor,
+    ]);
+  });
+}
+```
+
+A scheduled job deletes published outbox rows (and inbox rows older than the broker's maximum redelivery window), so neither table grows without bound.
+
 ### Sagas: choreography vs orchestration
 
 Distributed business transactions are modelled as a **saga**: a sequence of local transactions with **compensating actions** on failure.
@@ -240,6 +280,17 @@ sequenceDiagram
   participant I as Inventory
   participant P as Payments
   participant S as Shipping
+  %% step: The workflow starts the saga by reserving stock: a local transaction inside Inventory.
+  %% step: Inventory confirms. The workflow records a compensation (release stock) before moving on.
+  %% step: Next it charges the card through Payments.
+  %% step: The charge succeeds. The compensation "refund pi_123" goes to the front of the list.
+  %% step: Then it asks Shipping to schedule the shipment.
+  %% step: Shipping fails: no carrier capacity. There is no distributed rollback, so the saga must compensate.
+  %% step: Compensations run in reverse order, newest first, and each is a business action, not a database rollback.
+  %% step: Refund the payment. This must be idempotent, because the engine may retry it after a crash.
+  %% step: Payments confirms the refund.
+  %% step: Release the reserved stock.
+  %% step: Inventory confirms. The saga ends in a consistent, compensated state, and the order is marked failed.
 
   O->>I: Reserve stock
   I-->>O: Reserved
@@ -684,6 +735,135 @@ Workload-driven reasoning with cost maths, awareness of limits, and no ideology.
 - "Serverless is always cheaper."
 - Citing the Prime Video case as proof that serverless or microservices are bad.
 
+### What is a Backend for Frontend (BFF), and when is it worth having one? {#bff-pattern}
+
+**Level:** Foundation
+
+**Model answer:**
+A **BFF** is a server-side API built for **one client experience**: the web app, the iOS app, or a partner integration. It aggregates calls to downstream services, shapes responses to exactly what that UI needs, and handles client-specific concerns such as session cookies for the web, payload size for mobile, and API versions that old app releases still call.
+
+Worth it when:
+- different clients need very different data shapes or call patterns (a mobile screen needs one round-trip, not six);
+- you'd otherwise push aggregation logic into a general-purpose API, bloating it for everyone;
+- the frontend team can own the BFF, so UI changes don't wait on backend teams;
+- you want tokens kept server-side for the web (the BFF holds them and the browser gets an HttpOnly session cookie).
+
+Not worth it with a single client and a simple API, or when BFFs start duplicating business logic. Keep them to composition and presentation; domain rules stay in the services.
+
+**What the interviewer is looking for:**
+Client-specific composition, team ownership, and the boundary that keeps business logic out of BFFs.
+
+**Follow-ups:**
+- How does a BFF differ from a general API gateway?
+- Would GraphQL replace the need for BFFs?
+
+**Red flags:**
+- One BFF shared by all clients (that's just a gateway), or BFFs containing pricing rules.
+
+### What belongs in an API gateway, and what belongs in a service mesh? {#gateway-vs-mesh}
+
+**Level:** Senior
+
+**Model answer:**
+- **API gateway (north–south traffic, from clients into the system):**
+  - external authentication and token validation, coarse authorisation;
+  - rate limiting and quotas per client or API key;
+  - request routing and versioning, TLS termination, WAF integration;
+  - request/response transformation for external contracts, and developer-portal concerns.
+- **Service mesh (east–west traffic, between services):**
+  - mutual TLS and workload identity, with service-to-service authorisation policies;
+  - retries, timeouts and circuit breaking at the network layer;
+  - traffic splitting for canaries, and uniform telemetry (metrics, traces) without code changes.
+
+Overlap exists (both can do retries and routing). The usual guidance is to keep **business logic out of both**: a gateway that orchestrates domain calls becomes a monolith in the wrong place. And a mesh is a serious operational investment, only justified at real service counts or when you have zero-trust requirements. Many systems need a gateway long before they need a mesh.
+
+**What the interviewer is looking for:**
+North–south versus east–west, clear responsibilities, no business logic, and a cost-aware view of the mesh.
+
+**Follow-ups:**
+- Should retries live in the mesh or in application code? What if both retry?
+- What did "ambient" or sidecar-less meshes change?
+
+**Red flags:**
+- Putting orchestration or business rules in the gateway, or adopting a mesh for five services.
+
+### Ten consumers depend on your `OrderPlaced` event. How do you evolve its schema safely? {#event-versioning}
+
+**Level:** Senior
+
+**Model answer:**
+Treat the event as a **public API** with a compatibility policy:
+- **Additive changes only** within a version: add optional fields. Never remove fields, rename them or change their meaning or type.
+- **Tolerant readers:** consumers ignore unknown fields and don't fail on missing optional ones.
+- **A schema registry** (Confluent, Apicurio, Azure Schema Registry) with compatibility checks (backward or full) enforced at publish time and in CI, so a breaking change fails the build.
+- **Breaking changes become a new event type or version** (`OrderPlaced.v2`). Publish both during a migration window, track which consumers have moved (consumer-group lag on v1, or the registry's consumer metadata), then retire v1.
+- **Document it** in AsyncAPI, with an owner and a changelog.
+- **Semantic changes are breaking too:** changing `amount` from pounds to pence with the same type is the most dangerous change of all, because nothing fails loudly.
+
+For event-sourced stores, old events are immutable, so use **upcasters** that translate old versions on read.
+
+**What the interviewer is looking for:**
+A compatibility policy, tolerant readers, registry enforcement, a dual-publish migration, and awareness of semantic breaks.
+
+**Follow-ups:**
+- How do you find out who consumes an event?
+- Backward versus forward compatibility: which do you need when consumers upgrade first?
+
+**Red flags:**
+- "We'll tell everyone on Slack and change it on Friday."
+
+### You're extracting a module from a monolith, but five other modules read and write its tables. How do you split the data? {#splitting-shared-data}
+
+**Level:** Architect
+
+**Model answer:**
+Do it in stages, and make each one reversible:
+1. **Map the access:** query logs and code search to list every read and write of those tables, by module.
+2. **Establish ownership in the monolith first:** route all writes through the owning module's API (in-process). Other modules stop writing directly. This is the hardest step and needs no new infrastructure.
+3. **Replace foreign reads:** for each reader, choose between an API call (when it needs fresh data and can tolerate the coupling) and a **local read model** updated by events or CDC (for reporting or high-volume reads). Remove cross-module joins.
+4. **Move the tables:** give the extracted service its own schema or database. Run CDC or dual-writes from old to new during the transition, verify with reconciliation jobs, then switch the reads and finally the writes.
+5. **Break foreign keys** across the boundary and replace them with ids plus validation through events. Some invariants become eventually consistent, so agree with the business what that means (for example, an order may briefly reference a just-deleted product).
+6. **Decommission** the old tables once the reconciliation runs clean and nothing reads them (prove it with database audit logs).
+
+Expect step 2 to take longest. The network split is the easy part once ownership is real.
+
+**What the interviewer is looking for:**
+Ownership before distribution, a choice of read strategies, CDC with reconciliation, explicit handling of lost transactional invariants, and evidence-based decommissioning.
+
+**Follow-ups:**
+- A report joins across six of these tables. Where does it live afterwards?
+- How do you keep IDs consistent during dual-running?
+
+**Red flags:**
+- Copying the tables to a new database on day one and pointing the service at them.
+
+### What platform capabilities must exist before an organisation scales to dozens of microservices? {#platform-prerequisites}
+
+**Level:** Architect
+
+**Model answer:**
+Without these, every team re-solves them badly and productivity drops:
+- **Paved-road service template:** repository scaffold with build, tests, linting, container image, health checks and standard libraries for logging and tracing.
+- **CI/CD per service:** independent pipelines, progressive delivery (canary or blue-green) and automated rollback.
+- **Observability by default:** structured logs, RED metrics, distributed tracing with propagated context, and dashboards and alerts generated from the template.
+- **Infrastructure as code** and self-service provisioning for databases, queues and secrets, within guardrails.
+- **Service catalogue:** ownership, dependencies, docs, scorecards and on-call contacts (Backstage or similar).
+- **Communication standards:** API guidelines, event schema registry, contract testing, and resilience defaults (timeouts, retries).
+- **Security baseline:** workload identity, secret management, image scanning, and policy as code.
+- **Operational practice:** on-call per team, incident process, SLOs per service.
+
+Sequencing matters: extract the first two or three services *while* building these, but don't go wider until the template and pipeline make a new service cheap (hours, not weeks). Measure it: time to first deploy for a new service, and the DORA metrics per team.
+
+**What the interviewer is looking for:**
+A concrete capability list, a platform-as-product mindset, sequencing with the migration, and measurable readiness.
+
+**Follow-ups:**
+- Who builds this if there's no platform team yet?
+- How do you stop the template from becoming outdated after a year?
+
+**Red flags:**
+- Splitting into microservices first and planning to "add observability later".
+
 ## Cheat Sheet
 
 ### Styles
@@ -709,6 +889,15 @@ Workload-driven reasoning with cost maths, awareness of limits, and no ideology.
 - **Conway's law** — systems mirror the communication structure of the organisations that build them.
 - **Inverse Conway manoeuvre** — shape teams around the architecture you want, so the system follows.
 - **BFF** — Backend for Frontend: an API tailored to one client type.
+
+### Revisit
+- **BFF** — an API per client experience, owned by the frontend team; composition only, no domain rules.
+- **Gateway vs mesh** — north–south edge concerns vs east–west service-to-service concerns; no business logic in either.
+- **Event evolution** — additive changes, tolerant readers, a registry with compatibility checks, a new version for breaking changes.
+- **Inbox pattern** — record processed event ids in the consumer's transaction to make at-least-once delivery idempotent.
+- **SKIP LOCKED relay** — multiple outbox pollers claim different rows without blocking each other.
+- **Parallel run** — send traffic to legacy and new, compare results, serve legacy until they agree.
+- **Ownership before distribution** — route all writes through the owning module in-process before moving its tables.
 
 ## Further Reading
 
