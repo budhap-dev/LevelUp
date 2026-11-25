@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NotesApiError, formatBytes, notesApi } from '@/lib/notes/client';
-import type { AttachmentMeta, Note, NoteInput, NoteSummary } from '@/lib/notes/types';
+import { MAX_ATTACHMENT_BYTES, type AttachmentMeta, type Note, type NoteInput, type NoteSummary } from '@/lib/notes/types';
 import { Icon } from '@/components/Icon';
 import { RichTextEditor } from './RichTextEditor';
 
 const SAVE_DELAY_MS = 800;
+/** OS clutter that comes along when a whole folder is picked; never worth attaching. */
+const FOLDER_JUNK = /^(\..*|thumbs\.db|desktop\.ini)$/i;
+/** Above this many files, a folder pick asks before uploading. */
+const FOLDER_CONFIRM_OVER = 20;
+
+const nameList = (files: File[]) => (files.length <= 3 ? files.map((f) => f.name).join(', ') : `${files.length} files`);
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -39,6 +45,7 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const fileInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement | null>(null);
   const callbacks = useRef({ onChanged, onLocked });
   callbacks.current = { onChanged, onLocked };
 
@@ -122,8 +129,13 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
   );
 
   const upload = useCallback(
-    async (files: File[]) => {
+    async (picked: File[]) => {
       setFileError(null);
+      // Skip oversized files up front so one big file doesn't hide the others' outcome.
+      const tooBig = picked.filter((f) => f.size > MAX_ATTACHMENT_BYTES);
+      const files = picked.filter((f) => f.size <= MAX_ATTACHMENT_BYTES);
+      const failed: File[] = [];
+      let lastError = '';
       for (const file of files) {
         setUploading((u) => [...u, file.name]);
         try {
@@ -135,7 +147,8 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
           });
         } catch (e) {
           handleError(e);
-          setFileError(message(e));
+          failed.push(file);
+          lastError = message(e);
         } finally {
           setUploading((u) => {
             const i = u.indexOf(file.name);
@@ -143,9 +156,24 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
           });
         }
       }
+      const problems: string[] = [];
+      if (tooBig.length) problems.push(`Skipped ${nameList(tooBig)}: files can be up to 4 MB.`);
+      if (failed.length) problems.push(failed.length === 1 ? `Couldn’t attach ${failed[0]!.name}: ${lastError}` : `Couldn’t attach ${nameList(failed)}: ${lastError}`);
+      if (problems.length) setFileError(problems.join(' '));
     },
     [noteId, handleError],
   );
+
+  const uploadFolder = (picked: File[]) => {
+    const files = picked.filter((f) => !FOLDER_JUNK.test(f.name));
+    if (!files.length) {
+      setFileError('That folder has no files to attach.');
+      return;
+    }
+    const folder = files[0]!.webkitRelativePath.split('/')[0] || 'this folder';
+    if (files.length > FOLDER_CONFIRM_OVER && !window.confirm(`Attach all ${files.length} files from “${folder}”?`)) return;
+    void upload(files);
+  };
 
   const removeAttachment = async (a: AttachmentMeta) => {
     if (!window.confirm(`Delete “${a.filename}”?`)) return;
@@ -200,6 +228,11 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
       </div>
     );
   }
+
+  // Folder picking (webkitdirectory) is missing on some mobile browsers; hide the button there.
+  const canPickFolder = 'webkitdirectory' in HTMLInputElement.prototype;
+  const pickerButton =
+    'flex items-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-1.5 text-sm text-fg-soft transition-colors hover:border-accent hover:bg-subtle hover:text-fg';
 
   const statusText = {
     idle: `Edited ${formatDate(note.updatedAt)}`,
@@ -306,7 +339,7 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
           </p>
         )}
         {attachments.length === 0 && uploading.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Drop files here, paste them into the note, or use Attach. Up to 4 MB each.</p>
+          <p className="mt-2 text-sm text-muted">Drop files here, paste them into the note, or choose files or a whole folder. Up to 4 MB each.</p>
         ) : (
           <ul className="mt-3 grid gap-2 sm:grid-cols-2">
             {attachments.map((a) => (
@@ -357,6 +390,33 @@ export function NoteEditor({ noteId, autoFocusTitle, onChanged, onDeleted, onBac
               </li>
             ))}
           </ul>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={() => fileInput.current?.click()} className={pickerButton}>
+            <Icon name="file" /> Choose files
+          </button>
+          {canPickFolder && (
+            <button type="button" onClick={() => folderInput.current?.click()} className={pickerButton}>
+              <Icon name="folder" /> Choose folder
+            </button>
+          )}
+        </div>
+        {canPickFolder && (
+          <input
+            ref={(el) => {
+              folderInput.current = el;
+              el?.setAttribute('webkitdirectory', ''); // not in React's input typings
+            }}
+            type="file"
+            multiple
+            hidden
+            aria-label="Attach a folder"
+            onChange={(e) => {
+              const files = [...(e.target.files ?? [])];
+              e.target.value = '';
+              if (files.length) uploadFolder(files);
+            }}
+          />
         )}
       </section>
 

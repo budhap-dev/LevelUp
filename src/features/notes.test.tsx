@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { routes } from '@/app/router';
-import type { Note, NoteSummary } from '@/lib/notes/types';
+import type { AttachmentMeta, Note, NoteSummary } from '@/lib/notes/types';
 
 const NOTE_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -17,6 +17,7 @@ function fakeApi() {
   let unlocked = false;
   const notes = new Map<string, Note>();
   const calls: string[] = [];
+  const attachments: AttachmentMeta[] = [];
   const reply = (body: unknown, status = 200) => Promise.resolve(new Response(body === null ? null : JSON.stringify(body), { status }));
   const summary = (n: Note): NoteSummary => ({ id: n.id, title: n.title, snippet: n.contentHtml.replace(/<[^>]+>/g, ''), createdAt: n.createdAt, updatedAt: n.updatedAt, attachmentCount: 0 });
 
@@ -24,8 +25,15 @@ function fakeApi() {
     const url = new URL(String(input), 'https://levelup.test');
     const method = init.method ?? 'GET';
     calls.push(`${method} ${url.pathname}${url.search}`);
-    const body = init.body ? (JSON.parse(String(init.body)) as Record<string, string>) : {};
     const path = url.pathname.replace('/api/', '');
+    const upload = /^notes\/([^/]+)\/attachments$/.exec(path);
+    if (upload && method === 'POST' && unlocked) {
+      const file = init.body as File;
+      const attachment = { id: crypto.randomUUID(), noteId: upload[1]!, filename: decodeURIComponent(new Headers(init.headers).get('x-filename') ?? ''), contentType: file.type, size: file.size, createdAt: new Date().toISOString() };
+      attachments.push(attachment);
+      return reply({ attachment }, 201);
+    }
+    const body = init.body ? (JSON.parse(String(init.body)) as Record<string, string>) : {};
     if (path === 'session') {
       if (method === 'POST') {
         if (body.password !== 'open sesame') return reply({ error: 'Wrong passphrase' }, 401);
@@ -50,7 +58,7 @@ function fakeApi() {
     if (method === 'PATCH') Object.assign(note, body, { updatedAt: new Date().toISOString() });
     return reply({ note });
   });
-  return { fetchMock, notes, calls };
+  return { fetchMock, notes, calls, attachments };
 }
 
 const renderAt = (path: string) => render(<RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />);
@@ -112,6 +120,42 @@ describe('notes section', () => {
     await user.click(screen.getByRole('button', { name: 'All notes' }));
     const list = await screen.findByRole('list', { name: 'Notes' });
     expect(within(list).getByRole('link', { name: /Kafka partitions/ })).toHaveAttribute('href', `/notes?note=${NOTE_ID}`);
+  });
+
+  it('attaches several files, or a whole folder, from the picker buttons', async () => {
+    // jsdom has no folder picking; pretend the browser supports it so the button shows.
+    Object.defineProperty(HTMLInputElement.prototype, 'webkitdirectory', { configurable: true, writable: true, value: false });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      const user = userEvent.setup();
+      renderAt('/notes');
+      await user.type(await screen.findByLabelText('Passphrase'), 'open sesame{Enter}');
+      await user.click(await screen.findByRole('button', { name: 'New note' }));
+      const section = within(await screen.findByRole('region', { name: /Attachments/ }));
+
+      // Choose files: a multi-select picker.
+      expect(section.getByRole('button', { name: 'Choose files' })).toBeInTheDocument();
+      const filesInput = screen.getByLabelText<HTMLInputElement>('Attach files');
+      expect(filesInput.multiple).toBe(true);
+      await user.upload(filesInput, [new File(['a'], 'diagram.png', { type: 'image/png' }), new File(['b'], 'spec.pdf', { type: 'application/pdf' })]);
+      expect(await section.findByRole('link', { name: 'diagram.png' })).toBeInTheDocument();
+      expect(await section.findByRole('link', { name: 'spec.pdf' })).toBeInTheDocument();
+
+      // Choose folder: skips OS clutter and oversized files, and says what it skipped.
+      expect(section.getByRole('button', { name: 'Choose folder' })).toBeInTheDocument();
+      const inFolder = (file: File) => Object.defineProperty(file, 'webkitRelativePath', { value: `design/${file.name}` });
+      const big = inFolder(new File(['x'], 'video.mov'));
+      Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 });
+      const folderInput = screen.getByLabelText<HTMLInputElement>('Attach a folder');
+      await user.upload(folderInput, [inFolder(new File(['c'], 'notes.txt', { type: 'text/plain' })), inFolder(new File(['d'], '.DS_Store')), big]);
+      expect(await section.findByRole('link', { name: 'notes.txt' })).toBeInTheDocument();
+      expect(await section.findByRole('alert')).toHaveTextContent('Skipped video.mov: files can be up to 4 MB.');
+      expect(api.attachments.map((a) => a.filename)).toEqual(['diagram.png', 'spec.pdf', 'notes.txt']);
+      expect(confirm).not.toHaveBeenCalled(); // only asks above 20 files
+    } finally {
+      confirm.mockRestore();
+      delete (HTMLInputElement.prototype as { webkitdirectory?: boolean }).webkitdirectory;
+    }
   });
 
   it('searches notes on the server', async () => {
