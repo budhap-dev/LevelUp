@@ -7375,5 +7375,194 @@
       "code-review",
       "adrs-nfrs"
     ]
+  },
+  {
+    "id": "rework-rate",
+    "term": "Rework rate",
+    "aka": [],
+    "group": "delivery",
+    "definition": "The share of deployments that are unplanned and made to fix a user-facing problem, such as hotfixes and rollbacks. DORA added it as a second instability metric in its 2024 report.",
+    "details": [
+      "Complements change failure rate, which misses streams of quick fixes.",
+      "Classify deployments as planned or unplanned from work item types or labels."
+    ],
+    "useCases": [
+      "Spotting high deployment frequency that is mostly fix-ups."
+    ],
+    "related": [
+      "dora-metrics",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "value-stream-mapping",
+    "term": "Value stream mapping",
+    "aka": [
+      "VSM"
+    ],
+    "group": "delivery",
+    "definition": "A lean technique that maps every step from a customer request or idea to delivered value, recording working time and waiting time for each, to find where flow stalls.",
+    "details": [
+      "Done with the people who do the work, not drawn by one person.",
+      "Often shows most delay outside the delivery pipeline."
+    ],
+    "useCases": [
+      "Finding why features take months despite fast deployments."
+    ],
+    "related": [
+      "dora-metrics",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "flow-efficiency",
+    "term": "Flow efficiency",
+    "aka": [],
+    "group": "delivery",
+    "definition": "The share of a work item's elapsed time spent actively working on it, rather than waiting: working time divided by total lead time.",
+    "details": [
+      "Values below 15–40% are common.",
+      "Reducing waiting usually shortens delivery more than working faster."
+    ],
+    "useCases": [
+      "Explaining why a three-day task took two weeks."
+    ],
+    "related": [
+      "estimation",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "spike",
+    "term": "Spike",
+    "aka": [
+      "technical spike"
+    ],
+    "group": "delivery",
+    "definition": "A short, time-boxed piece of work done to answer a specific question that makes an estimate or design decision uncertain. The output is learning, not production code.",
+    "details": [
+      "Name the question precisely and agree the time-box up front.",
+      "Discard or rewrite the spike's code."
+    ],
+    "useCases": [
+      "Testing a provider's refund API before committing to a launch date."
+    ],
+    "related": [
+      "estimation"
+    ]
+  },
+  {
+    "id": "reference-class-forecasting",
+    "term": "Reference class forecasting",
+    "aka": [
+      "outside view"
+    ],
+    "group": "delivery",
+    "definition": "Predicting a project's outcome from the actual outcomes of similar past projects, rather than from the details of its own plan, to correct for optimism.",
+    "details": [
+      "Needs recorded estimates, actuals and causes of variance.",
+      "Apply past overrun ratios to new bottom-up estimates."
+    ],
+    "useCases": [
+      "Forecasting a large migration from previous migrations."
+    ],
+    "related": [
+      "estimation"
+    ]
+  },
+  {
+    "id": "accessible-name",
+    "term": "Accessible name",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "The name assistive technologies use for an element, computed from aria-labelledby, aria-label, native labels such as label and alt, or the element's text content.",
+    "details": [
+      "Every interactive element needs one.",
+      "Label in Name: the accessible name must include the visible label, for voice-control users."
+    ],
+    "useCases": [
+      "Naming icon-only buttons such as Close or Search."
+    ],
+    "related": [
+      "accessibility"
+    ]
+  },
+  {
+    "id": "live-region",
+    "term": "Live region",
+    "aka": [
+      "aria-live",
+      "role=status"
+    ],
+    "group": "languages-frontend",
+    "definition": "An area of a page whose changes screen readers announce without moving focus, set with aria-live or roles such as status, alert and log.",
+    "details": [
+      "Polite announcements wait for a pause, and assertive ones interrupt.",
+      "The region must exist before its content changes."
+    ],
+    "useCases": [
+      "Announcing Saved confirmations and search result counts."
+    ],
+    "related": [
+      "accessibility"
+    ]
+  },
+  {
+    "id": "contrast-ratio",
+    "term": "Contrast ratio",
+    "aka": [
+      "colour contrast"
+    ],
+    "group": "languages-frontend",
+    "definition": "WCAG's measure of the difference in relative luminance between two colours, from 1:1 to 21:1, with AA requiring 4.5:1 for normal text and 3:1 for large text and UI components.",
+    "details": [
+      "Calculated as (lighter luminance + 0.05) divided by (darker luminance + 0.05), with no rounding.",
+      "Check every background a colour is used on."
+    ],
+    "useCases": [
+      "Validating design-system colour tokens in CI."
+    ],
+    "related": [
+      "accessibility"
+    ]
+  },
+  {
+    "id": "forced-colors",
+    "term": "Forced colours mode",
+    "aka": [
+      "Windows High Contrast",
+      "forced-colors"
+    ],
+    "group": "languages-frontend",
+    "definition": "A user setting, such as Windows contrast themes, in which the browser replaces a page's colours with the user's chosen system palette, detectable with the forced-colors media query.",
+    "details": [
+      "Information shown only through background colours or images disappears.",
+      "Use borders, outlines, currentColor and system colour keywords."
+    ],
+    "useCases": [
+      "Keeping custom checkboxes and focus indicators visible."
+    ],
+    "related": [
+      "accessibility"
+    ]
+  },
+  {
+    "id": "accessibility-conformance-report",
+    "term": "Accessibility Conformance Report (ACR)",
+    "aka": [
+      "VPAT"
+    ],
+    "group": "languages-frontend",
+    "definition": "A document stating how a product conforms to accessibility standards such as WCAG, Section 508 and EN 301 549, usually written by completing the VPAT template.",
+    "details": [
+      "Each criterion is marked Supports, Partially Supports, Does Not Support or Not Applicable, with remarks.",
+      "It must come from a real manual audit and be kept up to date."
+    ],
+    "useCases": [
+      "Answering accessibility questions in enterprise and public-sector procurement."
+    ],
+    "related": [
+      "accessibility"
+    ]
   }
 ]
