@@ -6,14 +6,14 @@ tags: [mobile, cross-platform]
 level: Senior
 estimatedMinutes: 60
 related: [reactjs, typescript]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
 ## TL;DR
 
 - React Native lets you build **truly native iOS and Android apps with React and TypeScript**: components render to native views, not a web view, and one codebase targets both platforms (and more via out-of-tree platforms).
-- The **New Architecture** (JSI, Fabric renderer, TurboModules, bridgeless mode) is the default in recent versions, replacing the asynchronous JSON bridge with direct, synchronous-capable calls between JavaScript and native code.
+- The **New Architecture** (JSI, Fabric renderer, TurboModules, bridgeless mode) has been the only architecture since React Native 0.82 (October 2025), replacing the asynchronous JSON bridge with direct, synchronous-capable calls between JavaScript and native code.
 - **Expo** is the recommended way to start: managed native configuration, a rich SDK, cloud builds (EAS) and over-the-air updates — while still allowing custom native code.
 - Performance depends on **keeping the JS thread free**, efficient lists (FlashList/FlatList), animations on the UI thread (Reanimated), minimal re-renders and the Hermes engine.
 - Mobile releases are different from the web: app store reviews, staged rollouts, **OTA updates for JS changes**, backward-compatible APIs for old app versions and crash monitoring.
@@ -50,7 +50,7 @@ export function OrdersScreen({ orders, onOpen }: { orders: Order[]; onOpen: (id:
     <FlashList
       data={orders}
       keyExtractor={(o) => o.id}
-      estimatedItemSize={72}                  // recycling list for long data sets
+      // FlashList v2 recycles views and measures items itself; v1 also needed estimatedItemSize
       renderItem={({ item }) => (
         <Pressable onPress={() => onOpen(item.id)} accessibilityRole="button" style={styles.row}>
           <Text style={styles.title}>Order {item.reference}</Text>
@@ -82,6 +82,30 @@ Use existing libraries (Expo SDK, community modules) where possible. Write nativ
 - Small key-value data: MMKV or AsyncStorage; secrets in **Keychain/Keystore** (`expo-secure-store`), never AsyncStorage.
 - Handle connectivity changes, background fetch limits and app lifecycle states.
 
+### Worked example: which users can receive this OTA update?
+
+Over-the-air (OTA) updates replace the **JavaScript bundle and assets**, never the native code. So an update must only reach app binaries whose native layer it was built for. Expo identifies that compatibility with a **runtime version**.
+
+The app's installed base today:
+
+| Store build | Native change | Runtime version | Share of users |
+|---|---|---|---|
+| 3.4.0 | — | `3.4.0` | 35% |
+| 3.5.0 | Adds a native barcode-scanning module | `3.5.0` | 60% |
+| Older builds | — | Various | 5% |
+
+The team builds a new **scan-to-reorder** screen in JavaScript that calls the barcode module, and wants to ship it by OTA.
+
+- **Published for runtime `3.5.0`**: the 60% on 3.5.0 get it on their next launch. Safe, because the module exists in their binary.
+- **3.4.0 users don't receive it.** If they did, the screen would call a native module that isn't there, and the app would crash. Runtime versions prevent exactly this.
+- For a **JavaScript bug fix** that affects everyone, publish separately to each supported runtime, built from the right branch for each.
+- The 3.4.0 users get the new feature only by **updating from the store**. Prompt them with a soft in-app message, and raise the minimum supported version once usage is low enough.
+
+How to avoid getting this wrong:
+- Use Expo's **`fingerprint` runtime-version policy**, which derives the runtime version from the native dependencies and configuration, so it changes automatically whenever the native layer does. With the `appVersion` policy, someone must remember to bump it, and eventually someone forgets.
+- **Roll out OTA updates gradually** (for example 10%, then 50%, then 100%), watching crash-free sessions per update. Roll back by republishing the previous update.
+- Stay within **store rules**: OTA updates fix bugs and adjust behaviour. They mustn't change the app's purpose or add features that would need store review.
+
 ## How It Works
 
 ```mermaid
@@ -104,6 +128,32 @@ flowchart LR
   JSI --> TM
   TM --> API
   V -->|"touch events"| R
+```
+
+### A push notification, from permission to tap
+
+```mermaid
+sequenceDiagram
+  participant App as App
+  participant OS as iOS or Android
+  participant PS as APNs or FCM
+  participant BE as Backend
+  %% step: At a meaningful moment, such as after the first order rather than at first launch, the app asks for permission to send notifications. On iOS and recent Android versions, the user must agree.
+  %% step: The operating system registers the device with Apple's (APNs) or Google's (FCM) push service.
+  %% step: The app receives a device push token. Tokens can change, so the app checks for a new one on every launch.
+  %% step: The app sends the token to the backend with the user id, platform and app version. Expo's push service can sit in between, with one API for both platforms.
+  %% step: Later, the backend sends an "Order shipped" notification to the token, with a deep link to the order in its payload.
+  %% step: The push service delivers it when the device is reachable. Delivery isn't guaranteed or instant, so never rely on push alone for critical information.
+  %% step: The user taps it, and the app opens straight on /orders/981 via its deep-link handling, even from a cold start.
+  %% step: When a token becomes invalid (the app was uninstalled), the push service reports it, and the backend deletes the token so it stops sending to dead devices.
+  App->>OS: Ask permission to notify
+  OS->>PS: Register the device
+  PS-->>App: Device push token
+  App->>BE: Save token with user, platform and version
+  BE->>PS: Send "Order shipped" with deep link
+  PS->>OS: Deliver when the device is reachable
+  OS->>App: User taps, app opens /orders/981
+  PS-->>BE: Token invalid, delete it
 ```
 
 ## When to Use / Trade-offs
@@ -502,6 +552,178 @@ Problem-first evaluation, criteria per option, de-risking through prototypes and
 **Red flags:**
 - Rewriting because a technology is fashionable.
 
+### What is Hermes, and why does it matter for React Native apps? {#hermes}
+
+**Level:** Foundation
+
+**Model answer:**
+**Hermes** is the JavaScript engine built by Meta for React Native, and the default engine since React Native 0.70. React Native 0.84 (2026) made **Hermes V1**, its next major version, the default.
+
+What makes it suited to mobile:
+- **Ahead-of-time bytecode compilation**: JavaScript is compiled to Hermes bytecode **at build time**, so the app doesn't parse and compile JavaScript on the device at startup. That's the main reason for **faster startup**, especially on low-end Android phones.
+- **Lower memory use**, designed for constrained devices, with a garbage collector tuned to avoid long pauses.
+- **Smaller app downloads** in many cases, because bytecode is compact.
+- A good **debugging and profiling** experience through React Native DevTools, which uses the Chrome DevTools protocol.
+
+What to keep in mind:
+- Hermes implements modern JavaScript, but check support for very new language features or specific `Intl` behaviour your app relies on, and test on real devices.
+- Performance work still matters: Hermes makes startup cheaper, but heavy work on the JS thread still blocks interactions.
+
+**What the interviewer is looking for:**
+What Hermes is, bytecode compilation and why it speeds startup, memory benefits, and awareness that it's the default.
+
+**Follow-ups:**
+- How would you measure an app's startup time, and what would you optimise first?
+- Why does startup time matter more on Android than iOS for many apps?
+
+**Red flags:**
+- Thinking React Native apps run in a web view.
+- Not knowing which JavaScript engine the app uses.
+
+### How do you design push notifications so they're reliable and respectful? {#push-notifications}
+
+**Level:** Senior
+
+**Model answer:**
+**Plumbing:**
+- Each device has a **push token** from APNs (iOS) or FCM (Android). Store tokens per user and device on the server, with platform, app version and last-seen time. Users have several devices, and tokens change.
+- Send through APNs and FCM directly, or through a service such as Expo's push service or a messaging platform that handles both.
+- **Handle feedback**: delete tokens the push service reports as invalid, and retry transient failures with backoff.
+
+**Reliability limits to design around:**
+- Delivery is **best effort**: delayed or dropped notifications happen, especially with battery saving or no connectivity. Anything important must also be visible **in the app** (an inbox or order status), and the notification is only a pointer to it.
+- **Data-only or background notifications** to trigger syncing are throttled by the operating systems. Don't depend on them for timely work.
+
+**Respecting users:**
+- **Ask permission in context**, after showing the value ("Get notified when your order ships"), not at first launch. A refused permission is hard to win back.
+- **Categories and preferences**: Android notification channels and iOS categories, with in-app settings per type (orders, marketing, security). Make marketing opt-in.
+- **Frequency caps** and quiet hours, and no notifications for things the user just did themselves.
+
+**Deep links and actions:**
+- Every notification opens the right screen through deep links, including from a cold start and when the user is signed out.
+- Actionable notifications (reply, mark as done) where useful.
+
+**Measure:** delivery and open rates per type, opt-out rates, and the effect on retention. Rising opt-outs mean too many or irrelevant notifications.
+
+**What the interviewer is looking for:**
+Token management, best-effort delivery and in-app fallbacks, contextual permission requests, categories and preferences, deep links, and measurement.
+
+**Follow-ups:**
+- A user gets the same notification three times on one phone. What could cause it?
+- How would you send a time-critical security alert?
+
+**Red flags:**
+- Asking for notification permission on first launch.
+- Critical information delivered only by push.
+
+### How do you handle app versions, minimum supported versions and forced updates? {#forced-updates}
+
+**Level:** Senior
+
+**Model answer:**
+Unlike the web, old mobile app versions **stay installed for months or years**, because users don't update and auto-update isn't universal. Every API change has to account for that.
+
+**Know your version distribution:** report the app version on every API request (a header) and in analytics, so you can see how many active users are on each version.
+
+**Keep old versions working:**
+- **Backward-compatible APIs** by default: additive changes, versioned endpoints for breaking ones, and tolerant clients that ignore unknown fields.
+- Remote configuration and feature flags evaluated server-side, so behaviour can change without a release.
+
+**Minimum supported version:**
+- The app fetches a small **version policy** at startup (or with its configuration): the minimum supported version and a recommended version.
+- **Soft prompt** ("A new version is available") for versions below recommended. **Hard block** ("Please update to continue") only below minimum, for security issues, broken payments or retired APIs.
+- On Android, Google Play's **in-app updates API** supports flexible (background) and immediate (blocking) flows. On iOS there's no equivalent, so link to the App Store page.
+- Handle the edge cases: users offline at startup (use the cached policy, don't brick the app), and enterprise devices with delayed updates.
+
+**Retiring versions deliberately:**
+- Set a support window (for example, the last 12 months of releases), announce retirements in the app, and raise the minimum gradually as usage drops.
+- Watch error rates by version: old versions often reveal API regressions first.
+
+**What the interviewer is looking for:**
+Long-lived installed versions, version telemetry, backward-compatible APIs, soft versus hard update prompts with platform specifics, offline handling, and a retirement policy.
+
+**Follow-ups:**
+- A security bug exists in all versions before 4.2. What's your plan?
+- How do OTA updates change this picture?
+
+**Red flags:**
+- Breaking API changes deployed with the latest app release.
+- Hard-blocking users for minor updates.
+
+### How would you structure a large React Native codebase worked on by several teams? {#rn-at-scale}
+
+**Level:** Architect
+
+**Model answer:**
+**Repository and modules:**
+- A **monorepo** (with Nx or Turborepo, and a package manager with workspaces) containing the app, **feature packages** owned by teams (checkout, account, loyalty), and **shared packages**: the design system, API client, analytics, navigation helpers and utilities.
+- **Module boundaries** enforced by lint rules: features depend on shared packages, never on each other directly. Cross-feature navigation goes through typed route definitions, and communication through events or shared services.
+- **CODEOWNERS** per package, so each team reviews its own area, and the platform or mobile-core team owns native configuration, build tooling and upgrades.
+
+**Native layer ownership:**
+- One **mobile platform team** owns native modules, config plugins, the Expo or React Native version, build pipelines and signing. Feature teams rarely touch native code.
+- **React Native upgrades** are planned regularly (staying within a couple of versions of the latest), because falling behind makes upgrades exponentially harder and blocks libraries. Audit native dependencies for maintenance.
+
+**Builds and CI:**
+- **Cache aggressively**: JavaScript tests and lint per affected package, remote caching, and native builds only when native inputs change (fingerprints help decide).
+- Preview builds or OTA preview channels per pull request, so reviewers and designers can try changes on devices.
+
+**Releases:**
+- A **release train** (for example weekly) with **feature flags**, so teams merge continuously and decide release by flag, not by branch.
+- Staged store rollouts and OTA updates gated on crash-free rates.
+
+**Shared quality:**
+- The design system with accessibility built in, performance budgets (startup time, bundle size), and end-to-end tests for critical journeys with Detox or Maestro.
+
+**What the interviewer is looking for:**
+Monorepo with owned feature packages and enforced boundaries, a mobile platform team owning native and upgrades, cached CI and previews, a flag-based release train, and shared quality budgets.
+
+**Follow-ups:**
+- Two teams need conflicting versions of a native library. How do you resolve it?
+- How do you keep the app's startup time from creeping up as teams add features?
+
+**Red flags:**
+- Feature teams freely adding native dependencies.
+- Skipping React Native upgrades for years.
+
+### Design observability for a mobile app with a million active users. {#mobile-observability}
+
+**Level:** Architect
+
+**Model answer:**
+On mobile you can't SSH into the device. Everything you'll ever know about a problem comes from what the app reports, so design it in from the start.
+
+**Crashes and errors:**
+- A crash reporting tool (Sentry, Firebase Crashlytics or similar) capturing **native crashes** (iOS signals, Android exceptions), **Android ANRs** (app not responding), and **JavaScript errors**, with breadcrumbs of recent screens and actions.
+- **Symbolication**: upload source maps for the JS bundle (including every OTA update), dSYM files for iOS, and ProGuard/R8 mapping files for Android, per build. Without them, stack traces are unreadable.
+- Tag every event with app version, **OTA update id**, device, OS version and feature flags.
+
+**Performance:**
+- **App start time** (cold and warm), time to interactive for key screens, frame rate and slow or frozen frames, and network request latency and failure rates by endpoint and connection type.
+- Report percentiles and segment by device class. Low-end Android devices often tell a very different story.
+
+**Release health:**
+- **Crash-free sessions and users** by version and OTA update, the core gate for staged rollouts. Pause a store rollout or roll back an OTA update automatically if the rate drops below a threshold (for example 99.5%).
+- Adoption curves per version, which feed minimum-version decisions.
+
+**Connecting front end and back end:** propagate trace context on API calls, so a slow screen can be traced into the services behind it, and include the app version in server logs.
+
+**Practicalities:**
+- **Buffer events offline** and send them in batches on good connectivity, respecting battery and data use.
+- **Sampling** for high-volume performance data, but keep all crashes.
+- **Privacy**: no personal data in events, consent where required, and documented data collection in the store privacy disclosures.
+
+**What the interviewer is looking for:**
+Native and JS crash capture with symbolication, performance metrics by device class, crash-free rates gating rollouts, trace propagation, offline batching, sampling and privacy.
+
+**Follow-ups:**
+- Crash-free sessions dropped from 99.8% to 99.1% after an OTA update. Walk through the next hour.
+- How do you find which screens are slow on low-end devices?
+
+**Red flags:**
+- No source maps for OTA bundles.
+- Measuring only on the team's flagship phones.
+
 ## Cheat Sheet
 
 ### Fundamentals
@@ -524,6 +746,16 @@ Problem-first evaluation, criteria per option, de-risking through prototypes and
 - **Staged rollouts** — phased store releases with crash monitoring and halt option.
 - **Backward compatibility** — APIs must serve old app versions; minimum version and forced upgrade.
 - **Brownfield** — embed RN screens in existing native apps incrementally.
+
+### Revisit
+
+- **OTA and runtime versions** — OTA updates replace JavaScript only. Publish per runtime version, use the fingerprint policy, roll out gradually, and roll back by republishing.
+- **Push notifications** — tokens per device, delete invalid tokens, best-effort delivery with in-app fallback, permission in context, deep links from cold start.
+- **Hermes** — the default engine, with bytecode compiled at build time for faster startup and lower memory. Hermes V1 is the default from React Native 0.84.
+- **New Architecture** — the only option since React Native 0.82. FlashList v2 needs it and no longer needs size estimates.
+- **Forced updates** — version telemetry, backward-compatible APIs, soft prompts versus hard blocks, Android in-app updates, a cached policy offline.
+- **Large RN codebases** — monorepo feature packages with boundaries, a mobile platform team owning native code and upgrades, flag-based release trains.
+- **Mobile observability** — native, ANR and JS crashes with symbolication, start time and frames by device class, crash-free rates gating rollouts.
 
 ## Further Reading
 

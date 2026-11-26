@@ -6,7 +6,7 @@ tags: [language, runtime, async]
 level: Senior
 estimatedMinutes: 60
 related: [typescript, nodejs, web-performance]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -82,6 +82,47 @@ queueMicrotask(() => console.log('3b microtask'));
 console.log('2 sync');
 ```
 
+### Worked example: predicting the event loop's order
+
+What does this print?
+
+```js
+console.log('A');
+setTimeout(() => console.log('B'), 0);
+Promise.resolve().then(() => {
+  console.log('C');
+  setTimeout(() => console.log('D'), 0);
+});
+(async () => {
+  console.log('E');
+  await null;
+  console.log('F');
+})();
+queueMicrotask(() => console.log('G'));
+console.log('H');
+```
+
+Trace it with three queues in mind: the current synchronous run, the **microtask** queue, and the **task** (timer) queue.
+
+| Step | What runs | Output | Queued afterwards |
+|---|---|---|---|
+| 1 | `console.log('A')` | A | — |
+| 2 | `setTimeout(B)` | — | Tasks: B |
+| 3 | `.then(C)` on an already-resolved promise | — | Microtasks: C |
+| 4 | The async function runs synchronously until its first `await` | E | Microtasks: C, F (the code after `await`) |
+| 5 | `queueMicrotask(G)` | — | Microtasks: C, F, G |
+| 6 | `console.log('H')`, and the script ends | H | — |
+| 7 | Drain microtasks in order: C, which schedules D, then F, then G | C F G | Tasks: B, D |
+| 8 | Next task: B, then microtasks (none), then the next task: D | B D | — |
+
+**Output: A E H C F G B D.**
+
+What to take away:
+- An `async` function runs **synchronously until its first `await`**. That's why E prints before H.
+- Everything after an `await` is a **microtask**, so it runs before any timer, even a `setTimeout(…, 0)` scheduled earlier.
+- The **whole microtask queue drains** before the next task. A microtask that keeps queueing microtasks starves timers, input and rendering, just like a long synchronous loop.
+- `setTimeout(fn, 0)` means "as a later task", not "now". Browsers also clamp nested timers to at least 4 ms.
+
 ### Async patterns
 
 ```js
@@ -125,6 +166,31 @@ flowchart TD
 ```
 
 Everything on the main thread — your code, React rendering, layout — competes for the same time slices. Keeping tasks short keeps the page responsive.
+
+### Cancelling a stale search request
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant C as Search box component
+  participant A as Search API
+  %% step: The user types "ca".
+  %% step: The component sends a request for "ca", passing an AbortController's signal to fetch.
+  %% step: Before the reply arrives, the user types "cat". Without cancellation, two requests now race, and whichever answers last wins.
+  %% step: The component aborts the first controller and creates a new one for the new query.
+  %% step: It sends the request for "cat" with the new signal.
+  %% step: The "cat" results arrive.
+  %% step: The component renders them. They match what's in the box.
+  %% step: The "ca" request was aborted, so its fetch rejected with an AbortError, which the component ignores. A late "ca" reply can never overwrite the newer results, which was the bug behind the intermittent errors in the scenario below.
+  U->>C: Types "ca"
+  C->>A: GET /search?q=ca, with signal 1
+  U->>C: Types "cat" before the reply
+  C->>C: Abort signal 1, create signal 2
+  C->>A: GET /search?q=cat, with signal 2
+  A-->>C: Results for "cat"
+  C->>U: Render "cat" results
+  Note over C: Request 1 rejected with AbortError, ignored
+```
 
 ## When to Use / Trade-offs
 
@@ -530,6 +596,205 @@ Workers, transfer vs copy, SharedArrayBuffer requirements, service workers' role
 **Red flags:**
 - Believing `async` functions run in parallel threads.
 
+### What's the difference between `null` and `undefined`, and how do `??` and `?.` help? {#null-undefined}
+
+**Level:** Foundation
+
+**Model answer:**
+- **`undefined`** means "no value has been assigned": an uninitialised variable, a missing property, a missing function argument, or a function with no `return`.
+- **`null`** is an intentional "no value", set explicitly by code or returned by APIs (`document.querySelector` finding nothing, JSON `null`).
+- `typeof undefined` is `'undefined'`, while `typeof null` is `'object'`, a historical quirk. `null == undefined` is `true` and `null === undefined` is `false`, so `x == null` is a handy check for both.
+
+The operators:
+- **Optional chaining `?.`** stops and returns `undefined` if the value on its left is `null` or `undefined`, instead of throwing. `user?.address?.city` and `callback?.()`.
+- **Nullish coalescing `??`** uses the right side only when the left is `null` or `undefined`. Unlike `||`, it keeps legitimate "falsy" values:
+
+```js
+const pageSize = options.pageSize || 20;   // 0 becomes 20: a bug
+const pageSize2 = options.pageSize ?? 20;  // 0 stays 0
+const title = input.title ?? 'Untitled';   // '' stays '' (decide whether that's what you want)
+```
+
+- `??=` assigns only if the target is nullish: `config.retries ??= 3`.
+
+Advice: pick one convention per codebase (many use `undefined` for "absent" and avoid `null` except where APIs or JSON require it), and let TypeScript's `strictNullChecks` force every possibly missing value to be handled.
+
+**What the interviewer is looking for:**
+The semantic difference, the `typeof` quirk, loose equality between them, and `??` versus `||` with falsy values.
+
+**Follow-ups:**
+- Why can `||` cause bugs with numeric settings?
+- What does JSON.stringify do with `undefined` properties?
+
+**Red flags:**
+- Using `||` for defaults where 0 or an empty string are valid.
+- Overusing `?.` so that missing data silently becomes `undefined` everywhere instead of being handled.
+
+### How do you cancel asynchronous work properly in JavaScript? {#cancellation}
+
+**Level:** Senior
+
+**Model answer:**
+Promises themselves can't be cancelled. The standard mechanism is **`AbortController` and `AbortSignal`**: the code that starts the work passes a signal, and anyone holding the controller can abort it.
+
+```js
+const controller = new AbortController();
+const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]); // user cancel OR timeout
+
+try {
+  const res = await fetch(url, { signal });
+  const data = await res.json();
+} catch (err) {
+  if (err.name === 'AbortError' || err.name === 'TimeoutError') return; // expected: not an error to report
+  throw err;
+}
+
+// Elsewhere: controller.abort();
+```
+
+Where it matters:
+- **Superseded requests**: search-as-you-type, fast filter changes and route changes. Abort the old request so a late reply can't overwrite newer data.
+- **Component unmounts**: abort in a React effect's clean-up function.
+- **Timeouts**: `AbortSignal.timeout(ms)` instead of hand-rolled `setTimeout` races.
+- **Combining reasons**: `AbortSignal.any([...])` aborts when any input does.
+
+Make your own async functions cancellable:
+- Accept a `signal` option and pass it down to `fetch`, streams and other APIs that support it.
+- Check `signal.aborted` (or call `signal.throwIfAborted()`) between steps of long work, and listen for the `abort` event to clean up timers or sockets.
+- Event listeners can be removed by a signal too: `addEventListener('scroll', fn, { signal })`.
+
+Remember that aborting stops the *client* from waiting. The server may still complete the work, so operations with side effects need idempotency, not just cancellation.
+
+**What the interviewer is looking for:**
+AbortController usage, timeouts and combined signals, handling AbortError, propagating signals through your own APIs, and the server-side caveat.
+
+**Follow-ups:**
+- How would you cancel a long CPU-bound loop?
+- How do you cancel work running in a Web Worker?
+
+**Red flags:**
+- Ignoring stale responses with ad hoc flags everywhere instead of aborting.
+- Reporting every AbortError as a production error.
+
+### What are iterators, generators and async iterators, and when are they useful? {#iterators-generators}
+
+**Level:** Senior
+
+**Model answer:**
+- An **iterator** is an object with a `next()` method returning `{ value, done }`. An object is **iterable** if it has a `[Symbol.iterator]()` method returning an iterator. Arrays, strings, Maps and Sets are iterable, which is what makes `for…of`, spread and destructuring work.
+- A **generator** (`function*`) is an easy way to write an iterator: it pauses at each `yield` and resumes on the next `next()` call, keeping its local state.
+- An **async iterator** has a `next()` that returns a promise. **Async generators** (`async function*`) and `for await…of` consume them.
+
+Why they're useful:
+- **Laziness**: values are produced on demand, so you can represent large or infinite sequences and stop early without computing the rest.
+- **Streaming data**: process records page by page or chunk by chunk as they arrive, with constant memory. Web streams and Node streams are async-iterable.
+- **Clean pagination**:
+
+```js
+async function* allOrders(client, { signal } = {}) {
+  let cursor;
+  do {
+    const page = await client.listOrders({ cursor, signal });
+    yield* page.items;          // hand items out one at a time
+    cursor = page.nextCursor;
+  } while (cursor);
+}
+
+for await (const order of allOrders(client)) {
+  if (order.total > 10_000) { await flag(order); }
+  if (shouldStop()) break;      // stops fetching further pages
+}
+```
+
+- **Iterator helpers** (ES2025) add `map`, `filter`, `take`, `drop`, `flatMap`, `reduce` and `toArray` to iterators, so lazy pipelines no longer need arrays in between: `iter.filter(isActive).take(10).toArray()`.
+
+Watch out for: generators are single-use, and `break` calls the iterator's `return()`, so put clean-up in a `finally` block.
+
+**What the interviewer is looking for:**
+The iterator protocol, generators as pausable functions, async iteration for streams and pagination, laziness, and the newer iterator helpers.
+
+**Follow-ups:**
+- How would you process a 2 GB file line by line in Node.js?
+- What happens to an async generator when the consumer breaks out of the loop?
+
+**Red flags:**
+- Loading every page into an array before processing.
+- Not knowing that `for…of` relies on the iterator protocol.
+
+### Design error handling for a large JavaScript or TypeScript application, front end and back end. {#error-handling-strategy}
+
+**Level:** Architect
+
+**Model answer:**
+**Separate kinds of errors, because they need different handling:**
+- **Expected domain outcomes** (validation failed, item out of stock, not authorised): part of normal behaviour. Model them explicitly as typed results or specific error classes, and show users a helpful message. Don't page anyone.
+- **Operational failures** (timeouts, a dependency down, network loss): retry where safe, degrade gracefully, and alert on rates.
+- **Programming errors** (bugs, invariants broken): fail fast, report with full context, and fix the code.
+
+**Conventions in code:**
+- Throw `Error` subclasses, never strings, so stack traces survive. Wrap lower-level errors with **`cause`**: `throw new PaymentError('Charge failed', { cause: err })`, to keep the chain.
+- In TypeScript, treat `catch (e)` as `unknown` and narrow it. Consider a `Result` type for expected outcomes in domain code, while keeping exceptions for the unexpected.
+- **No floating promises**: lint rules (`no-floating-promises`), and `unhandledrejection` handlers (browser) and `process.on('unhandledRejection')` (Node) that report, not swallow.
+
+**Boundaries:**
+- **Back end**: one error-handling layer per service maps errors to responses, such as RFC 9457 Problem Details with a stable `type`, the right status code, and no internal details. Unknown errors become a 500 with a correlation id.
+- **Front end**: React **error boundaries** around independent regions of the page, so one broken widget doesn't blank the app, plus a global handler for errors outside React. Show retry options for operational failures.
+
+**Observability:**
+- Report errors with context (user action, route, release version, feature flags, trace id) to an error-tracking tool, with **source maps** uploaded per release.
+- Group, deduplicate and route alerts by owner. Alert on error *rates* tied to SLOs, not on every exception.
+- Scrub personal data and secrets from error reports.
+
+**What the interviewer is looking for:**
+Distinguishing expected, operational and programming errors, `Error` subclasses with `cause`, no floating promises, boundaries on both sides, and observability with context and privacy.
+
+**Follow-ups:**
+- When would you use a Result type instead of exceptions?
+- How do you make sure an error in a third-party script doesn't take down your page?
+
+**Red flags:**
+- `catch (e) {}` that swallows errors.
+- Stack traces and SQL errors returned to users.
+
+### Design a browser client for a real-time feed (prices, chat or live updates) that stays correct through disconnects. {#realtime-client}
+
+**Level:** Architect
+
+**Model answer:**
+**Choose the transport:**
+- **Server-Sent Events** for server-to-client streams over HTTP. They're simple, work through most proxies, and reconnect automatically with `Last-Event-ID`.
+- **WebSockets** when the client also sends frequent messages, such as chat or collaborative editing.
+- **WebTransport** is emerging for low-latency, unordered or multi-stream needs, where supported.
+
+**Connection management:**
+- **Reconnect with exponential backoff and jitter**, capped. Many clients reconnecting at once after a server deploy is a self-inflicted thundering herd.
+- **Heartbeats** in both directions to detect dead connections, which TCP alone can take minutes to notice.
+- React to **visibility and network changes**: pause or slow down in background tabs, and reconnect promptly when `online` fires.
+- One connection per tab or shared across tabs (via a SharedWorker or BroadcastChannel) to limit server load.
+
+**Correctness through gaps:**
+- Every message carries a **sequence number or version** per stream or entity. The client tracks the last applied one.
+- On reconnect, **resume from the last sequence** (if the server keeps a buffer), or fetch a **fresh snapshot** and then apply only messages newer than it.
+- **Ignore duplicates and out-of-order** messages by version, so replays are harmless.
+- Use **idempotency keys** for messages the client sends, so retries after an uncertain disconnect don't double-post.
+
+**User experience:**
+- Show connection state honestly ("Reconnecting…"), mark data as possibly stale, and queue outgoing actions with clear pending states.
+- **Throttle rendering**: batch bursts of updates per animation frame, so 200 price ticks a second don't block input.
+
+**Operations:** metrics on connection counts, reconnect rates and message lag. Server deploys that drain connections gradually, and load tests with realistic reconnect storms.
+
+**What the interviewer is looking for:**
+Transport choice, backoff with jitter and heartbeats, sequence-based resume or snapshot and catch-up, deduplication, idempotent sends, honest UI and render throttling.
+
+**Follow-ups:**
+- The server keeps only 60 seconds of buffered messages. What happens after a 5-minute disconnect?
+- How do you test this client's behaviour under flaky networks?
+
+**Red flags:**
+- Reconnecting immediately in a tight loop.
+- Applying every message blindly, with no ordering or versioning.
+
 ## Cheat Sheet
 
 ### Language
@@ -550,6 +815,16 @@ Workers, transfer vs copy, SharedArrayBuffer requirements, service workers' role
 - **AbortController** — cancel fetches and remove listeners via signals.
 - **ESM vs CommonJS** — static, tree-shakeable, async vs dynamic synchronous require.
 - **Web Workers** — parallel threads via message passing or transferables.
+
+### Revisit
+
+- **Event loop order** — synchronous code first (an async function runs until its first `await`), then all microtasks in order, then the next task. `A E H C F G B D`.
+- **Stale requests** — abort the previous request with AbortController when a new query starts, and ignore AbortError.
+- **`??` vs `||`** — `??` replaces only `null` and `undefined`. `||` also replaces 0 and `''`.
+- **Cancellation** — pass signals down, combine them with `AbortSignal.any` and `AbortSignal.timeout`, and remember the server may still finish the work.
+- **Generators** — lazy, pausable iterators. Async generators plus `for await` stream pages and chunks. ES2025 added iterator helpers.
+- **Error strategy** — expected, operational and programming errors handled differently, `Error` subclasses with `cause`, boundaries in UI and API, reports with context.
+- **Real-time client** — backoff with jitter, heartbeats, resume by sequence or snapshot and catch-up, deduplicate by version, throttle rendering.
 
 ## Further Reading
 

@@ -7564,5 +7564,158 @@
     "related": [
       "accessibility"
     ]
+  },
+  {
+    "id": "microtask",
+    "term": "Microtask",
+    "aka": [
+      "microtask queue"
+    ],
+    "group": "languages-frontend",
+    "definition": "A callback queued to run immediately after the current task finishes and before the next task or render, such as promise reactions, code after await, and queueMicrotask callbacks.",
+    "details": [
+      "The whole microtask queue drains before the next task, so endless microtasks starve timers and rendering.",
+      "Code after await always runs as a microtask."
+    ],
+    "useCases": [
+      "Predicting the order of promise callbacks and timers."
+    ],
+    "related": [
+      "javascript",
+      "nodejs"
+    ]
+  },
+  {
+    "id": "abort-controller",
+    "term": "AbortController",
+    "aka": [
+      "AbortSignal"
+    ],
+    "group": "languages-frontend",
+    "definition": "The standard JavaScript mechanism for cancelling asynchronous work: a controller's signal is passed to fetch, streams, event listeners or custom functions, and calling abort() cancels them.",
+    "details": [
+      "AbortSignal.timeout() and AbortSignal.any() add timeouts and combine reasons.",
+      "Aborting stops the client waiting. The server may still finish the work."
+    ],
+    "useCases": [
+      "Cancelling superseded search requests.",
+      "Cleaning up requests when a component unmounts."
+    ],
+    "related": [
+      "javascript",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "import-map",
+    "term": "Import map",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "A JSON block that tells the browser which URL to load for each bare module specifier, letting native ES modules import packages by name without a bundler rewriting paths.",
+    "details": [
+      "Supported in all major browsers.",
+      "Used to share one copy of a library across micro-frontends, and to switch versions by editing the map."
+    ],
+    "useCases": [
+      "Composing micro-frontends with native ES modules."
+    ],
+    "related": [
+      "micro-frontends",
+      "javascript"
+    ]
+  },
+  {
+    "id": "module-federation",
+    "term": "Module Federation",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "A bundler feature, originally in webpack 5 and now also available for Rspack and Vite, that lets one application load modules from separately built and deployed applications at runtime, with negotiation of shared dependencies.",
+    "details": [
+      "Shared libraries such as React can be singletons with version ranges.",
+      "A manifest of remote locations lets teams deploy without redeploying the host."
+    ],
+    "useCases": [
+      "Runtime composition of micro-frontends owned by different teams."
+    ],
+    "related": [
+      "micro-frontends"
+    ]
+  },
+  {
+    "id": "cascade-layers",
+    "term": "Cascade layers",
+    "aka": [
+      "@layer"
+    ],
+    "group": "languages-frontend",
+    "definition": "A CSS feature that groups styles into named layers with an explicit order of precedence, so later layers win regardless of selector specificity or the order stylesheets load in.",
+    "details": [
+      "Useful for ordering resets, design-system styles and application styles.",
+      "Supported in all modern browsers."
+    ],
+    "useCases": [
+      "Keeping micro-frontend styles from overriding shell styles unpredictably."
+    ],
+    "related": [
+      "micro-frontends"
+    ]
+  },
+  {
+    "id": "hermes",
+    "term": "Hermes",
+    "aka": [
+      "Hermes V1"
+    ],
+    "group": "languages-frontend",
+    "definition": "The JavaScript engine built for React Native, which compiles JavaScript to bytecode at build time for faster startup and lower memory use on mobile devices.",
+    "details": [
+      "The default engine since React Native 0.70. React Native 0.84 made Hermes V1 the default.",
+      "Debugged through React Native DevTools."
+    ],
+    "useCases": [
+      "Improving cold-start time on low-end Android devices."
+    ],
+    "related": [
+      "react-native"
+    ]
+  },
+  {
+    "id": "runtime-version",
+    "term": "Runtime version",
+    "aka": [
+      "OTA compatibility"
+    ],
+    "group": "languages-frontend",
+    "definition": "In Expo's OTA updates, an identifier of a binary's native layer, used to make sure an update's JavaScript is only delivered to builds whose native code it was built for.",
+    "details": [
+      "The fingerprint policy derives it from native dependencies and configuration automatically.",
+      "Updates that call a native module must not reach builds without it."
+    ],
+    "useCases": [
+      "Shipping a JavaScript update safely to some app versions but not others."
+    ],
+    "related": [
+      "react-native"
+    ]
+  },
+  {
+    "id": "long-animation-frames",
+    "term": "Long Animation Frames (LoAF)",
+    "aka": [
+      "LoAF API"
+    ],
+    "group": "languages-frontend",
+    "definition": "A browser performance API that reports frames taking longer than 50 ms to render, with attribution to the scripts that ran during them, by source URL and function.",
+    "details": [
+      "The successor to the Long Tasks API for diagnosing poor INP.",
+      "Script attribution maps slow frames to the code or team responsible."
+    ],
+    "useCases": [
+      "Finding which micro-frontend's script causes slow interactions."
+    ],
+    "related": [
+      "web-performance",
+      "micro-frontends"
+    ]
   }
 ]
