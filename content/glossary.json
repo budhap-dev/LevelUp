@@ -6207,5 +6207,282 @@
       "nodejs",
       "javascript"
     ]
+  },
+  {
+    "id": "security-group",
+    "term": "Security group",
+    "aka": [
+      "SG"
+    ],
+    "group": "cloud-devops",
+    "definition": "A stateful, allow-only virtual firewall attached to network interfaces in an AWS VPC. Return traffic for an allowed connection is permitted automatically.",
+    "details": [
+      "Rules can reference other security groups instead of IP ranges, which expresses intent and survives scaling.",
+      "Azure's closest equivalent is a network security group (NSG), which also supports deny rules."
+    ],
+    "useCases": [
+      "Allowing only the load balancer's group to reach a service's port.",
+      "Restricting a database to its application's tasks."
+    ],
+    "related": [
+      "aws",
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "network-acl",
+    "term": "Network ACL",
+    "aka": [
+      "NACL"
+    ],
+    "group": "cloud-devops",
+    "definition": "A stateless list of numbered allow and deny rules applied to all traffic entering or leaving an AWS subnet.",
+    "details": [
+      "Rules are evaluated lowest number first, and the first match wins.",
+      "Being stateless, it needs explicit rules for return traffic on ephemeral ports."
+    ],
+    "useCases": [
+      "Quickly blocking a known bad address range for a whole subnet.",
+      "A coarse backstop between public and data subnets."
+    ],
+    "related": [
+      "aws"
+    ]
+  },
+  {
+    "id": "cold-start",
+    "term": "Cold start",
+    "aka": [
+      "init duration"
+    ],
+    "group": "cloud-devops",
+    "definition": "The extra latency when a serverless platform must create a new execution environment (download code, start the runtime, run initialisation) before handling a request.",
+    "details": [
+      "Reduced by smaller bundles, lazy loading, snapshots such as Lambda SnapStart, and provisioned concurrency.",
+      "Lambda has billed the init phase for every configuration since August 2025."
+    ],
+    "useCases": [
+      "Explaining p99 latency spikes on a user-facing Lambda API after a traffic burst."
+    ],
+    "related": [
+      "aws",
+      "azure"
+    ]
+  },
+  {
+    "id": "data-perimeter",
+    "term": "Data perimeter",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "A set of preventive guardrails ensuring that only trusted identities access trusted resources from expected networks, so one misconfiguration or stolen credential can't leak data.",
+    "details": [
+      "On AWS: RCPs and resource policies for identities, SCPs and VPC endpoint policies for resources, and network condition keys.",
+      "Key conditions include aws:PrincipalOrgID, aws:ResourceOrgID and aws:SourceVpce."
+    ],
+    "useCases": [
+      "Blocking access to company buckets from outside the organisation, even if a bucket policy is too open."
+    ],
+    "related": [
+      "aws",
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "resource-control-policy",
+    "term": "Resource control policy (RCP)",
+    "aka": [
+      "RCP"
+    ],
+    "group": "cloud-devops",
+    "definition": "An AWS Organizations policy that caps what can be done to resources in member accounts, whoever the caller is, including principals outside the organisation.",
+    "details": [
+      "Like SCPs, it only limits and never grants.",
+      "Introduced in November 2024 for S3, STS, KMS, SQS and Secrets Manager, and since extended to more services."
+    ],
+    "useCases": [
+      "Denying access to any S3 bucket in the organisation from principals outside it."
+    ],
+    "related": [
+      "aws"
+    ]
+  },
+  {
+    "id": "managed-identity",
+    "term": "Managed identity",
+    "aka": [
+      "system-assigned identity",
+      "user-assigned identity"
+    ],
+    "group": "cloud-devops",
+    "definition": "A Microsoft Entra identity that Azure creates and manages for a resource, so code can get tokens for other Azure services without any stored secret.",
+    "details": [
+      "System-assigned identities live and die with one resource. User-assigned ones are standalone and can be shared.",
+      "Grant it least-privilege RBAC roles at the narrowest scope."
+    ],
+    "useCases": [
+      "An app reading Key Vault secrets and Blob Storage with no connection strings."
+    ],
+    "related": [
+      "azure",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "workload-identity-federation",
+    "term": "Workload identity federation",
+    "aka": [
+      "OIDC federation",
+      "federated identity credential"
+    ],
+    "group": "cloud-devops",
+    "definition": "Letting an external workload exchange a token from its own OIDC issuer (such as GitHub Actions or a Kubernetes cluster) for short-lived cloud credentials, based on a configured trust in that issuer, subject and audience.",
+    "details": [
+      "On Azure it's a federated credential on a managed identity or app registration. On AWS it's AssumeRoleWithWebIdentity with a role trust policy.",
+      "Scope the subject to a repository and environment, so only approved jobs get production access."
+    ],
+    "useCases": [
+      "CI pipelines deploying to the cloud without stored keys."
+    ],
+    "related": [
+      "azure",
+      "aws",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "private-endpoint",
+    "term": "Private endpoint",
+    "aka": [
+      "Private Link"
+    ],
+    "group": "cloud-devops",
+    "definition": "A network interface with a private IP in your virtual network that connects to one specific PaaS resource, so traffic to it never uses the public endpoint.",
+    "details": [
+      "Needs private DNS so the service's normal hostname resolves to the private IP.",
+      "Disable public network access on the resource once it's in place."
+    ],
+    "useCases": [
+      "Reaching Azure SQL, Storage and Key Vault only from the application's VNet and on-premises."
+    ],
+    "related": [
+      "azure",
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "virtual-wan",
+    "term": "Virtual WAN",
+    "aka": [
+      "vWAN"
+    ],
+    "group": "cloud-devops",
+    "definition": "Azure's managed networking service providing Microsoft-run hubs with any-to-any transit between VNets, branches, remote users and ExpressRoute across regions.",
+    "details": [
+      "A secured virtual hub adds Azure Firewall, and routing intent sends traffic through it.",
+      "You can't deploy your own resources inside a virtual hub."
+    ],
+    "useCases": [
+      "Connecting dozens of branch offices and several regions without hand-built routing."
+    ],
+    "related": [
+      "azure"
+    ]
+  },
+  {
+    "id": "api-gateway",
+    "term": "API gateway",
+    "aka": [
+      "API management"
+    ],
+    "group": "backend-apis",
+    "definition": "A managed entry point in front of APIs that applies cross-cutting policies such as authentication, rate limits, quotas, transformation, caching and analytics.",
+    "details": [
+      "Examples: Azure API Management, Amazon API Gateway, Kong, Apigee.",
+      "Subscription or API keys identify consumers for quotas. They aren't authentication."
+    ],
+    "useCases": [
+      "Publishing partner APIs with per-consumer quotas and JWT validation."
+    ],
+    "related": [
+      "azure",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "merge-queue",
+    "term": "Merge queue",
+    "aka": [
+      "merge train"
+    ],
+    "group": "delivery",
+    "definition": "A system that tests each pull request combined with the changes ahead of it in a queue, and merges only if that combination passes, so main stays green.",
+    "details": [
+      "Batching keeps throughput high. A failed batch is split to find the culprit.",
+      "It catches semantic conflicts that per-PR checks against an old main miss."
+    ],
+    "useCases": [
+      "A busy monorepo where many PRs merge every hour."
+    ],
+    "related": [
+      "ci-cd-pipelines",
+      "code-review"
+    ]
+  },
+  {
+    "id": "progressive-delivery",
+    "term": "Progressive delivery",
+    "aka": [
+      "automated canary analysis"
+    ],
+    "group": "cloud-devops",
+    "definition": "Releasing a change to gradually larger slices of traffic or users while automatically comparing its health with the current version, then promoting or rolling back without waiting for a person.",
+    "details": [
+      "Tools include Argo Rollouts, Flagger and cloud deployment services.",
+      "The canary needs enough requests for the comparison to be meaningful."
+    ],
+    "useCases": [
+      "A 5% to 25% to 100% rollout that aborts when the error rate rises."
+    ],
+    "related": [
+      "ci-cd-pipelines",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "blue-green-deployment",
+    "term": "Blue-green deployment",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "Running the new version alongside the old one, then switching all traffic to it at once, with the old version kept ready for an instant switch back.",
+    "details": [
+      "Needs double capacity during the switch.",
+      "The database schema must work with both versions."
+    ],
+    "useCases": [
+      "Releasing a service where mixed versions during a rolling update would be a problem."
+    ],
+    "related": [
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "pwn-request",
+    "term": "Pwn request",
+    "aka": [
+      "pull_request_target attack"
+    ],
+    "group": "quality-security",
+    "definition": "A CI attack in which a privileged workflow, such as GitHub Actions' pull_request_target, checks out and runs code from an untrusted pull request, giving the attacker its secrets and write token.",
+    "details": [
+      "Prevent it by running untrusted code only in unprivileged workflows.",
+      "Treat anything an unprivileged run produces as untrusted input."
+    ],
+    "useCases": [
+      "Auditing workflows in open-source repositories that accept fork PRs."
+    ],
+    "related": [
+      "ci-cd-pipelines",
+      "devsecops"
+    ]
   }
 ]

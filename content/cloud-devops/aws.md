@@ -6,7 +6,7 @@ tags: [aws, cloud]
 level: Senior
 estimatedMinutes: 90
 related: [cloud-fundamentals, azure, infrastructure-as-code, finops]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -145,6 +145,33 @@ export async function recentOrders(customerId: string, limit = 20) {
 - **Right-sizing** with Compute Optimizer, **storage lifecycle** policies, **log retention** settings (CloudWatch Logs defaults to never expire), and **data transfer** awareness: cross-AZ, NAT and internet egress.
 - **Visibility**: cost allocation tags, Cost Explorer, Cost and Usage Reports (CUR 2.0 / Data Exports), budgets and anomaly detection.
 
+### Worked example: finding and cutting a NAT gateway bill
+
+A service runs on ECS Fargate in private subnets across three AZs in us-east-1, with one NAT gateway per AZ and no VPC endpoints. Cost and Usage Report data, grouped by `UsageType`, shows `NatGateway-Bytes` as the third-largest line on the bill. VPC Flow Logs for the NAT gateways' network interfaces, joined to destination IP ranges, break the monthly traffic down (taking 1 TB as 1,000 GB to keep the sums simple):
+
+| Traffic through NAT | GB per month |
+|---|---|
+| S3 (data files and exports) | 40,000 |
+| ECR image pulls (layers are stored in S3) | 6,000 |
+| CloudWatch Logs | 4,000 |
+| Third-party APIs | 1,000 |
+| **Total** | **51,000** |
+
+**Before**, at $0.045 per NAT gateway hour and $0.045 per GB processed:
+- Hours: 3 gateways × 730 hours × $0.045 = $98.55.
+- Data: 51,000 GB × $0.045 = $2,295.
+- About **$2,394 a month**, almost all of it data processing, for traffic that never needed to leave AWS.
+
+**After** adding endpoints:
+- An **S3 gateway endpoint** is free and carries the S3 traffic *and* the ECR image layers, because ECR serves layers from S3. That removes 46,000 GB from the NAT gateways.
+- **Interface endpoints** for `ecr.api`, `ecr.dkr` and `logs` cost $0.01 per hour per AZ each: 3 endpoints × 3 AZs × 730 hours × $0.01 = $65.70. Their data processing is $0.01 per GB: 4,000 GB of logs is $40, and the ECR API calls are negligible.
+- Only the third-party traffic still uses NAT: 1,000 GB × $0.045 = $45, plus the same $98.55 of gateway hours.
+- About **$249 a month**, a saving of roughly $2,145 a month (90%).
+
+Two follow-on checks:
+- **Cross-AZ traffic.** If a subnet's route table points at a NAT gateway in another AZ, every byte also pays inter-AZ transfer ($0.01 per GB in each direction), and one AZ's outage takes the others' egress with it. Route each AZ to its own NAT gateway.
+- **Endpoint policies.** An endpoint can carry a policy, so the S3 gateway endpoint can allow only the organisation's buckets. The saving and the data-perimeter control come from the same change.
+
 ## How It Works
 
 ### Multi-account landing zone
@@ -182,6 +209,41 @@ flowchart LR
   SVC -. "gateway endpoint (free)" .-> S3[("S3")]
   SVC -. "NAT gateway (per GB)" .-> EXT["Third-party APIs"]
 ```
+
+### An SQS batch with one bad message
+
+```mermaid
+sequenceDiagram
+  participant P as Order API
+  participant Q as SQS queue
+  participant L as Lambda consumer
+  participant D as Dead-letter queue
+  participant O as On-call
+  %% step: The order API sends three orders to the queue.
+  %% step: Lambda's event source mapping long-polls the queue for a batch.
+  %% step: SQS returns all three. They're now invisible to other consumers for the visibility timeout, which should be about six times the function timeout.
+  %% step: The handler processes each record. Orders 1 and 3 succeed. Order 2 fails validation.
+  %% step: With ReportBatchItemFailures on, the handler returns only order 2's message id. Lambda deletes orders 1 and 3, so they aren't processed again.
+  %% step: Order 2 becomes visible again when its visibility timeout expires. Its receive count is now 1.
+  %% step: The event source mapping keeps polling and picks it up again.
+  %% step: Order 2 fails again on its second and third receives. The bug is in the data, so retrying can't fix it.
+  %% step: Its receive count has passed the redrive policy's maxReceiveCount of 3.
+  %% step: SQS moves it to the dead-letter queue, so it stops blocking the queue and stops burning invocations.
+  %% step: An alarm on the DLQ's visible-message count pages the owning team. After the fix they redrive it to the source queue.
+  P->>Q: Send orders 1, 2 and 3
+  L->>Q: Poll for a batch
+  Q-->>L: Batch of 3, now invisible
+  Note over L: 1 and 3 succeed, 2 fails
+  L-->>Q: batchItemFailures = order 2
+  Note over Q: Order 2 visible again
+  L->>Q: Poll again
+  Q-->>L: Order 2, which fails twice more
+  Note over Q: Receive count over maxReceiveCount
+  Q->>D: Redrive order 2 to the DLQ
+  D->>O: Alarm on DLQ depth
+```
+
+Without `ReportBatchItemFailures`, the handler's single error would make all three messages reappear, and orders 1 and 3 would be processed again. That's harmless only if every consumer is idempotent, which it should be anyway.
 
 ## When to Use / Trade-offs
 
@@ -645,6 +707,160 @@ A sound event flow with an outbox-like publish, per-consumer queues, a saga, and
 - Lambda calling Lambda synchronously through the whole chain.
 - No idempotency or DLQs.
 
+### What is the difference between security groups and network ACLs? {#security-groups-vs-nacls}
+
+**Level:** Foundation
+
+**Model answer:**
+| | Security group | Network ACL |
+|---|---|---|
+| Attached to | Elastic network interfaces (instances, tasks, load balancers, endpoints) | Subnets |
+| State | **Stateful**: return traffic is allowed automatically | **Stateless**: return traffic needs its own rule, usually for ephemeral ports 1024–65535 |
+| Rules | Allow only | Allow and deny |
+| Evaluation | All rules together | In number order, lowest first. The first match wins |
+| Sources | CIDR ranges, prefix lists, **other security groups** | CIDR ranges only |
+
+In practice, security groups do almost all the work. Referencing groups instead of IP addresses expresses intent ("the ALB's group may reach the service's group on 8080") and keeps working as tasks come and go. NACLs are a coarse, subnet-wide backstop: blocking a known bad range quickly, or enforcing "the data subnets accept nothing from the public subnets" regardless of what any team puts in its security groups.
+
+Neither inspects content. For layer 7 filtering use AWS WAF on CloudFront or the ALB, and for central egress or domain filtering use AWS Network Firewall.
+
+**What the interviewer is looking for:**
+Stateful versus stateless, the scope of each, group-to-group references, and an opinion on which to rely on.
+
+**Follow-ups:**
+- Why might a NACL change break responses but not requests?
+- How would you allow a Lambda function in a VPC to reach an RDS database?
+
+**Red flags:**
+- `0.0.0.0/0` inbound on database security groups.
+- Forgetting ephemeral return ports in a custom NACL.
+
+### How do Lambda concurrency and cold starts work, and how do you control them? {#lambda-concurrency}
+
+**Level:** Senior
+
+**Model answer:**
+**Concurrency** is the number of requests being processed at once, with one execution environment per in-flight request. Each environment handles one request at a time.
+- The **account limit** per region defaults to 1,000 and can be raised. All functions share it.
+- Each function can scale out by **1,000 environments every 10 seconds**, up to the account limit.
+- **Reserved concurrency** guarantees a function a slice of the account limit *and* caps it at that number. The cap is its most useful side: it protects a downstream database or a rate-limited partner API. Setting it to 0 is a kill switch.
+- For SQS triggers, **maximum concurrency** on the event source mapping limits how many environments that queue can drive, without throttling other invocations of the function.
+
+A **cold start** happens when a request needs a new environment: download the code, start the runtime, run the initialisation code outside the handler. It ranges from a couple of hundred milliseconds for a small Node.js or Python function to several seconds for a large JVM function. Since August 2025 the init phase is billed for every configuration, so heavy initialisation costs money as well as latency.
+
+Ways to reduce it:
+- **Do less at init**: smaller bundles (tree-shaking, no unused SDK clients), lazy-load rarely used dependencies, keep SDK clients and connections in module scope so warm invocations reuse them.
+- **SnapStart** for Java, Python and .NET restores a snapshot of an initialised environment.
+- **Provisioned concurrency** keeps a number of environments initialised. It's billed while configured, and it can be scheduled or scaled on utilisation.
+- More memory also gives proportionally more CPU, which often shortens init.
+
+For databases, put **RDS Proxy** between Lambda and a relational database, so thousands of short-lived environments don't open thousands of connections.
+
+**What the interviewer is looking for:**
+The per-request environment model, reserved concurrency as a protective cap, and cold-start remedies matched to their cost.
+
+**Follow-ups:**
+- A Lambda function overwhelms its PostgreSQL database during a spike. What do you change?
+- When does provisioned concurrency cost more than running Fargate?
+
+**Red flags:**
+- Thinking one Lambda environment handles many requests at once.
+- "Warming" functions with scheduled pings instead of provisioned concurrency.
+
+### A call returns AccessDenied. How do you work out which policy is denying it? {#debug-access-denied}
+
+**Level:** Senior
+
+**Model answer:**
+1. **Confirm who is calling.** Run `aws sts get-caller-identity` in the same context, or read `userIdentity` in the CloudTrail event. Many "permission" bugs are the wrong role: a default profile, a task role that wasn't set, or a session from the wrong account.
+2. **Read the whole error message.** For most services it names the policy type: "no identity-based policy allows the action", "with an explicit deny in a service control policy", "in a resource-based policy" or "in a permissions boundary". That narrows the search to one layer.
+3. **Find the CloudTrail event** (`errorCode` `AccessDenied` or `UnauthorizedOperation`) to see the exact action, resource ARN, region and request parameters. A request to the wrong region or a slightly different ARN is common.
+4. **Walk the layers that can deny it:**
+   - SCPs and RCPs on every OU from the root down.
+   - The resource policy: bucket policy, KMS key policy, queue policy, or the role's trust policy for `AssumeRole`.
+   - The permissions boundary and any session policy.
+   - The identity policy, including its `Condition` keys (tags, source VPC, MFA, region).
+   - **VPC endpoint policies** if the call goes through an endpoint.
+5. **Check the service-specific traps:**
+   - **KMS**: reading an encrypted S3 object needs `kms:Decrypt` on the key, and a key policy that allows the account or role.
+   - **S3**: Block Public Access, Object Ownership and ACLs.
+   - **Cross-account**: both sides must allow it.
+6. **Test the fix with tools**, not repeated deploys: the IAM policy simulator for identity policies, and IAM Access Analyzer's policy checks to validate a change before it ships.
+
+Afterwards, ask why the error was confusing. Use clear policy `Sid`s and keep guardrails documented, so the next person can find the deny quickly.
+
+**What the interviewer is looking for:**
+A systematic order: identity, error text, CloudTrail, then each policy layer, plus the KMS and endpoint-policy traps.
+
+**Follow-ups:**
+- The same role can read the bucket from a laptop but not from a Lambda function in a VPC. Why might that be?
+- How do you stop people from "fixing" access errors with `s3:*`?
+
+**Red flags:**
+- Adding `AdministratorAccess` to see whether it helps.
+- Not knowing that SCPs and KMS key policies can deny.
+
+### How do you roll out a new service control policy without breaking production? {#scp-rollout}
+
+**Level:** Architect
+
+**Model answer:**
+An SCP affects every principal in every account under the OU it's attached to, except the management account and service-linked roles. A wrong one can stop deployments or break running workloads across hundreds of accounts in seconds. Treat it like a production code change.
+
+1. **Write it as code** in the landing zone repository, with a reviewed pull request, a clear `Sid` per statement and the reason documented.
+2. **Measure the impact before enforcing it.** SCPs have no audit mode, so query CloudTrail (an organisation trail in Athena or CloudTrail Lake) for calls the new policy would have denied in the last 30–90 days. IAM Access Analyzer's last-accessed data helps for service-level denies.
+3. **Leave room for the platform.** Exempt break-glass and pipeline roles with a condition on `aws:PrincipalArn` (for example the landing zone's deployment roles), so the guardrail can't lock out the people who need to fix it.
+4. **Stage the rollout**: a policy-staging OU with test accounts, then Sandbox, then non-prod, then prod. Wait long enough between stages to cover monthly jobs and seasonal workloads.
+5. **Watch for denies** after each stage: an EventBridge rule or a CloudWatch metric filter on CloudTrail `AccessDenied` events whose message mentions a service control policy, routed to the platform team.
+6. **Have a fast rollback.** Detaching the policy takes effect quickly, so keep the pipeline able to revert, and make sure the rollback doesn't itself depend on something the SCP blocks.
+
+Mind the limits: up to five SCPs attached to each OU or account, 5,120 characters each. That pushes towards a few well-structured policies rather than one per rule.
+
+**What the interviewer is looking for:**
+Impact analysis from CloudTrail before enforcing, exemptions for break-glass, staged OUs, deny monitoring and a tested rollback.
+
+**Follow-ups:**
+- How would you handle a team that needs an exception for one account?
+- Why can't an SCP protect the management account, and what do you do about it?
+
+**Red flags:**
+- Attaching a new deny SCP at the root on a Friday.
+- No exemption for the roles that manage the organisation.
+
+### How would you build a data perimeter so the organisation's data can only be reached by trusted identities from expected networks? {#aws-data-perimeter}
+
+**Level:** Architect
+
+**Model answer:**
+A data perimeter is a set of preventive guardrails ensuring that only **trusted identities** access **trusted resources** from **expected networks**. Each of the three is enforced by a different kind of policy, so that one mistake, such as a bucket policy that's too open or a stolen credential, isn't enough to leak data.
+
+| Goal | Enforced with | Key condition |
+|---|---|---|
+| Only my identities can access my resources | **RCPs** (resource control policies) and resource policies | `aws:PrincipalOrgID` equals my organisation, with exceptions for AWS services acting for me (`aws:PrincipalIsAWSService`) |
+| My identities can only access my resources | **SCPs** and **VPC endpoint policies** | `aws:ResourceOrgID` equals my organisation, with documented exceptions for third-party and AWS-owned resources |
+| Access only from expected networks | RCPs, SCPs and resource policies | `aws:SourceVpc`, `aws:SourceVpce` or `aws:SourceIp`, with `aws:ViaAWSService` so services calling on your behalf still work |
+
+**Design steps:**
+1. **Inventory the exceptions first.** Use IAM Access Analyzer's external access findings and CloudTrail to find legitimate cross-organisation access: partner buckets, vendor SaaS roles, public datasets, AWS service principals.
+2. **Start with RCPs** on the services they cover. They began with S3, STS, KMS, SQS and Secrets Manager and have since added services such as ECR, CloudWatch Logs and DynamoDB. One RCP closes the "bucket made public by mistake" path across every account.
+3. **Add SCPs** that deny access to resources outside the organisation, so a compromised workload can't copy data to the attacker's bucket.
+4. **Apply endpoint policies** on S3 and DynamoDB gateway endpoints and on interface endpoints, so traffic from your VPCs can only reach your organisation's resources.
+5. **Network controls on credentials**: deny use of the organisation's roles from outside expected networks for sensitive data stores, so a stolen session token is useless from the attacker's laptop.
+6. **Roll out like any guardrail**: impact analysis from CloudTrail, staged OUs, deny monitoring.
+
+**Trade-offs:** every exception is a maintenance cost, and network conditions break legitimate paths such as the console, AWS services acting for you and partners. Start with the identity and resource controls, which have the best value and the fewest surprises, and apply network controls to the most sensitive data.
+
+**What the interviewer is looking for:**
+The trusted identities, resources and networks model, the right policy type for each, the key condition keys, and a realistic plan for exceptions.
+
+**Follow-ups:**
+- How do you allow a vendor's SaaS product to read one bucket without breaking the perimeter?
+- Which AWS-owned resources would a "my resources only" SCP accidentally block?
+
+**Red flags:**
+- Relying on bucket policies alone across hundreds of accounts.
+- Network-only controls without identity controls.
+
 ## Cheat Sheet
 
 ### Governance and identity
@@ -671,6 +887,16 @@ A sound event flow with an outbox-like publish, per-consumer queues, a saga, and
 - **NAT gateway cost** — hourly plus about $0.045 per GB processed in us-east-1.
 - **Savings Plans** — commit to steady compute spend after right-sizing. Compute Savings Plans cover EC2, Fargate and Lambda.
 - **Well-Architected pillars** — operational excellence, security, reliability, performance efficiency, cost optimisation, sustainability.
+
+### Revisit
+
+- **NAT vs endpoints** — S3 gateway endpoints are free and also carry ECR image layers. Interface endpoints are $0.01 per hour per AZ plus $0.01 per GB, against NAT's $0.045 per GB.
+- **Security groups vs NACLs** — stateful, allow-only, on network interfaces, can reference other groups. NACLs are stateless, ordered allow and deny rules on subnets.
+- **SQS partial batch failure** — return `batchItemFailures` so only failed messages retry, and use `maxReceiveCount` plus a DLQ with an alarm.
+- **Lambda concurrency** — one request per environment. Reserved concurrency guarantees and caps a function. Functions scale by 1,000 environments every 10 seconds.
+- **Cold starts** — slim init, SnapStart for Java, Python and .NET, provisioned concurrency for steady latency. Init time has been billed since August 2025.
+- **AccessDenied triage** — confirm the caller, read the policy type in the message, find the CloudTrail event, then check SCP, RCP, resource, boundary, session, identity and endpoint policies.
+- **Data perimeter** — RCPs for trusted identities, SCPs and endpoint policies for trusted resources, network conditions for expected networks.
 
 ## Further Reading
 
