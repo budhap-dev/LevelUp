@@ -5665,5 +5665,201 @@
       "multi-tenant-saas",
       "authentication-authorisation"
     ]
+  },
+  {
+    "id": "consistent-hashing",
+    "term": "Consistent hashing",
+    "aka": [
+      "hash ring"
+    ],
+    "group": "architecture-design",
+    "definition": "A way to map keys to nodes by placing both on a ring of hash values, so that adding or removing a node moves only about 1/N of the keys.",
+    "details": [
+      "Virtual nodes (many points per node) keep the load balanced; with one point per node, load can be very uneven.",
+      "Plain hash % N moves most keys whenever N changes."
+    ],
+    "useCases": [
+      "Distributing cache keys across a changing set of nodes.",
+      "Partitioning data in Dynamo-style stores."
+    ],
+    "related": [
+      "system-design",
+      "caching"
+    ]
+  },
+  {
+    "id": "uuidv7",
+    "term": "UUIDv7",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A UUID version defined in RFC 9562 (2024) that starts with a 48-bit Unix millisecond timestamp followed by random bits, so ids sort roughly by creation time.",
+    "details": [
+      "Needs no coordination between generators.",
+      "Keeps B-tree inserts close together, unlike random UUIDv4."
+    ],
+    "useCases": [
+      "Primary keys in distributed systems and databases."
+    ],
+    "related": [
+      "system-design",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "hot-key",
+    "term": "Hot key",
+    "aka": [
+      "hot partition"
+    ],
+    "group": "architecture-design",
+    "definition": "A single key that receives far more traffic than its partition or cache node can serve, so adding nodes doesn't help.",
+    "details": [
+      "Hot reads: local caches, replicated copies, request coalescing.",
+      "Hot writes: split into sub-keys, batch updates, or aggregate asynchronously."
+    ],
+    "useCases": [
+      "A viral post's like counter.",
+      "A flash-sale product page."
+    ],
+    "related": [
+      "system-design",
+      "caching"
+    ]
+  },
+  {
+    "id": "virtual-waiting-room",
+    "term": "Virtual waiting room",
+    "aka": [
+      "waiting room"
+    ],
+    "group": "architecture-design",
+    "definition": "A queue in front of a high-demand flow that admits users at the rate the back end can sustain, turning a traffic spike into a controlled stream.",
+    "details": [
+      "Positions are randomised at opening time so refreshing or bots gain nothing.",
+      "Served as static content from the edge, so waiting users cost little."
+    ],
+    "useCases": [
+      "Concert ticket sales.",
+      "Limited product drops."
+    ],
+    "related": [
+      "system-design",
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "command-query-separation",
+    "term": "Command–query separation (CQS)",
+    "aka": [
+      "CQS"
+    ],
+    "group": "architecture-design",
+    "definition": "Bertrand Meyer's principle that a method should either change state (a command) or return information (a query), but not both.",
+    "details": [
+      "Atomic operations such as pop or compare-and-set are deliberate exceptions, because splitting them creates races.",
+      "CQRS applies the same idea at the architecture level."
+    ],
+    "useCases": [
+      "Making queries safe to call in logs, assertions and retries."
+    ],
+    "related": [
+      "solid-clean-code",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "composition-over-inheritance",
+    "term": "Composition over inheritance",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "Building behaviour by combining small collaborating objects or functions rather than by extending base classes.",
+    "details": [
+      "Avoids the fragile base class problem and the explosion of subclasses for every combination.",
+      "Inheritance still suits small, stable is-a hierarchies designed for extension."
+    ],
+    "useCases": [
+      "A report job composed from any renderer and any delivery method."
+    ],
+    "related": [
+      "solid-clean-code",
+      "design-patterns"
+    ]
+  },
+  {
+    "id": "functional-core-imperative-shell",
+    "term": "Functional core, imperative shell",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A structure that keeps decisions in pure functions (the core) and confines I/O, time and randomness to a thin outer layer (the shell).",
+    "details": [
+      "The core is tested with plain inputs and outputs, without mocks.",
+      "Popularised by Gary Bernhardt."
+    ],
+    "useCases": [
+      "Pricing, eligibility and scheduling rules.",
+      "Nightly jobs whose decisions must be easy to test."
+    ],
+    "related": [
+      "solid-clean-code",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "seam",
+    "term": "Seam",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A place where you can change a program's behaviour without editing the code at that point, such as an injected dependency or an overridable method. Michael Feathers' term.",
+    "details": [
+      "Used to get legacy code under test before refactoring it.",
+      "Constructor parameters with default values are a common, low-risk seam."
+    ],
+    "useCases": [
+      "Replacing a hard-wired database call with a fake in a characterisation test."
+    ],
+    "related": [
+      "technical-debt",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "brownout",
+    "term": "Brownout",
+    "aka": [
+      "scheduled brownout"
+    ],
+    "group": "architecture-design",
+    "definition": "An announced, short window in which a deprecated API or feature deliberately fails, to reveal consumers that still depend on it before it is removed.",
+    "details": [
+      "Callers get a clear error linking to the migration guide.",
+      "Repeated with growing duration as the removal date approaches."
+    ],
+    "useCases": [
+      "Retiring an internal API version.",
+      "Removing a legacy authentication method."
+    ],
+    "related": [
+      "technical-debt",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "codemod",
+    "term": "Codemod",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A program that rewrites source code automatically, usually by transforming its syntax tree, to apply the same change across many files or repositories.",
+    "details": [
+      "Tools include jscodeshift and ts-morph (TypeScript), OpenRewrite (Java) and Roslyn code fixes (.NET).",
+      "Combined with bulk pull-request tooling for organisation-wide migrations."
+    ],
+    "useCases": [
+      "Upgrading a framework across hundreds of services.",
+      "Replacing a deprecated library call everywhere."
+    ],
+    "related": [
+      "technical-debt",
+      "platform-engineering"
+    ]
   }
 ]

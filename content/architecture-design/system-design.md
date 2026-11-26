@@ -6,7 +6,7 @@ tags: [scalability, distributed-systems]
 level: Architect
 estimatedMinutes: 120
 related: [architecture-patterns, caching, databases-sql-nosql, messaging-event-streaming]
-lastReviewed: 2026-11-20
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -65,6 +65,53 @@ Keep request-handling services **stateless**: session state goes in a token or a
   - **Range** keeps range scans cheap but creates hot spots (for example, time-ordered keys all writing to the newest shard).
   - **Consistent hashing** with virtual nodes limits data movement when nodes join or leave.
 - Cross-shard queries, transactions and secondary indexes are the hidden cost. Choose the key so that the **most frequent query hits one shard**.
+
+### Worked example: consistent hashing, measured
+
+`hash(key) % N` is the obvious way to pick a shard, until N changes. A hash ring places each node at many points ("virtual nodes") on a circle of hash values. A key belongs to the first node point clockwise from the key's own hash:
+
+```ts
+import { createHash } from 'node:crypto';
+
+// Fast and evenly spread; not used for security.
+const hash = (s: string) => createHash('md5').update(s).digest().readUInt32BE(0);
+
+class HashRing {
+  private ring: { point: number; node: string }[] = [];
+  constructor(nodes: string[], private vnodes = 100) {
+    nodes.forEach((n) => this.add(n));
+  }
+
+  add(node: string) {
+    for (let i = 0; i < this.vnodes; i++) this.ring.push({ point: hash(`${node}#${i}`), node });
+    this.ring.sort((a, b) => a.point - b.point);
+  }
+
+  nodeFor(key: string): string {
+    const h = hash(key);
+    let lo = 0, hi = this.ring.length;          // binary search for the first point ≥ h
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.ring[mid].point < h) lo = mid + 1; else hi = mid;
+    }
+    return this.ring[lo % this.ring.length].node; // past the last point, wrap to the first
+  }
+}
+```
+
+Running it with 1,000,000 keys, growing from 3 nodes to 4:
+
+| Scheme | Keys that moved | Where they went | Busiest node vs the average |
+|---|---|---|---|
+| `hash % N` | 75% | Everywhere | — |
+| Ring, 1 point per node | 3.7% | All to the new node | 2.9× |
+| Ring, 10 points per node | 22.6% | All to the new node | 1.36× |
+| Ring, 100 points per node | 22.0% | All to the new node | 1.15× |
+| Ring, 200 points per node | 21.9% | All to the new node | 1.10× |
+
+Two lessons. A ring moves only about 1/N of the keys, and only onto the new node, so a cache keeps most of its hit rate and a database moves a quarter of its data instead of three quarters. Virtual nodes are what make it *balanced*. With one point per node, the new node received almost nothing and one old node held nearly three times its share.
+
+Many systems go further and use a fixed number of **logical shards** (say 1,024) mapped onto physical nodes. Rebalancing then means moving whole logical shards, which is easier to reason about, throttle and track than a ring.
 
 ### Caching
 
@@ -131,6 +178,13 @@ sequenceDiagram
   participant R as Outbox relay
   participant Q as Message broker
   participant W as Worker
+  %% step: The client sends the order with an Idempotency-Key, so a retry after a timeout can't create a second order.
+  %% step: One local transaction writes the order and an outbox row. Either both exist or neither does, so there's no dual write.
+  %% step: The API answers 202 straight away. The slow work happens off the request path.
+  %% step: Separately, the outbox relay polls for rows it hasn't published yet (or tails the database log with change data capture).
+  %% step: It publishes OrderPlaced. If it crashes before marking the row sent, it publishes again later: at-least-once.
+  %% step: The broker delivers to a worker, possibly more than once.
+  %% step: So the worker deduplicates on the event id before acting. At-least-once delivery plus idempotent processing gives an exactly-once effect.
   C->>A: POST /orders with Idempotency-Key
   A->>D: BEGIN, insert order and outbox row, COMMIT
   A-->>C: 202 Accepted (order id)
@@ -166,7 +220,7 @@ sequenceDiagram
 
 - **Designing before clarifying** — jumping to Kafka and Kubernetes before agreeing on QPS and NFRs. Spot it when nobody can say which requirement a component satisfies.
 - **The distributed monolith** — services that must deploy together and call each other synchronously in long chains. Availability multiplies down: five services at 99.9% in series give ≈ 99.5%.
-- **Retry storms** — every layer retries 3× without jitter or a budget, so one slow dependency receives 27× the load and never recovers.
+- **Retry storms** — three layers each make up to 3 attempts without jitter or a budget, so one slow dependency receives up to 27× the load and never recovers.
 - **No timeouts** — a hung dependency holds threads and connections until the caller falls over too. Every network call needs a deadline that is shorter than the caller's own.
 - **Hot partitions** — a celebrity user, a timestamp-ordered key or a "global counter" row. Spot it with per-partition metrics, not averages.
 - **Cache as source of truth** — data that exists only in Redis, without persistence, is lost on eviction or failover.
@@ -243,7 +297,7 @@ CAP says that when a **network partition** separates replicas, a system must cho
 
 CAP says nothing about the normal case, which is where systems spend nearly all of their time. **PACELC** adds: *Else* (no partition), choose between **latency** and **consistency**. Synchronous replication across zones gives consistency at the cost of latency. Asynchronous replication is fast but can lose recent writes on failover or serve stale reads.
 
-Examples: a single-leader relational database with synchronous standby is PC/EC. DynamoDB with eventually consistent reads leans PA/EL, but it offers strongly consistent reads per request at extra cost and latency. DynamoDB serves strongly consistent reads from the partition leader, and they cost twice the read capacity of eventually consistent reads.
+Examples: a single-leader relational database with synchronous standby is PC/EC. DynamoDB with eventually consistent reads leans PA/EL, but it offers strongly consistent reads per request. They cost twice the read capacity of eventually consistent reads, and add latency.
 
 **What the interviewer is looking for:**
 That the candidate doesn't treat CAP as "pick two of three", knows its definitions are narrow, and can apply the latency-versus-consistency trade-off to a concrete design decision.
@@ -579,6 +633,161 @@ Judgement: distinguishing reversible from irreversible decisions, tying scale to
 - Defaulting to the most scalable architecture regardless of team size or load.
 - Never revisiting capacity assumptions.
 
+### How do you generate unique IDs in a distributed system? {#unique-ids}
+
+**Level:** Foundation
+
+**Model answer:**
+The options trade coordination, ordering, size and guessability:
+
+| Scheme | How it works | Strengths | Weaknesses |
+|---|---|---|---|
+| Database sequence | `BIGSERIAL` or `IDENTITY` | Compact, ordered, simple | One writer hands them out. Leaks volume ("we're order 1,042") |
+| Sequence ranges (hi/lo) | Each server reserves a block of 1,000 ids at a time | Few round trips, compact | Gaps; ordering only roughly follows time |
+| UUIDv4 | 122 random bits | No coordination, unguessable | 16 bytes; random inserts scatter across B-tree index pages |
+| UUIDv7 (RFC 9562, 2024) | 48-bit millisecond timestamp plus random bits | No coordination, roughly time-ordered, index-friendly | Reveals the creation time; 16 bytes |
+| ULID | Similar layout, encoded as 26 Crockford base32 characters | Sortable as text, readable | Not a standard UUID type |
+| Snowflake-style | 41-bit millisecond timestamp, 10-bit worker id, 12-bit sequence, in 64 bits | Compact, time-ordered, 4,096 ids per millisecond per worker | Needs unique worker ids, and depends on the clock not going backwards |
+
+A sensible default today is **UUIDv7** for primary keys (PostgreSQL 18 has a built-in `uuidv7()`). It needs no coordination and avoids UUIDv4's index fragmentation. Use a 64-bit Snowflake-style id when size matters at very large scale. Use random, unguessable identifiers (or a separate public token) anywhere an id appears in a URL that mustn't be enumerable.
+
+**What the interviewer is looking for:**
+The trade-offs between coordination, ordering and index locality, and that ids exposed to users leak information.
+
+**Follow-ups:**
+- What happens to a Snowflake generator when NTP moves the clock backwards?
+- Why do random UUIDs hurt insert performance in a B-tree index?
+
+**Red flags:**
+- A single auto-increment row shared by every service.
+- Using sequential ids in URLs for private resources.
+
+### How do you deal with hot keys in caches and partitioned stores? {#hot-keys}
+
+**Level:** Senior
+
+**Model answer:**
+A hot key is one key that receives far more traffic than its partition can serve: a viral post, a celebrity's profile, a flash-sale product or a global counter. Adding nodes doesn't help, because the key still lives on one node.
+
+**Find it first.** Use per-partition and per-key metrics (top-k sampling, Redis `--hotkeys` with an LFU eviction policy, DynamoDB's CloudWatch Contributor Insights), not cluster averages.
+
+**Hot reads:**
+- **Cache closer to the caller**: an in-process cache with a short TTL in front of the shared cache, or the CDN for public content.
+- **Replicate the hot entry**: store copies under `key#1` … `key#n` and read a random one.
+- **Request coalescing**: one fetch per key per instance, with other callers waiting for it, so a cache miss doesn't become a stampede.
+
+**Hot writes:**
+- **Split the key**: write a counter as 16 sub-counters (`likes:post42:0` … `:15`) chosen at random, and sum them on read (or periodically).
+- **Buffer and batch**: aggregate increments in memory or in a stream and apply them every second.
+- **Make it someone else's job**: an append-only log of events with asynchronous aggregation, instead of a single contended row.
+
+**Choose keys to avoid it**: a partition key with high cardinality, and no monotonically increasing values (timestamps, sequences) as the leading part of a range-partitioned key.
+
+**What the interviewer is looking for:**
+Detection by key rather than by average, and separate techniques for hot reads and hot writes.
+
+**Follow-ups:**
+- How would you show an exact like count if the counter is split?
+- What does DynamoDB do automatically for hot partitions, and where does that stop?
+
+**Red flags:**
+- "Add more shards" for a single hot key.
+- A global counter row updated on every request.
+
+### Design a notification service that sends email, SMS and push notifications to millions of users. {#design-notification-service}
+
+**Level:** Senior
+
+**Model answer:**
+**Requirements:** product teams send notifications through one API. Some are transactional (password resets, order updates, which must arrive in seconds) and some are marketing (campaigns to millions, which can take hours). Respect user preferences and quiet hours, never send duplicates, and track delivery.
+
+**Design:**
+1. **API** accepts `{ notificationId, userId, template, data, priority }`. `notificationId` is an idempotency key, so a retried call never sends twice.
+2. **Preference and policy check:** channel opt-ins, unsubscribes, quiet hours in the user's time zone, frequency caps, legal requirements (consent for marketing).
+3. **Rendering:** templates per channel and locale, rendered with the event's data.
+4. **Queues per channel and priority:** transactional traffic never waits behind a campaign. Separate worker pools act as bulkheads.
+5. **Channel workers** call providers (an email service, an SMS gateway, APNs and FCM for push), with per-provider rate limits, retries with backoff for retryable errors, and failover to a second provider for critical traffic.
+6. **Delivery tracking:** store every attempt and status. Ingest provider webhooks (delivered, bounced, complained), and suppress addresses that hard-bounce.
+7. **Campaign fan-out:** expand an audience in batches, from a snapshot of the segment, throttled to provider limits and spread over time.
+
+**Scale:** 10M marketing messages in 2 hours is about 1,400 per second, so the providers' rate limits matter more than your own throughput. Transactional volume is lower but latency-sensitive.
+
+**Failure modes to cover:** a provider outage (failover, and queue rather than drop), duplicate sends after a worker crash (an idempotency check before each send, keyed by notification and channel), and a bad template sent to everyone (render previews and canary sends to a small group first).
+
+**What the interviewer is looking for:**
+Idempotency, preferences as a first-class step, isolation between transactional and bulk traffic, provider limits and delivery feedback.
+
+**Follow-ups:**
+- How would you let a user see every notification you've sent them?
+- How do you avoid waking users at 3 a.m. across time zones?
+
+**Red flags:**
+- One queue for password resets and marketing campaigns.
+- No idempotency, so retries send the same SMS twice.
+
+### Design a group chat service with delivery and read receipts. {#design-chat}
+
+**Level:** Architect
+
+**Model answer:**
+**Requirements:** one-to-one and group conversations (up to a few thousand members), messages delivered in under a second to online users, offline users catch up later, message history, read receipts, multiple devices per user. Say 50M daily users sending 40 messages each, or about 2 billion messages a day (≈ 23k per second on average, perhaps 100k at peak).
+
+**Connections:** clients hold a WebSocket to a **gateway** tier. A presence and routing service maps `user → gateway instances` (one per device). Gateways are stateful, so plan for reconnect storms after a deploy: drain slowly, and have clients reconnect with jitter.
+
+**Write path:**
+1. The client sends a message with a **client-generated id**, so a resend after a dropped connection is deduplicated.
+2. The chat service assigns a **per-conversation sequence number** and appends the message to durable storage partitioned by conversation id (a wide-column store such as Cassandra or ScyllaDB suits this append-heavy, read-recent pattern).
+3. It acknowledges to the sender ("sent").
+4. It fans out to recipients' gateways through a pub/sub layer. Small groups fan out on write. Very large channels are better pulled: clients fetch new messages when notified.
+
+**Ordering and catch-up:** order is per conversation, by sequence number, not across conversations. Each device remembers the last sequence it saw per conversation, and asks for everything after it on reconnect. That one mechanism handles offline users, new devices and missed pushes. Offline users also get a mobile push notification.
+
+**Receipts:** "delivered" and "read" are themselves small messages back to the sender. For groups, store a **read watermark per member** (the highest sequence they've read) instead of a receipt per message per member, which would grow with members times messages.
+
+**Other concerns:** end-to-end encryption changes the server's role (it stores ciphertext, and fan-out to multiple devices happens per device key). Add rate limits and abuse reporting, and retention policies per conversation.
+
+**What the interviewer is looking for:**
+Stateful connection handling, idempotent sends, per-conversation sequencing, a single catch-up mechanism, and receipts stored as watermarks.
+
+**Follow-ups:**
+- How would you implement "typing…" indicators without storing them?
+- How does the design change for a 100,000-member broadcast channel?
+
+**Red flags:**
+- A global ordering of all messages.
+- Storing one receipt row per member per message in large groups.
+
+### Design ticket sales for a concert where 2 million fans compete for 60,000 seats at 10:00. {#design-ticket-booking}
+
+**Level:** Architect
+
+**Model answer:**
+**The shape of the problem:** demand exceeds supply 30-fold, almost all of it arrives in the first minute, and two people must never get the same seat. The goal is not to serve everyone instantly, but to fail fairly and never oversell.
+
+**1. A waiting room in front of everything.** At 10:00, everyone already on the page gets a random position in a queue (randomised so that refreshing early or running bots gives no advantage). Admit users to the booking flow at the rate the back end can sustain, perhaps 2,000 a minute. The queue is static, cacheable and served from the edge, so 2 million waiting users cost almost nothing. Users see their position and an honest estimate.
+
+**2. Seat holds, not purchases.** An admitted user picks seats and gets a **hold with a timeout** (say 8 minutes):
+- Reserve with a conditional write: `UPDATE seats SET held_by = $user, held_until = now() + interval '8 minutes' WHERE seat_id = ANY($seats) AND (held_by IS NULL OR held_until < now())`, and check that every requested seat was updated.
+- Partition seat inventory by section, so concurrent holds spread across rows and partitions rather than contending on one event row.
+- For general-admission tickets, use a counter per price tier with an atomic decrement that can't go below zero, split across several sub-counters if needed.
+
+**3. Payment with the hold as the guard.** Take payment with an idempotency key tied to the hold. Confirm only if the hold is still yours. If payment fails or the hold expires, a sweeper releases the seats back to the pool, and the waiting room admits more people.
+
+**4. Fairness and abuse.** Per-account and per-card purchase limits, bot detection at the waiting room, verified fan programmes or pre-registration for the biggest events, and identity-linked tickets to reduce scalping.
+
+**5. Load and failure.** Pre-scale everything for a known start time, load-test at the expected peak, and protect the payment provider with its own rate limit. Degrade gracefully: if the booking service struggles, slow the waiting room's admission rate instead of letting requests fail.
+
+**What the interviewer is looking for:**
+A waiting room to turn a spike into a controlled flow, expiring holds enforced by conditional writes, inventory partitioned to avoid contention, and fairness treated as a requirement.
+
+**Follow-ups:**
+- How would you show an accurate "seats left" count without hammering the inventory store?
+- What happens if the payment provider slows down halfway through the sale?
+
+**Red flags:**
+- Letting 2 million users hit the booking API at once and relying on auto-scaling.
+- Checking availability, then reserving in a separate step without a conditional write.
+
 ## Cheat Sheet
 
 ### Estimation
@@ -610,6 +819,16 @@ Judgement: distinguishing reversible from irreversible decisions, tying scale to
 - **Fan-out on write vs read** — push for normal accounts, pull for celebrities (hybrid).
 - **301 vs 302 redirect** — 301 is cached by browsers, 302 lets every click reach the server.
 - **Token bucket** — rate limit that allows bursts up to the bucket size at a steady refill rate.
+
+### Revisit
+
+- **Hash ring with virtual nodes** — adding a 4th node moves about 22% of keys, all to the new node; `hash % N` moves 75%.
+- **Logical shards** — a fixed number of shards mapped onto nodes, so rebalancing moves whole shards.
+- **UUIDv7** — a time-ordered UUID that needs no coordination and keeps B-tree inserts local.
+- **Hot write key** — split it into sub-keys chosen at random, and sum them on read.
+- **Transactional vs bulk notifications** — separate queues and workers, so a campaign never delays a password reset.
+- **Chat catch-up** — a per-conversation sequence number; each device asks for everything after the last one it saw.
+- **Waiting room** — randomised queue positions and admission at the back end's sustainable rate, served from the edge.
 
 ## Further Reading
 
