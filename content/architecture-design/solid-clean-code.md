@@ -6,7 +6,7 @@ tags: [solid, code-quality]
 level: Senior
 estimatedMinutes: 45
 related: [design-patterns, testing-strategy]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -60,6 +60,64 @@ async function confirmOrder(order: Order, deps: { orders: OrderRepository; notif
 }
 ```
 
+### Worked example: refactoring a pricing function in safe steps
+
+A small function that every checkout calls, and that nobody wants to touch:
+
+```ts
+export function price(items: any[], code: string, member: boolean) {
+  let t = 0;
+  for (const i of items) t += i.p * i.q;
+  if (code === 'SPRING10') t = t * 0.9;
+  else if (code === 'FIVEOFF' && t > 50) t = t - 5;
+  if (member) t = t * 0.95;
+  return Math.round(t * 100) / 100;
+}
+```
+
+**Step 1: pin the current behaviour.** Characterisation tests record what the code does today, including the edge cases nobody remembers deciding:
+
+```ts
+it.each([
+  [[{ p: 20, q: 3 }], 'SPRING10', false, 54],
+  [[{ p: 25, q: 2 }], 'FIVEOFF', false, 50],  // exactly 50 gets no discount: the rule is "over 50"
+  [[{ p: 25, q: 2 }], 'FIVEOFF', true, 47.5],
+  [[], 'UNKNOWN', true, 0],
+])('price(%j, %s, member=%s) = %d', (items, code, member, expected) => {
+  expect(price(items, code, member)).toBe(expected);
+});
+```
+
+**Steps 2–5, each its own commit with the tests green:**
+1. **Rename and type** the inputs (`LineItem`, `promoCode`, `isMember`), so the compiler helps from now on.
+2. **Extract** `subtotal` and `roundToPence`, so the main function reads at one level of abstraction.
+3. **Replace the `if` chain with a lookup of promotions.** Marketing adds a code every month, so this is real, recurring variation, which is where the open–closed principle pays off. A `Map` avoids an accidental match on inherited object keys such as `"constructor"`.
+4. **Name the magic number** (`MEMBER_RATE`).
+
+```ts
+type LineItem = { unitPrice: number; quantity: number };
+type Promotion = (subtotal: number) => number;
+
+const promotions = new Map<string, Promotion>([
+  ['SPRING10', (s) => s * 0.9],
+  ['FIVEOFF', (s) => (s > 50 ? s - 5 : s)],
+]);
+const noPromotion: Promotion = (s) => s;
+const MEMBER_RATE = 0.95;
+
+const subtotal = (items: LineItem[]) => items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+const roundToPence = (amount: number) => Math.round(amount * 100) / 100;
+
+export function price(items: LineItem[], promoCode: string, isMember: boolean) {
+  const afterPromotion = (promotions.get(promoCode) ?? noPromotion)(subtotal(items));
+  return roundToPence(isMember ? afterPromotion * MEMBER_RATE : afterPromotion);
+}
+```
+
+**Step 6 is different, and gets its own pull request.** Prices are floating-point numbers, so `0.1 + 0.2` problems can creep into totals. Switching to integer minor units (or a `Money` value object) *changes behaviour* in rare rounding cases. Refactoring and behaviour changes don't belong in the same commit, because then the tests can't tell you which one broke something.
+
+Note what was left alone: `isMember` is still a boolean. It's data about the customer, not a flag that switches the function into a different mode, so splitting the function wouldn't help.
+
 ### Coupling and cohesion
 
 - **High cohesion:** things that change together live together.
@@ -89,6 +147,39 @@ flowchart LR
 ```
 
 "Make the change easy, then make the easy change" (Kent Beck): refactoring is part of delivering features, not a separate project.
+
+### Dependency inversion at runtime
+
+```mermaid
+sequenceDiagram
+  participant Root as Composition root
+  participant UC as confirmOrder (use case)
+  participant O as Order (domain)
+  participant R as OrderRepository (Postgres adapter)
+  participant DB as PostgreSQL
+  participant N as Notifications (email adapter)
+  participant M as Email provider
+  %% step: The composition root, at application start-up, is the only place that knows the concrete classes. It passes them to the use case as interfaces.
+  %% step: The use case asks the domain object whether confirming is allowed. The rule lives in Order, not in the use case.
+  %% step: Order answers from its own state, with no database or framework involved.
+  %% step: Order changes its own state through an intention-revealing method.
+  %% step: The use case saves through the OrderRepository interface, which the domain owns.
+  %% step: Only the adapter knows about SQL. Swapping PostgreSQL would change this adapter and nothing above it.
+  %% step: Notification goes through another domain-owned interface.
+  %% step: The email adapter talks to the provider's API. Its error handling and retries stay out of the use case.
+  %% step: In tests, the root passes in-memory fakes instead. confirmOrder doesn't change, and its tests run in milliseconds.
+  Root->>UC: confirmOrder(order, { orders, notifications })
+  UC->>O: canBeConfirmed()
+  O-->>UC: true
+  UC->>O: confirm()
+  UC->>R: orders.save(order)
+  R->>DB: UPDATE orders SET status = 'confirmed'
+  UC->>N: notifications.orderConfirmed(order)
+  N->>M: Send "Order confirmed" email
+  Note over Root,UC: Tests pass in-memory fakes for both interfaces
+```
+
+The arrows of *source-code* dependency point the other way from the calls. `PostgresOrderRepository` imports the `OrderRepository` interface from the domain, and the domain imports nothing from infrastructure.
 
 ## When to Use / Trade-offs
 
@@ -488,6 +579,206 @@ Awareness of critiques, alternative views (deep modules), and a nuanced, outcome
 **Red flags:**
 - Treating any book's rules as law.
 
+### What does "composition over inheritance" mean, and why is it usually preferred? {#composition-over-inheritance}
+
+**Level:** Foundation
+
+**Model answer:**
+Build behaviour by **combining objects or functions that each do one job**, instead of by extending a base class and overriding parts of it.
+
+Why inheritance causes trouble:
+- **Tight coupling to the parent.** Subclasses depend on the base class's internals, so a change in the base can break every subclass (the "fragile base class" problem).
+- **One axis only.** A `PdfReport` and an `EmailedReport` are easy. An `EmailedPdfReport` needs multiple inheritance or a class for every combination.
+- **Liskov violations.** Subclasses inherit methods that don't make sense for them, and override them to throw.
+
+Composition fixes this by passing in collaborators:
+
+```ts
+interface Renderer { render(report: ReportData): Uint8Array }
+interface Delivery { deliver(file: Uint8Array, to: string): Promise<void> }
+
+class ReportJob {
+  constructor(private renderer: Renderer, private delivery: Delivery) {}
+  async run(data: ReportData, to: string) {
+    await this.delivery.deliver(this.renderer.render(data), to);
+  }
+}
+// new ReportJob(new PdfRenderer(), new EmailDelivery()) — any renderer with any delivery.
+```
+
+Inheritance is still fine for a genuine, stable *is-a* relationship with a small, designed-for-extension base, such as framework base classes or a closed hierarchy of error types.
+
+**What the interviewer is looking for:**
+The fragile-base-class and combination problems, a concrete composed alternative, and knowing when inheritance is still reasonable.
+
+**Follow-ups:**
+- How do mixins or traits fit between the two?
+- How would you refactor a deep inheritance hierarchy towards composition?
+
+**Red flags:**
+- Inheritance used only to share utility methods.
+- Hierarchies four or five levels deep.
+
+### What is command–query separation, and when would you deliberately break it? {#command-query-separation}
+
+**Level:** Senior
+
+**Model answer:**
+Bertrand Meyer's principle: a method should either **change state** (a command, returning nothing) or **return information** (a query, with no observable side effects), not both. Asking a question shouldn't change the answer.
+
+Why it helps:
+- Queries can be called freely: in logs, in assertions, twice in a row, or reordered.
+- Side effects become visible at call sites, because only commands have them.
+- Tests are simpler: assert on queries, and verify commands by their effect.
+
+A typical violation is a getter that lazily creates or caches something with visible effects, or `validate()` that also normalises and saves the input.
+
+Deliberate exceptions, where combining them is the correct design:
+- **Atomic operations**, where splitting creates a race: `stack.pop()`, `queue.dequeue()`, `counter.incrementAndGet()`, `INSERT … RETURNING id`, compare-and-set.
+- **Commands that return an identifier or a result type** (`placeOrder()` returning the new order id, or a typed success or failure). Many teams treat that as acceptable.
+- **Fluent builders** that return `this`.
+
+At the architecture level, the same idea becomes CQRS: separate models for writes and reads.
+
+**What the interviewer is looking for:**
+The definition, why it makes code safer to call, and the race-condition argument for atomic exceptions.
+
+**Follow-ups:**
+- Is `array.sort()` in JavaScript a CQS violation? What did `toSorted()` change?
+- How does CQS relate to CQRS?
+
+**Red flags:**
+- Getters with hidden writes.
+- Splitting an atomic check-and-update into a query and a command, creating a race.
+
+### What does "make illegal states unrepresentable" mean, and how do you do it in TypeScript? {#illegal-states-unrepresentable}
+
+**Level:** Senior
+
+**Model answer:**
+Design types so that invalid combinations of data **can't be constructed**, instead of checking for them at run time all over the code.
+
+A common bad shape is a bag of optional fields:
+
+```ts
+// Allows nonsense: status 'paid' with no paidAt, or a refund on an unpaid order.
+type Order = { status: 'draft' | 'paid' | 'refunded'; paidAt?: Date; refundId?: string };
+```
+
+A **discriminated union** makes each state carry exactly its own data:
+
+```ts
+type Order =
+  | { status: 'draft' }
+  | { status: 'paid'; paidAt: Date }
+  | { status: 'refunded'; paidAt: Date; refundId: string };
+
+function receiptLine(o: Order): string {
+  switch (o.status) {
+    case 'draft': return 'Not paid yet';
+    case 'paid': return `Paid ${o.paidAt.toISOString()}`;   // paidAt is guaranteed here
+    case 'refunded': return `Refunded (${o.refundId})`;
+    default: { const unreachable: never = o; return unreachable; } // a new status breaks the build
+  }
+}
+```
+
+Other tools:
+- **Branded types** for values that share a primitive type but mustn't mix: `type UserId = string & { readonly __brand: 'UserId' }`, created only by a validating function.
+- **Parse, don't validate.** Turn untrusted input into a precise type once at the boundary (with Zod, for example), and pass the parsed type inward.
+- **Non-empty types** where emptiness is illegal: `[T, ...T[]]`.
+
+The payoff: fewer defensive checks, and the compiler points at every place to update when the model changes.
+
+**What the interviewer is looking for:**
+Discriminated unions with exhaustiveness checks, branded types, and parsing at the boundary.
+
+**Follow-ups:**
+- How do you persist and load a discriminated union from a relational table?
+- Where does this approach stop being worth it?
+
+**Red flags:**
+- Many optional fields guarded by comments explaining when each is set.
+- Using `as` casts to get past the compiler.
+
+### What is "functional core, imperative shell", and when would you use it? {#functional-core-imperative-shell}
+
+**Level:** Architect
+
+**Model answer:**
+A structure popularised by Gary Bernhardt: put the **decisions** in pure functions (the core), and put all **side effects**, such as I/O, time, randomness and the database, in a thin outer layer (the shell) that gathers inputs, calls the core and carries out what it decided.
+
+```ts
+// Core: pure. Easy to test exhaustively, with no mocks.
+type Decision =
+  | { kind: 'renew'; until: Date }
+  | { kind: 'expire' }
+  | { kind: 'remind'; daysLeft: number }
+  | { kind: 'none' };
+
+function decideSubscription(sub: Subscription, now: Date): Decision {
+  const daysLeft = Math.ceil((sub.endsAt.getTime() - now.getTime()) / 86_400_000);
+  if (daysLeft <= 0) return sub.autoRenew && sub.cardValid ? { kind: 'renew', until: addMonths(sub.endsAt, 1) } : { kind: 'expire' };
+  if (daysLeft <= 7) return { kind: 'remind', daysLeft };
+  return { kind: 'none' };
+}
+
+// Shell: thin, with no branching business logic of its own.
+async function nightlyRun(deps: Deps) {
+  for (const sub of await deps.subs.dueWithin(7)) {
+    const d = decideSubscription(sub, deps.clock.now());
+    if (d.kind === 'renew') await deps.billing.charge(sub, d.until);
+    else if (d.kind === 'expire') await deps.subs.expire(sub.id);
+    else if (d.kind === 'remind') await deps.mail.remind(sub, d.daysLeft);
+  }
+}
+```
+
+Benefits:
+- **Testing.** Most logic is tested with plain inputs and outputs. The shell needs only a few integration tests.
+- **Reasoning.** Pure functions can be read, reordered and reused without surprises.
+- **Fits hexagonal architecture.** The core is the domain, and the shell is the adapters plus the application service.
+
+Use it for rule-heavy logic: pricing, eligibility, scheduling, state machines and reconciliation. It fits less well when decisions depend on many interleaved reads (each answer determines the next query). There you either load everything up front, or let the core return "need more data" steps.
+
+**What the interviewer is looking for:**
+Separating decisions from effects, the testing benefit, and an honest limit.
+
+**Follow-ups:**
+- How do you handle the current time and random numbers in the core?
+- How does this compare with dependency injection and mocks?
+
+**Red flags:**
+- A "core" that reads the clock or the database.
+- Mock-heavy tests for logic that could have been a pure function.
+
+### A colleague proposes an interface, a base class or a shared library. How do you judge whether the abstraction is worth it? {#evaluating-abstractions}
+
+**Level:** Architect
+
+**Model answer:**
+Every abstraction trades indirection now for easier change later. I'd ask:
+
+1. **How many real variants exist today?** Two or more concrete cases, or a boundary to infrastructure you'll fake in tests, justify an interface. A single implementation "in case we need another" usually doesn't.
+2. **Is it deep?** In Ousterhout's sense: does a small interface hide significant complexity? A wrapper that renames three methods adds a layer and removes nothing.
+3. **Do the callers change for the same reasons?** If two callers already need different flags and options, the abstraction is merging different concepts (Sandi Metz's "wrong abstraction").
+4. **Who owns it, and how does it change?** A shared library across teams adds release coordination, version skew and a dependency for every consumer. Sometimes copying 50 lines is cheaper than a library.
+5. **How hard is it to undo?** An internal interface can be inlined in an afternoon. A published library or a public API can't.
+6. **What does it cost to read?** Can a new engineer follow a request from the entry point to the database without jumping through five files?
+
+Rules of thumb: abstract at boundaries (I/O, third parties, plug-in points). Wait for the second or third real case inside a module. Prefer copying to a cross-team library until the shared thing is stable. When an abstraction starts sprouting flags, inline it and re-split.
+
+**What the interviewer is looking for:**
+Concrete criteria (real variants, depth, reasons to change, ownership, reversibility) rather than a blanket rule for or against abstraction.
+
+**Follow-ups:**
+- When is a shared internal library across services a good idea?
+- How do you remove an abstraction that many call sites depend on?
+
+**Red flags:**
+- An interface for every class "for testability".
+- Refusing all abstraction in the name of simplicity.
+
 ## Cheat Sheet
 
 ### SOLID
@@ -511,6 +802,16 @@ Awareness of critiques, alternative views (deep modules), and a nuanced, outcome
 - **Make the change easy, then make the easy change** — refactoring as part of delivery.
 - **Hotspots** — complex code that changes often deserves the most care.
 - **Deep modules** — simple interfaces hiding significant functionality (Ousterhout).
+
+### Revisit
+
+- **Characterisation test** — pins down what legacy code does today, including odd edge cases, before you refactor it.
+- **Refactor vs behaviour change** — keep them in separate commits, so the tests can tell you which one broke something.
+- **Composition over inheritance** — combine small collaborators, rather than extending a base class you then depend on.
+- **Command–query separation** — a method changes state or returns information, except where splitting would create a race.
+- **Illegal states unrepresentable** — discriminated unions, branded types and a `never` exhaustiveness check.
+- **Functional core, imperative shell** — pure functions decide, and a thin outer layer performs the side effects.
+- **Abstraction test** — real variants, a deep interface, shared reasons to change, clear ownership, easy to undo.
 
 ## Further Reading
 

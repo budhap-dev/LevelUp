@@ -6,7 +6,7 @@ tags: [technical-debt, refactoring, code-quality, maintainability]
 level: Senior
 estimatedMinutes: 60
 related: [solid-clean-code, technical-strategy, prioritisation, architecture-patterns]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -89,6 +89,36 @@ const hotspots = [...changes]
 console.table(hotspots);
 ```
 
+### Worked example: estimating the interest on one module
+
+The team believes the pricing module is slowing them down. Here's how to turn that belief into a number product leadership can weigh against features.
+
+**1. Find the work that touched it.** Ticket ids in commit messages connect code to delivery data:
+
+```bash
+# Tickets whose commits touched pricing in the last 12 months.
+git log --since="12 months ago" --format=%s -- src/pricing | grep -oE 'PAY-[0-9]+' | sort -u > pricing-tickets.txt
+wc -l < pricing-tickets.txt   # 38
+```
+
+**2. Compare like with like.** Take cycle time (from first commit to production) for those 38 tickets, and for tickets elsewhere with the same story-point size, so you aren't just measuring that pricing work is bigger:
+
+| | Median cycle time | Reopened or caused an incident |
+|---|---|---|
+| Medium tickets touching pricing | 9 days | 11 of 38 |
+| Medium tickets elsewhere | 4 days | 6 of 120 |
+
+**3. Put a range on the interest.**
+- Delivery: about 5 extra days × 38 tickets ≈ **190 engineer-days a year**. Some of that is genuine domain complexity, so call it 100–190.
+- Incidents: 7 pricing incidents, at roughly 3 engineer-days each (response, fix, follow-up) ≈ **20 engineer-days**.
+- Next year: the roadmap has about 1.5× as many pricing changes, so the interest grows to **150–315 days**.
+
+**4. Estimate the principal and the payback.** Characterisation tests (15 days), extracting the rules behind a clear interface (30 days) and migrating callers (15 days) add up to about **60 engineer-days**. Even if the work removes only half the interest, it pays back in roughly 5–10 months. At the optimistic end, it's under 3.
+
+**5. Present a decision, not a complaint.** "Pricing changes take twice as long as similar work and caused 7 incidents last year. Sixty engineer-days, spread over the next two quarters alongside the pricing roadmap, should pay for itself within the year. We'll report cycle time for pricing tickets monthly."
+
+The numbers are rough, and saying so makes them more credible. Ranges built from your own history beat a static-analysis "remediation estimate" every time.
+
 ### Ways of paying it down
 
 - **Refactor in the flow of work.** Kent Beck: "make the change easy (warning: this may be hard), then make the easy change". Improve the code you're about to change, as part of the feature. It's the cheapest way to pay down debt where interest is highest.
@@ -136,6 +166,34 @@ flowchart TB
   D --> E["More deadline pressure"]
   E --> A
   D -. "break the loop: refactor where you change, protect capacity" .-> F["Interest falls"]
+```
+
+### Retiring an internal API
+
+```mermaid
+sequenceDiagram
+  participant O as Owning team
+  participant C as Consumer teams
+  participant API as Old API
+  participant T as Usage telemetry
+  %% step: Announce the deprecation with a date, the reason, and a migration guide that shows the old and new call side by side.
+  %% step: Mark it in the protocol too: Deprecation and Sunset response headers, so the warning reaches code and logs, not just inboxes.
+  %% step: Record every call with the caller's identity. You can't retire an API if you don't know who uses it.
+  %% step: The telemetry shows 14 consumers still calling, which turns "everyone" into a list of named owners.
+  %% step: Do the work for them where you can: codemod pull requests for the 9 consumers whose usage matches a known pattern.
+  %% step: Brownouts: announced, short windows in which the old API fails on purpose. They find the consumers nobody knew about.
+  %% step: During a brownout, callers get a clear error that links to the migration guide.
+  %% step: Usage reaches zero and stays there for 30 days, including month-end and quarterly jobs.
+  %% step: Delete the endpoint and its code. Deprecation debt is only paid when the old path is gone.
+  O->>C: Announce deprecation, date and migration guide
+  O->>API: Add Deprecation and Sunset headers
+  API->>T: Log every call with caller identity
+  T-->>O: 14 consumers still calling
+  O->>C: Codemod pull requests for 9 of them
+  Note over API: Scheduled brownout: fails for one hour
+  API-->>C: 410 Gone, with a link to the guide
+  T-->>O: Zero calls for 30 days
+  O->>API: Remove the endpoint and its code
 ```
 
 ## When to Use / Trade-offs
@@ -596,6 +654,148 @@ Deal-relevant scoping, evidence from history and operations (not just reading co
 - Judging quality by reading a few files.
 - Ignoring people and licence risk.
 
+### How is technical debt different from a bug, a missing feature or legacy code? {#debt-vs-bugs-legacy}
+
+**Level:** Foundation
+
+**Model answer:**
+- **A bug** is behaviour that's wrong *today*: users see incorrect results. **Debt** is a property of the code or system that makes *future change* slower or riskier, even if every behaviour is correct right now. Debt often *causes* bugs, and a bug can be a symptom of debt, but fixing the bug doesn't repay the debt.
+- **A missing feature** is functionality nobody has built. Calling it debt ("feature debt") blurs the line between investing in the product and maintaining the system, and makes both harder to prioritise.
+- **Legacy code** is a description of age or ownership, not of quality. Michael Feathers defines it as code without tests. Old, stable, well-tested code that nobody needs to change carries little interest. Code written last month without tests or a clear design may carry a lot.
+
+Why the distinctions matter: each goes through a different path. Bugs go to triage with severity. Features go to product prioritisation. Debt needs evidence of interest and a share of capacity. Lumping everything into a "tech debt" bucket turns it into a backlog nobody can reason about.
+
+**What the interviewer is looking for:**
+Debt as the cost of future change rather than present wrongness, and why separating the categories helps prioritisation.
+
+**Follow-ups:**
+- Is a missing test suite a bug or debt?
+- Would you count an end-of-life runtime as debt, risk or both?
+
+**Red flags:**
+- "Tech debt is whatever engineers want to work on."
+- Treating all old code as debt.
+
+### How do you safely change legacy code that has no tests? {#refactoring-without-tests}
+
+**Level:** Senior
+
+**Model answer:**
+Michael Feathers' approach in *Working Effectively with Legacy Code*: **get the code under test with the smallest, safest changes, then refactor**.
+
+1. **Identify the change point** and the places where you can observe its behaviour.
+2. **Find or create a seam**: a place where you can change behaviour without editing the code there. For example, pass a dependency in through a constructor parameter that defaults to the current one, or extract a hard-wired database call into a method you can override in a test.
+3. **Write characterisation tests** that pin down what the code does now, including surprising behaviour. For code with large outputs (reports, generated files, API responses), use **approval or snapshot tests**: record the output once, review it, then compare against it on every run.
+4. **Refactor in tiny steps**, preferably with the IDE's automated refactorings (rename, extract, move), which are far less risky than hand edits. Run the tests after each step.
+5. **Make the actual change**, with a new test for the new behaviour.
+
+When you can't get the code under test right away:
+- **Sprout method or class:** write the new logic as new, tested code, and call it from the old code with a one-line change.
+- **Wrap method:** put the new behaviour before or after a call to the renamed original.
+- **Scratch refactoring:** refactor freely to *understand* the code, then throw the changes away and do it properly.
+
+Keep refactoring and behaviour changes in separate commits, and add tests in the areas you touch, not everywhere at once.
+
+**What the interviewer is looking for:**
+Seams, characterisation and approval tests, automated refactorings, and the sprout and wrap techniques for when testing isn't possible yet.
+
+**Follow-ups:**
+- How do you write a characterisation test for a function that depends on the current time?
+- When would you stop and propose a rewrite of a component instead?
+
+**Red flags:**
+- Large hand-made refactors with no tests, "because it's urgent".
+- Trying to reach high coverage everywhere before making any change.
+
+### How do you retire an internal API or library that other teams still depend on? {#deprecation}
+
+**Level:** Senior
+
+**Model answer:**
+Deprecation is debt that the owning team can't repay alone, because the interest is paid in other teams' code. Treat it as a small programme:
+
+1. **Provide the replacement first**, and make it better, or at least no worse, for consumers.
+2. **Announce with a date, a reason and a migration guide**, showing the old and new usage side by side. Give enough notice to fit consumers' planning cycles.
+3. **Signal it in the system itself**: compiler or lint warnings (`@deprecated` in TSDoc), runtime warnings, and for HTTP APIs the `Sunset` header (RFC 8594) and `Deprecation` header (RFC 9745).
+4. **Measure usage by caller**, so "everyone" becomes a named list of owners. You can't finish what you can't see.
+5. **Do the migration for them where you can**: codemods (jscodeshift, OpenRewrite) that open pull requests in each consumer's repository.
+6. **Run brownouts**: announced windows in which the old path fails on purpose. They find the consumers nobody knew about, such as month-end batch jobs.
+7. **Stop new usage** with a lint rule or a dependency check in CI, so the list only shrinks.
+8. **Delete it** once usage has stayed at zero long enough to cover rare jobs.
+
+The common failure is step 8 never happening, so the organisation pays for two ways of doing the same thing indefinitely.
+
+**What the interviewer is looking for:**
+Replacement first, usage telemetry by caller, doing the migration work for consumers, brownouts, and actually deleting the old code.
+
+**Follow-ups:**
+- A critical consumer can't migrate before the deadline. What do you do?
+- How would you deprecate a field in a widely used event schema?
+
+**Red flags:**
+- An email announcement as the whole plan.
+- Deprecated code that stays in place for years "just in case".
+
+### When would you refactor, rewrite or replace a component with a bought product? {#refactor-rewrite-replace}
+
+**Level:** Architect
+
+**Model answer:**
+Start from what the business needs the component to do over the next few years, not from how bad the code is.
+
+**Refactor incrementally (the default)** when the design is broadly right for where the product is going, the knowledge is available, and the pain is concentrated in a few hotspots. It keeps delivering value and has the lowest risk.
+
+**Rewrite** only when most of these hold:
+- The current architecture can't reach a **required** capability (scale, multi-tenancy, a regulatory requirement) without changing almost everything.
+- The platform is a dead end: an unsupported language or runtime, with no upgrade path.
+- The domain is well understood, and behaviour can be specified, for example from characterisation tests and production traffic.
+- You can do it **incrementally** with a strangler fig, routing one capability at a time, rather than with a big-bang cut-over.
+
+Rewrites fail when teams underestimate the behaviour the old system encodes (edge cases, integrations, data quirks), when the old system keeps changing while the new one chases it, and when the business waits a year for no new value.
+
+**Replace with a product** when the capability is a **generic subdomain** (identity, billing, search, workflow, CMS) that a vendor does better, and the differentiating parts can live in configuration or around it. Account for migration, integration and licence costs, lock-in, and the loss of control over the roadmap.
+
+**Decide with data:** cost of the current interest, cost and risk of each option, time to first value, and what happens to the team's knowledge. Make it an ADR, and set checkpoints at which you would stop.
+
+**What the interviewer is looking for:**
+Incremental refactoring as the default, clear conditions for a rewrite, the strangler approach, and build versus buy grounded in what differentiates the business.
+
+**Follow-ups:**
+- How do you keep a strangler migration from stalling at 70%?
+- How would you validate that the new system behaves like the old one?
+
+**Red flags:**
+- "The code is ugly, so we should rewrite it."
+- A rewrite that delivers nothing to users until it's finished.
+
+### How would you run a large-scale code migration across hundreds of repositories? {#large-scale-migrations}
+
+**Level:** Architect
+
+**Model answer:**
+Examples are a framework major version, replacing a logging library, or a new internal SDK across 300 services. Treat it as a **campaign** with tooling, not as 300 tickets:
+
+1. **Inventory.** Find every affected repository and call site (code search such as Sourcegraph or GitHub code search, dependency graphs, SBOMs). Classify them by pattern and difficulty.
+2. **Automate the change.** Write codemods for the common patterns: jscodeshift or ts-morph for TypeScript, OpenRewrite for Java, Roslyn analysers and code fixes for .NET. AI assistants help with the long tail of odd cases, with the same review as any other change.
+3. **Open the pull requests in bulk** (Sourcegraph Batch Changes, multi-gitter or a small script). Each must be small, pass the consumer's own CI, and explain why, with a link to the guide.
+4. **Roll out in waves.** Pilot teams first, to fix the codemod, then the easy majority, then the hard cases with hands-on help from the platform team.
+5. **Make it visible.** A dashboard of migrated, open and blocked repositories per team, reviewed in engineering leadership meetings.
+6. **Set the policy.** A deadline tied to a real driver (an end-of-life date, a security fix). Block new usage of the old pattern in CI. Have an escalation path for teams that don't merge.
+7. **Finish.** Remove the old library or compatibility shims, and the tooling that supported them.
+
+Who does the work matters. If the central team writes the codemods and opens the pull requests, owning teams only review and merge. That's the difference between a migration that finishes in a quarter and one that takes two years.
+
+**What the interviewer is looking for:**
+Inventory, automation with codemods, small pull requests in waves, visibility and policy, and the central team carrying most of the effort.
+
+**Follow-ups:**
+- How do you handle repositories with no active owner?
+- How would you verify behaviour hasn't changed in services with weak test suites?
+
+**Red flags:**
+- A wiki page and a deadline, with every team doing it by hand.
+- Leaving the old library installed "for compatibility" after the migration.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -621,6 +821,16 @@ Deal-relevant scoping, evidence from history and operations (not just reading co
 - **Debt sprints** — usually a sign that continuous paydown failed.
 - **Characterisation tests** — tests that capture current behaviour before refactoring legacy code.
 - **Debt business case** — impact in business terms, interest evidence, an incremental plan and success measures.
+
+### Revisit
+
+- **Interest estimate** — compare cycle time with similar-sized work elsewhere, add incident cost, and quote a range.
+- **Debt vs bug** — a bug is wrong behaviour now; debt makes future change slower or riskier.
+- **Seam** — a place to change behaviour without editing that code, used to get legacy code under test.
+- **Sprout and wrap** — put new logic in new, tested code, called from the old code with a one-line change.
+- **Brownout** — announced, short windows in which a deprecated path fails on purpose, to flush out unknown consumers.
+- **Rewrite conditions** — a required capability is unreachable, the platform is a dead end, behaviour is specifiable, and it can be done incrementally.
+- **Migration campaign** — inventory, codemods, bulk pull requests in waves, a dashboard, then delete the old path.
 
 ## Further Reading
 
