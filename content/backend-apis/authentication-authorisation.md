@@ -6,7 +6,7 @@ tags: [security, oauth2, oidc, jwt]
 level: Senior
 estimatedMinutes: 75
 related: [owasp-threat-modelling, api-styles]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -79,6 +79,63 @@ const order = await orders.get(orderId);
 if (order.tenantId !== ctx.tenantId || !(await can(ctx.user, 'read', order))) throw new NotFound(); // 404 hides existence
 ```
 
+### Worked example: refresh-token rotation with reuse detection
+
+Every refresh returns a new refresh token and marks the old one used. If a used token ever comes back, someone has a copy, so the whole chain of tokens from that login (the *family*) is revoked:
+
+```sql
+CREATE TABLE refresh_tokens (
+  token_hash bytea       PRIMARY KEY,   -- store a hash, never the token itself
+  family_id  uuid        NOT NULL,      -- every token descended from one sign-in
+  user_id    uuid        NOT NULL,
+  expires_at timestamptz NOT NULL,      -- absolute limit, inherited by each rotated token
+  used_at    timestamptz,
+  revoked_at timestamptz
+);
+```
+
+```ts
+export async function refresh(presented: string) {
+  return db.transaction(async (tx) => {
+    const { rows: [t] } = await tx.query(
+      'SELECT * FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE',
+      [sha256(presented)],
+    );
+    if (!t || t.revoked_at || t.expires_at < new Date()) throw new Unauthorized();
+
+    if (t.used_at) {
+      // A token that was already exchanged has come back: assume it was stolen.
+      await tx.query(
+        'UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL',
+        [t.family_id],
+      );
+      await audit('refresh_token_reuse', { userId: t.user_id, familyId: t.family_id });
+      throw new Unauthorized();
+    }
+
+    await tx.query('UPDATE refresh_tokens SET used_at = now() WHERE token_hash = $1', [t.token_hash]);
+    const next = randomToken(32);
+    await tx.query(
+      'INSERT INTO refresh_tokens (token_hash, family_id, user_id, expires_at) VALUES ($1, $2, $3, $4)',
+      [sha256(next), t.family_id, t.user_id, t.expires_at],
+    );
+    return { accessToken: await mintAccessToken(t.user_id), refreshToken: next };
+  });
+}
+```
+
+How it plays out when an attacker copies a token:
+
+| Event | Result |
+|---|---|
+| The user signs in | R1 is issued in family F |
+| Malware copies R1 from the device | — |
+| The app refreshes with R1 | R1 is marked used, and R2 is issued |
+| The attacker presents R1 | R1 is already used, so family F is revoked, including R2 |
+| The app presents R2 | Rejected. The user signs in again, and the reuse is in the audit log |
+
+Whoever uses the stolen token second, the attacker or the user, triggers the revocation. One refinement: a mobile app that retries a refresh after a dropped response will present R1 twice legitimately. Managed identity providers handle this with a short reuse interval or grace period, during which the same R1 returns the same R2 instead of revoking the family.
+
 ### Service-to-service identity
 
 - **mTLS** with workload identities (service mesh, SPIFFE/SPIRE) proves which service is calling.
@@ -97,6 +154,21 @@ sequenceDiagram
   participant BFF as BFF (server)
   participant AS as Authorisation server (IdP)
   participant API as Orders API
+  %% step: The user clicks "Sign in". The browser asks its own backend (the BFF) to start the flow; the SPA never sees a token.
+  %% step: The BFF creates a random state (against CSRF), a nonce (to bind the ID token), and a PKCE verifier with its SHA-256 challenge. It keeps all three server-side.
+  %% step: It redirects the browser to the authorisation server with the challenge, state, nonce and requested scopes. The verifier stays behind.
+  %% step: The user authenticates at the identity provider: a password plus MFA, or a passkey. Your app never handles the credentials.
+  %% step: The authorisation server redirects back with a short-lived, single-use authorisation code and the same state.
+  %% step: The browser delivers the code to the BFF's callback. The BFF checks the state matches the one it created.
+  %% step: The BFF redeems the code with the PKCE verifier and its own client credentials. An attacker who stole the code can't do this step.
+  %% step: The authorisation server checks the verifier against the challenge and returns an access token, a refresh token and an ID token.
+  %% step: The BFF validates the ID token (signature, issuer, audience, expiry, nonce) and stores the tokens server-side.
+  %% step: The browser gets only a session cookie: HttpOnly so scripts can't read it, Secure, and SameSite to limit cross-site use.
+  %% step: Later, the SPA calls its BFF with the cookie, like any same-site request.
+  %% step: The BFF looks up the session and calls the API with the access token as a bearer token, refreshing it first if it has expired.
+  %% step: The API validates the JWT itself (signature, issuer, audience, expiry), then checks this user may see these orders.
+  %% step: The API returns only the orders this user is allowed to see.
+  %% step: The BFF passes the data back. At no point did a token reach JavaScript in the browser.
   B->>BFF: GET /login
   BFF->>BFF: create state, nonce, PKCE verifier and challenge
   BFF-->>B: 302 to AS /authorize (code_challenge, state, nonce, scope)
@@ -371,7 +443,7 @@ Workload identity, mTLS/client credentials, least privilege, user-context propag
 **Model answer:**
 **Passwords (if you must store them — prefer an IdP):**
 - Hash with a slow, salted, memory-hard algorithm: **Argon2id** (preferred), scrypt or bcrypt, with tuned parameters; never SHA-256 alone, never encryption.
-- Follow NIST SP 800-63B: minimum length (8+, allow long passphrases), no arbitrary composition rules or forced periodic changes, **check against known-breached passwords**, rate-limit and lock out intelligently against credential stuffing.
+- Follow NIST SP 800-63B: a minimum of 15 characters when the password is the only factor (8 when it's one factor of MFA), allow at least 64, no arbitrary composition rules or forced periodic changes, **check against known-breached passwords**, rate-limit and lock out intelligently against credential stuffing.
 
 **MFA:**
 - Adds a second factor; strengths vary: SMS (weak: SIM swap, interception) < TOTP apps < push with number matching < **phishing-resistant** factors (FIDO2 security keys, passkeys).
@@ -532,6 +604,156 @@ Core principles, concrete controls for users, devices, services and networks, an
 - Zero trust as a product you buy.
 - Treating it as purely a network project.
 
+### What are OAuth scopes, and how do they differ from permissions? {#scopes-vs-permissions}
+
+**Level:** Foundation
+
+**Model answer:**
+A **scope** limits what a **client application** may do on the user's behalf. A **permission** says what the **user** may do. An API needs both checks, and the effective access is the intersection.
+
+For example, a calendar app asks for `calendar.read`. The user consents, and the access token carries that scope. The app can now read calendars, but only those the *user* is allowed to see. And even though the user could delete events, the app can't, because it was never granted `calendar.write`.
+
+Design guidance:
+- **Name scopes by resource and action** (`orders.read`, `orders.write`), coarse enough that users understand the consent screen.
+- **Keep per-object decisions out of scopes.** "Can read order 42" depends on ownership and roles, checked in the API against current data. Packing every permission into the token makes tokens large and stale.
+- **Request the least.** Clients ask for the scopes they need now, and request more later (incremental consent) when a feature needs them.
+- **Check scopes in the API** on every request, typically in middleware, and then do the object-level check.
+
+For first-party apps, scopes matter less, because the client is trusted. For third-party integrations, they are the main limit on what a compromised or over-eager app can do.
+
+**What the interviewer is looking for:**
+Scopes limit the client, permissions limit the user, and both are checked, with object-level checks kept out of the token.
+
+**Follow-ups:**
+- How would you design scopes for a public API with 40 resources?
+- Should roles be put into access tokens?
+
+**Red flags:**
+- Treating the `admin` scope as proof the user is an administrator.
+- Authorising only on scopes, with no per-object check.
+
+### What are sender-constrained tokens (DPoP, mutual TLS), and when are they worth it? {#sender-constrained-tokens}
+
+**Level:** Senior
+
+**Model answer:**
+A normal access token is a **bearer** token: whoever holds it can use it. If it leaks through logs, a compromised proxy or malware, the attacker can replay it until it expires. A **sender-constrained** token is bound to a key the legitimate client holds, so a stolen token alone is useless.
+
+- **DPoP** (RFC 9449). The client generates a key pair and proves possession on every request with a `DPoP` header: a short JWT signed with its private key, covering the HTTP method, the URL, a timestamp and (for resource requests) a hash of the access token. The authorisation server binds the token to the public key's thumbprint (the `cnf.jkt` claim). The API checks the proof's signature, method, URL and freshness, and that the key matches the token. It works at the application layer, so it suits browsers and mobile apps.
+- **Mutual TLS-bound tokens** (RFC 8705). The token is bound to the client's TLS certificate (`cnf.x5t#S256`), and the API checks that the connection presented that certificate. It's strong and simple for server-to-server calls where you already manage certificates, and awkward for browsers.
+
+When it's worth it: high-value APIs (payments, open banking, health data), long-lived refresh tokens on public clients, and regulated profiles that require it (FAPI 2.0). The costs are client complexity, replay caches for proof ids (`jti`), clock tolerance, and support across your identity provider and API gateway.
+
+For a typical first-party web app behind a BFF, tokens never reach the browser, so DPoP adds less. Short lifetimes and refresh rotation already limit the damage.
+
+**What the interviewer is looking for:**
+The bearer-token replay problem, how proof of possession works in DPoP and mTLS, and where each fits.
+
+**Follow-ups:**
+- Why does a DPoP proof include the HTTP method and URL?
+- How does DPoP interact with a CDN or proxy that rewrites URLs?
+
+**Red flags:**
+- "Use HTTPS, so tokens can't be stolen."
+- Thinking DPoP encrypts the token.
+
+### How do you require a stronger sign-in for sensitive actions such as changing payout details? {#step-up-auth}
+
+**Level:** Senior
+
+**Model answer:**
+Use **step-up authentication**: a normal session is enough for everyday use, but sensitive actions require a recent, strong authentication.
+
+1. **Define the requirement per action.** For example, changing bank details needs a phishing-resistant factor (a passkey or security key) within the last 5 minutes.
+2. **Express it in OIDC.** Send the user back to the identity provider with `acr_values` (the required level, such as a phishing-resistant MFA profile) and `max_age=300`. The new ID token or access token carries `acr` (the level achieved), `amr` (the methods used) and `auth_time`.
+3. **Check it on the server, in the API that performs the action.** Reject the request if `acr` is too low or `auth_time` is too old. Hiding a button in the UI isn't enforcement.
+4. **Tell the client what's missing.** RFC 9470 standardises the API response: `401` with `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="…", max_age=300`. The client starts the step-up flow and retries.
+5. **Keep it short-lived.** The elevated state should expire quickly, or be bound to the single action (a transaction-scoped token) so it can't be reused for other sensitive operations.
+
+Add **notifications** ("your payout details were changed") and a **cooling-off period** for the riskiest changes, such as delaying the first payout to new bank details. These catch the cases where the attacker passed the step-up anyway.
+
+**What the interviewer is looking for:**
+Per-action requirements, `acr`, `amr` and `auth_time` checked server-side, the standard challenge response, and compensating controls.
+
+**Follow-ups:**
+- What would you do for users who have no strong factor enrolled?
+- How does step-up work for an API used by a machine, not a person?
+
+**Red flags:**
+- Re-entering the same password as the only step-up.
+- Checking the requirement only in the frontend.
+
+### Design API keys for a developer platform. {#api-key-design}
+
+**Level:** Architect
+
+**Model answer:**
+API keys are long-lived secrets, so design for the day one leaks.
+
+**Format:**
+- A recognisable prefix plus enough randomness: `sk_live_` followed by 32+ random bytes, base62-encoded. The prefix tells people (and secret scanners) what it is and which environment it belongs to. A checksum suffix lets scanners reject random strings without calling you.
+- A separate public **key id** for logs and dashboards, so the secret never needs to be shown again.
+
+**Storage and issuance:**
+- **Show the secret once**, at creation. Store only a hash. A fast hash such as SHA-256 is fine here, because the key is random and long, unlike a password.
+- Scope each key: specific permissions, environment (test or live), optional IP allow-lists, an owner (a person or a service account), and an optional expiry.
+
+**Lifecycle:**
+- **Rotation without downtime.** Allow two active keys per integration, so customers can deploy the new one before revoking the old.
+- **Last-used timestamp and source IP** shown in the dashboard, so unused keys get noticed and revoked.
+- **Revocation** takes effect within seconds, which is easy because every request looks up the key's hash.
+
+**Leak response:**
+- Join secret-scanning programmes (GitHub's secret scanning partner programme, for example), so keys pushed to public repositories are reported to you, and revoke or notify automatically.
+- Alert on anomalies: a key suddenly used from a new country, or at 50 times its normal rate.
+
+**When not to use API keys:** for user-delegated access (use OAuth), and for server-to-server calls inside your own cloud (use workload identity). For high-value integrations, offer OAuth client credentials, where tokens are short-lived.
+
+**What the interviewer is looking for:**
+Identifiable prefixes, hashed storage with show-once, scoping, rotation with overlap, usage visibility and automated leak response.
+
+**Follow-ups:**
+- Why is SHA-256 acceptable for API keys but not for passwords?
+- How do you migrate customers from unscoped keys to scoped ones?
+
+**Red flags:**
+- Storing keys in plain text, or showing them again in the dashboard.
+- One key per account with no way to rotate it without downtime.
+
+### Design account recovery that doesn't become the weakest link. {#account-recovery}
+
+**Level:** Architect
+
+**Model answer:**
+Attackers go for whichever way into an account is easiest. If you deploy passkeys but let anyone reset access with an email link and a support call, the recovery path *is* your security level.
+
+**Prevent the need:**
+- Encourage **several strong authenticators**: more than one passkey (synced passkeys survive a lost phone), plus a hardware key for high-value accounts.
+- Offer **recovery codes** at enrolment, stored hashed and usable once.
+
+**When recovery is needed, scale the checks to the risk:**
+- **Low-risk accounts:** an email link that expires quickly and works once, plus a check that the request comes from a device or location seen before.
+- **High-value accounts** (admins, accounts holding money): recovery codes, or identity verification (document plus liveness check), or for business users, a reset approved by the organisation's own administrator through its identity provider.
+
+**Contain the damage of a fraudulent recovery:**
+- **Notify every existing channel** (email, push, SMS) that recovery started, with a one-click "this wasn't me".
+- **Delay** the recovery of high-value accounts (for example 24 hours) unless it is confirmed from an existing device.
+- **Restrict new sessions** after recovery: no payout changes, no new API keys and no export of data for a few days.
+- **Revoke other sessions and tokens** when recovery completes.
+
+**Support staff are part of the system:** give them scripts that never bypass the checks, require two people for manual overrides, log everything, and test them with social-engineering exercises.
+
+**What the interviewer is looking for:**
+Recovery treated as an authentication path with risk-based checks, plus notification, delays and restrictions that limit the damage of a successful attack.
+
+**Follow-ups:**
+- How do you recover an account whose only passkey was on a lost phone?
+- What does the support desk do when a caller is very convincing?
+
+**Red flags:**
+- SMS one-time codes as the only recovery for a high-value account.
+- Support staff who can disable MFA on request.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -554,6 +776,16 @@ Core principles, concrete controls for users, devices, services and networks, an
 - **RBAC / ABAC / ReBAC** — roles vs attribute policies vs relationship graph (Zanzibar-style).
 - **Token exchange** — RFC 8693; downscoped tokens to call downstream services on a user's behalf.
 - **Zero trust** — verify every request by identity, device and context; least privilege, no trusted network.
+
+### Revisit
+
+- **Refresh-token reuse** — a used refresh token presented again means a copy exists: revoke the whole family.
+- **Rotation grace period** — a short window in which a retried refresh returns the same new token instead of revoking.
+- **Scopes vs permissions** — scopes limit the client app, permissions limit the user; check both.
+- **DPoP** — RFC 9449: the client signs a proof per request with a key bound to the token, so a stolen token alone is useless.
+- **Step-up challenge** — RFC 9470: `insufficient_user_authentication` with `acr_values` and `max_age`, checked against `acr` and `auth_time`.
+- **API key storage** — show it once, store a SHA-256 hash, prefix it so scanners can find leaks.
+- **Recovery is authentication** — notify existing channels, delay high-value recoveries, restrict new sessions.
 
 ## Further Reading
 

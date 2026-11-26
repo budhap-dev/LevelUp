@@ -6,7 +6,7 @@ tags: [kafka, service-bus, events, async]
 level: Architect
 estimatedMinutes: 90
 related: [architecture-patterns, system-design, domain-driven-design, observability-sre]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -60,6 +60,28 @@ Kafka guarantees order **within a partition**. Messages with the same key go to 
 - Changing the partition count changes key→partition mapping for new messages (ordering across the change is not guaranteed).
 
 Service Bus offers ordering through **sessions** (`SessionId`); one receiver holds a session lock at a time.
+
+### Worked example: sizing a topic's partitions
+
+An `order-events` topic must handle a peak of **50,000 messages a second**, averaging 1 KB each (50 MB/s), and an average of 15,000 a second. It is keyed by `orderId`.
+
+**1. Measure, then divide.** A common rule: partitions ≥ max(T / p, T / c), where T is the target throughput, p is what one partition can take from producers, and c is what one consumer can process from one partition. Measure p and c on your own hardware and handler. Don't copy someone else's numbers.
+
+| | Measured per partition | Partitions needed for 50 MB/s |
+|---|---|---|
+| Producer | ~10 MB/s | 5 |
+| Consumer, one database write per message (~2 ms) | 500 messages/s ≈ 0.5 MB/s | **100** |
+| Consumer, batched writes of 200 messages | ~5,000 messages/s ≈ 5 MB/s | 10 |
+
+The consumer is the bottleneck, as it usually is. Batching the handler's writes changes the answer by ten times, so fix the handler before adding partitions.
+
+**2. Add headroom, and pick once.** Adding partitions later changes which partition a key maps to, so per-order ordering breaks across the change. Size for about two years of growth: with batching and three times the growth, 30 partitions are needed, so choose **32** (or 48 if the consumer count needs to divide evenly).
+
+**3. Don't overshoot.** Each partition costs open files and memory on the brokers, adds work to leader elections and rebalances, and can't be removed later without recreating the topic. Thousands of partitions for one topic is rarely the answer.
+
+**4. Check the storage.** 15 MB/s average × 86,400 s ≈ 1.3 TB a day. With 7 days' retention that is about 9 TB, and about **27 TB** with a replication factor of 3, before compression. Tiered storage can move older segments to object storage if longer replay is needed.
+
+**5. Write the decision down**, with the measured p and c, so the next person knows what assumption to re-test when traffic changes.
 
 ### Transactional outbox
 
@@ -117,6 +139,39 @@ sequenceDiagram
   end
   Billing->>Broker: commit offset
 ```
+
+### Retry tiers and dead-lettering
+
+```mermaid
+sequenceDiagram
+  participant Main as orders topic
+  participant C as Fulfilment consumer
+  participant W as Warehouse API
+  participant R as orders.retry.1m
+  participant DLQ as orders.dlq
+  %% step: The consumer receives OrderPaid for order 81 from its partition of the main topic.
+  %% step: It asks the warehouse to create a shipment, with an idempotency key so a retry can't create two.
+  %% step: The warehouse returns 503. That's a transient error, so retrying is reasonable.
+  %% step: Rather than retrying in place and blocking every order behind it, the consumer copies the message to a retry topic with attempt=1 and a not-before time.
+  %% step: It commits the offset on the main topic, so the rest of the partition keeps flowing.
+  %% step: A minute later, the retry consumer (the same handler) picks the message up.
+  %% step: It calls the warehouse again, with the same idempotency key.
+  %% step: This time the warehouse rejects the SKU. That's a permanent error: retrying will never succeed.
+  %% step: The message goes to the dead-letter topic with the error, the attempt history and the original metadata.
+  %% step: An alert on the dead-letter topic's depth and age brings in a person. After the fix, a redrive tool replays the message.
+  Main->>C: OrderPaid (order 81)
+  C->>W: Create shipment (idempotency key)
+  W-->>C: 503 Service Unavailable
+  C->>R: Publish attempt=1, not before now + 1 min
+  C->>Main: Commit offset
+  R->>C: Redeliver after 1 minute
+  C->>W: Create shipment (same key)
+  W-->>C: 400 Unknown SKU
+  C->>DLQ: Dead-letter with reason and attempts
+  Note over DLQ: Alert on depth and age, redrive after the fix
+```
+
+The cost of this design is ordering. While order 81 waits in the retry topic, a later event for the same order can overtake it. Either park later events for that key until the retry resolves, or make the handler reject events older than the order's current version.
 
 ## When to Use / Trade-offs
 
@@ -525,6 +580,171 @@ RPO and RTO first, topology trade-offs, offset translation, accepting duplicates
 - Active-active with global ordering assumptions.
 - A DR design that has never been tested.
 
+### What is log compaction in Kafka, and when do you use it? {#log-compaction}
+
+**Level:** Foundation
+
+**Model answer:**
+A normal Kafka topic deletes data by **time or size** (`cleanup.policy=delete`). A **compacted** topic (`cleanup.policy=compact`) instead keeps **at least the latest message for every key**, and removes older messages for keys that have newer ones.
+
+It turns a topic into a **changelog of current state**: a new consumer that reads from the beginning ends up with the latest value of every key, without having to process years of history.
+
+How it behaves:
+- Compaction runs in the background on closed log segments. Consumers may still see some older values for a key that haven't been compacted yet, so they must apply messages in order and treat the last one as current.
+- **Deleting a key** means writing a *tombstone*: a message with that key and a `null` value. Tombstones are kept for `delete.retention.ms`, so consumers have time to see them, and then removed.
+- Offsets don't change. Compacted topics simply have gaps in the offsets.
+
+Uses:
+- Current state of entities, such as customer profiles or product prices, as fat snapshot events keyed by id.
+- Kafka's own `__consumer_offsets` topic, and Kafka Streams state store changelogs.
+- Configuration or reference data that services load at start-up.
+
+It isn't suitable when consumers need every intermediate change, such as an audit trail or billing events. Use a normal retention topic for those, or both: compaction can be combined with a time limit (`compact,delete`).
+
+**What the interviewer is looking for:**
+Latest value per key instead of time-based retention, tombstones for deletes, and the changelog use case.
+
+**Follow-ups:**
+- How would you erase one customer's data from a compacted topic?
+- Why might a consumer still see an old value for a key?
+
+**Red flags:**
+- Thinking compaction keeps only one message per key at all times.
+- Using a compacted topic for events where every occurrence matters.
+
+### How do you process messages from one partition in parallel without losing ordering or offsets? {#parallel-consumption}
+
+**Level:** Senior
+
+**Model answer:**
+A Kafka consumer group's parallelism is capped by the partition count, and a slow handler (one remote call per message) makes each partition slow. Adding partitions is one fix, but it is irreversible and remaps keys. Processing in parallel *within* a partition is another, if you handle two problems.
+
+**Ordering.** Messages for the same key must still be processed in order. Run messages for **different keys** concurrently, and messages for the **same key** one after another: for example, a pool of workers where each key is hashed to one worker, or an in-memory queue per key.
+
+**Offsets.** Kafka commits one offset per partition, meaning "everything before this is done". With parallel processing, message 105 can finish before 103. You may commit only up to the **highest offset with everything before it completed**. Anything after that point is processed again after a crash or rebalance, so handlers must be idempotent.
+
+Libraries such as the Confluent Parallel Consumer implement this (ordering by key or by partition, tracking completed offsets, and storing the out-of-order completions in the commit metadata to reduce reprocessing).
+
+Other details:
+- **Backpressure.** Limit messages in flight, and `pause()` partitions when the limit is reached, while still calling `poll()` to stay in the group.
+- **Rebalances.** On revocation, stop work for those partitions and commit what is safely complete.
+- **When ordering doesn't matter at all**, Kafka's share groups (KIP-932) give queue-style consumption with per-message acknowledgement.
+
+**What the interviewer is looking for:**
+Key-level ordering, the "highest contiguous completed offset" rule, idempotency for the replay window, and backpressure.
+
+**Follow-ups:**
+- What happens if one key's message is stuck for a minute?
+- How does this compare with simply increasing the partition count?
+
+**Red flags:**
+- Committing each message's offset as soon as it finishes, out of order.
+- A thread pool per partition with no per-key ordering.
+
+### Which Kafka producer and topic settings prevent losing acknowledged messages? {#producer-durability}
+
+**Level:** Senior
+
+**Model answer:**
+A message is safe only once it is on enough brokers that a failure can't remove it. The settings work together:
+
+| Setting | Recommended | Why |
+|---|---|---|
+| `replication.factor` | 3 | Copies on three brokers, ideally in three availability zones (`broker.rack`) |
+| `min.insync.replicas` | 2 | A write needs at least two in-sync copies to succeed |
+| `acks` | `all` | The producer waits for every in-sync replica, so the `min.insync.replicas` rule applies |
+| `enable.idempotence` | `true` (default since Kafka 3.0) | Retries don't create duplicates, and per-partition order holds with up to 5 requests in flight |
+| `retries` / `delivery.timeout.ms` | Defaults (retry until the delivery timeout, 2 minutes) | Transient leader changes don't surface as errors |
+| `unclean.leader.election.enable` | `false` (the default) | An out-of-date replica is never promoted to leader, which would silently drop acknowledged messages |
+
+With `acks=1`, the leader acknowledges before replicating. If it dies straight after, the message is gone even though the producer was told it succeeded. With `min.insync.replicas=1`, `acks=all` degrades to the same thing whenever the followers fall behind.
+
+The trade-off is availability: with RF=3 and `min.insync.replicas=2`, losing two of the three replicas makes the partition reject writes (`NotEnoughReplicas`) rather than accept writes it can't protect.
+
+The producer application matters too. Handle the send callback's errors, and don't treat "handed to the client library" as "delivered". For business events, the transactional outbox ensures that a message which never made it can be sent again.
+
+**What the interviewer is looking for:**
+`acks=all` combined with `min.insync.replicas`, idempotent producers, no unclean leader election, and the availability trade-off.
+
+**Follow-ups:**
+- What does a producer see when only one in-sync replica remains?
+- Does Kafka fsync each message to disk? Why is that usually acceptable?
+
+**Red flags:**
+- `acks=all` with `min.insync.replicas=1`, believing it is safe.
+- Fire-and-forget sends with errors ignored.
+
+### Design a change-data-capture pipeline that streams changes from a legacy database to new services. {#cdc-pipeline}
+
+**Level:** Architect
+
+**Model answer:**
+**Capture.** Use log-based CDC: Debezium (on Kafka Connect, or Debezium Server) reading the database's transaction log, which for PostgreSQL means a logical replication slot. It captures every committed change in commit order without touching the application, and without polling load.
+
+**Choose what to publish:**
+- **Raw table changes** expose the legacy schema to every consumer. A column rename then breaks services you don't know about. Fine for replication into a warehouse, poor as a contract between teams.
+- **An outbox table** written by the application, routed by Debezium's outbox event router, publishes *domain events* with designed schemas. That's the better contract. On a legacy system you can't change, use an anticorruption service that consumes raw changes and publishes clean events.
+
+**Initial state.** Debezium takes a consistent **snapshot**, then streams changes from that point. Newer incremental snapshots run in chunks while streaming continues. Plan for the snapshot's load and duration on large tables.
+
+**Event details:**
+- Key events by primary key, so each row's changes stay ordered.
+- Deletes produce a delete event followed by a tombstone, which supports compacted topics.
+- Register schemas, and decide how schema changes in the source become versioned events.
+
+**Operational risks:**
+- **Replication slot growth.** If the connector is down, PostgreSQL keeps all write-ahead log (WAL) since the slot's position, and the disk can fill. Alert on slot lag. Set `max_slot_wal_keep_size` to cap it (accepting a re-snapshot if it is exceeded).
+- **Failover.** Logical slots must survive a primary failover (PostgreSQL 17 can synchronise failover slots to standbys), or the connector must re-snapshot.
+- **Large transactions** and bulk backfills produce bursts. Size the consumers for them.
+- **Personal data** flows into every topic. Filter columns at the source and set retention deliberately.
+
+**Consumers** are idempotent and use the source's log position (the LSN) or a version to ignore stale or duplicate changes.
+
+**What the interviewer is looking for:**
+Log-based capture, raw changes versus outbox events as a contract, snapshots, ordering by key, and the replication-slot and failover risks.
+
+**Follow-ups:**
+- How would you backfill a new consumer that needs three years of history?
+- How do you handle a source schema change mid-stream?
+
+**Red flags:**
+- Publishing raw legacy tables as the long-term contract for other teams.
+- No monitoring of replication slot lag.
+
+### Design a system that sends millions of reminders, each at a specific time, which users can cancel. {#scheduled-messages}
+
+**Level:** Architect
+
+**Model answer:**
+"Send this at 09:00 tomorrow in the user's time zone, unless they cancel" is a **durable timer** problem. Brokers offer partial answers:
+- Amazon SQS delays messages by at most 15 minutes.
+- Azure Service Bus supports scheduled messages, with cancellation by sequence number.
+- Kafka has no per-message delay at all.
+
+At millions of timers, with cancellation and edits, I'd **keep the timers in a database and use the broker for execution**:
+
+1. **Timer store.** A `reminders` table: `id, user_id, due_at (UTC), status, payload, version`, with an index on `(status, due_at)`. Store the user's local time and time zone too, so you can recalculate when a daylight-saving rule or the user's time zone changes.
+2. **Scheduler.** Workers poll for due rows in small batches: `SELECT … WHERE status = 'scheduled' AND due_at <= now() ORDER BY due_at LIMIT 500 FOR UPDATE SKIP LOCKED`. They mark the rows `enqueued` and publish to a queue. Several workers can run safely, and none blocks another.
+3. **Execution.** Senders consume the queue and deliver. Each message carries the reminder id and version, so a sender checks it is still current. A cancellation or edit (which bumps the version) after enqueueing is then ignored rather than sent.
+4. **Cancellation and edits** are plain updates to the row. Most happen long before the due time, so there's nothing to recall from a broker.
+
+**Scale and spikes.** Reminders cluster on round times (09:00 in each time zone). Partition the table by due date, spread the load by adding a few seconds of jitter where the product allows it, and size senders for the peak minute. For far larger scale, a hierarchical approach: a database for far-future timers, and in-memory timing wheels or broker scheduling for the next few minutes.
+
+**Correctness.** At-least-once with idempotent senders (a sent marker per reminder and version), alerts when due reminders are older than a threshold (the scheduler is behind), and recovery after an outage that sends late reminders or drops them, according to product rules.
+
+Workflow engines (Temporal, Durable Functions) provide durable timers out of the box. They're a good fit when the reminder is part of a longer process.
+
+**What the interviewer is looking for:**
+Durable timers in a store with `SKIP LOCKED` polling, version checks for cancellation, time-zone handling, and planning for spikes on round times.
+
+**Follow-ups:**
+- What happens to reminders that were due during a two-hour outage?
+- How would you guarantee a reminder is never sent twice?
+
+**Red flags:**
+- One delayed message per reminder on a broker that can't cancel them.
+- Storing due times in local time without the time zone.
+
 ## Cheat Sheet
 
 - **Queue** — competing consumers, message deleted on ack; for commands and jobs.
@@ -542,6 +762,16 @@ RPO and RTO first, topology trade-offs, offset translation, accepting duplicates
 - **Static membership** — `group.instance.id` lets a restarting consumer rejoin without triggering a rebalance.
 - **Cooperative rebalancing** — only partitions that move are revoked, so the group keeps processing.
 - **Saga** — sequence of local transactions with compensating actions; orchestrate money flows, choreograph side effects.
+
+### Revisit
+
+- **Partition sizing** — partitions ≥ max(T ÷ producer throughput, T ÷ consumer throughput), measured; the consumer usually dominates.
+- **Adding partitions later** — changes key-to-partition mapping, so per-key ordering breaks across the change.
+- **Retry topic trade-off** — keeps the main partition flowing, but a retried message can be overtaken by later events for its key.
+- **Tombstone** — a message with a key and a null value, deleting that key from a compacted topic.
+- **Parallel offset commits** — commit only up to the highest offset with everything before it completed.
+- **Durable producer** — RF 3, `min.insync.replicas=2`, `acks=all`, idempotence on, no unclean leader election.
+- **Replication slot lag** — a stopped CDC connector makes PostgreSQL keep WAL until the disk fills: alert on it.
 
 ## Further Reading
 

@@ -6,7 +6,7 @@ tags: [api, rest, graphql, grpc]
 level: Senior
 estimatedMinutes: 60
 related: [system-design, authentication-authorisation, nodejs]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -112,6 +112,70 @@ message Order {
 - **Security:** OAuth 2.0 / OIDC access tokens, scopes, object-level authorisation on every request (OWASP API Security Top 10's #1 is broken object-level authorisation).
 - **Observability:** correlation/trace headers, per-endpoint RED metrics.
 
+### Worked example: implementing idempotency keys
+
+A `POST /payments` endpoint that clients can retry safely. The key's lifecycle is stored in PostgreSQL:
+
+```sql
+CREATE TABLE idempotency_keys (
+  client_id     text        NOT NULL,
+  key           text        NOT NULL,
+  request_hash  text        NOT NULL,
+  status        text        NOT NULL CHECK (status IN ('in_progress', 'completed')),
+  response_code int,
+  response_body jsonb,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (client_id, key)          -- scoped per client: two clients can use the same key
+);
+```
+
+```ts
+export async function createPayment(req: ApiRequest): Promise<ApiResponse> {
+  const key = req.header('idempotency-key');
+  if (!key) return problem(400, 'missing-idempotency-key');
+  const hash = sha256(canonicalJson(req.body));
+
+  // Claim the key. Exactly one concurrent request can win this insert.
+  const claimed = await db.query(
+    `INSERT INTO idempotency_keys (client_id, key, request_hash, status)
+     VALUES ($1, $2, $3, 'in_progress')
+     ON CONFLICT (client_id, key) DO NOTHING`,
+    [req.clientId, key, hash],
+  );
+
+  if (claimed.rowCount === 0) {
+    const { rows: [row] } = await db.query(
+      `SELECT request_hash, status, response_code, response_body
+         FROM idempotency_keys WHERE client_id = $1 AND key = $2`,
+      [req.clientId, key],
+    );
+    if (row.request_hash !== hash) return problem(422, 'idempotency-key-reused'); // same key, different request
+    if (row.status === 'in_progress') return problem(409, 'request-in-progress');  // the first attempt is still running
+    return { status: row.response_code, body: row.response_body, headers: { 'Idempotent-Replayed': 'true' } };
+  }
+
+  // Pass a key downstream too: the provider deduplicates if we call it twice.
+  const charge = await psp.charges.create(
+    { amountMinor: req.body.amountMinor, currency: req.body.currency },
+    { idempotencyKey: `${req.clientId}:${key}` },
+  );
+  const body = { id: charge.id, status: charge.status };
+  await db.query(
+    `UPDATE idempotency_keys SET status = 'completed', response_code = 201, response_body = $3
+      WHERE client_id = $1 AND key = $2`,
+    [req.clientId, key, body],
+  );
+  return { status: 201, body };
+}
+```
+
+What each piece protects against:
+- **The primary key** makes the claim atomic, so two simultaneous retries can't both charge.
+- **The request hash** catches a client bug that reuses one key for different payments.
+- **The downstream key** covers a crash after the charge but before the `UPDATE`. A recovery job finds rows stuck `in_progress` for more than a minute, calls the provider again with the same key, gets the *same* charge back, and completes the row.
+- **Store business failures too.** If the card is declined, store the 402 response as `completed`, so a retry gets the same decline instead of a second attempt. For transient failures (timeouts, 5xx from the provider), delete the row so the client's retry runs again.
+- **Expire keys** after a window such as 24 hours, with a scheduled delete.
+
 ## How It Works
 
 ```mermaid
@@ -128,6 +192,36 @@ flowchart TD
 ```
 
 A typical layered setup: gRPC between internal services → a **BFF** or GraphQL layer shaping data for first-party clients → REST/OpenAPI public API through a gateway (auth, rate limits, analytics) → webhooks for partners.
+
+### A retried request with a lost response
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant A as Payments API
+  participant K as Idempotency store
+  participant P as Payment provider
+  %% step: The client creates a payment with a fresh Idempotency-Key, generated once per logical payment.
+  %% step: The API claims the key. The insert succeeds, so this request owns the operation.
+  %% step: It charges the card, passing a key downstream as well.
+  %% step: The provider charges the card once and returns the charge id.
+  %% step: The API stores the 201 response against the key.
+  %% step: The response is lost on the way back, perhaps a mobile network drop. The client can't tell whether the payment happened.
+  %% step: The client does the only safe thing: retries with the same key.
+  %% step: The claim fails, because the key already exists. The API looks it up instead.
+  %% step: The stored record is completed, with the original response.
+  %% step: The API replays the same 201 and the same charge id. The card was charged exactly once.
+  C->>A: POST /payments (Idempotency-Key k1)
+  A->>K: Claim k1 (in progress)
+  A->>P: Charge (key client:k1)
+  P-->>A: Charged ch_9
+  A->>K: Store 201 response for k1
+  A--xC: Response lost
+  C->>A: Retry POST /payments (Idempotency-Key k1)
+  A->>K: Claim k1 fails, look it up
+  K-->>A: Completed, stored 201
+  A-->>C: 201 Created, ch_9 (replayed)
+```
 
 ## When to Use / Trade-offs
 
@@ -549,6 +643,166 @@ Outbox, at-least-once with backoff and isolation, HMAC signing with replay prote
 - Fire-and-forget with no retries.
 - Unsigned payloads.
 
+### What does contract-first API development mean, and what does it give you? {#contract-first}
+
+**Level:** Foundation
+
+**Model answer:**
+You **write and review the API contract before the implementation**: an OpenAPI document for REST, `.proto` files for gRPC, an SDL schema for GraphQL, or AsyncAPI for events. The contract lives in the repository and is the source of truth.
+
+What it gives you:
+- **Earlier feedback.** Consumers review the shape of the API before anyone has built it, when changing it is cheap.
+- **Parallel work.** Frontend and partner teams build against a **mock server** generated from the contract while the backend is written.
+- **Generated code.** Clients, server stubs, request validation and documentation come from one source, so they can't drift apart.
+- **Automated checks.** Linting against the organisation's guidelines (Spectral, `buf lint`), and breaking-change detection on every pull request (`oasdiff`, `buf breaking`).
+- **A test oracle.** Responses can be validated against the schema in tests.
+
+The alternative, **code-first**, generates the contract from annotations in the code. It's quicker to start and fine for internal APIs with one consumer, but the contract becomes a by-product and tends to leak implementation details. Many teams settle on contract-first for public and cross-team APIs, and code-first for internal ones, with the same CI checks on the generated contract.
+
+**What the interviewer is looking for:**
+The contract as the source of truth, mocks and generated code, and automated linting and breaking-change checks.
+
+**Follow-ups:**
+- How do you keep the implementation honest to the contract?
+- Who approves a change to a shared contract?
+
+**Red flags:**
+- An OpenAPI file written once and never updated.
+- Hand-written clients for an API that already has a contract.
+
+### How do you design an API operation that takes minutes to complete? {#long-running-operations}
+
+**Level:** Senior
+
+**Model answer:**
+Don't hold an HTTP request open for minutes: proxies, load balancers and mobile networks will cut it off, and the client can't tell what happened. Use the **asynchronous request–reply** pattern:
+
+1. `POST /reports` validates the request, records an operation, and returns **`202 Accepted`** with `Location: /operations/op_81` (and ideally a suggested `Retry-After`).
+2. `GET /operations/op_81` returns the status: `{ "status": "running", "progress": 0.4 }`, then `succeeded` with a link to the result (`/reports/rep_12`), or `failed` with a Problem Details error.
+3. The client polls with backoff, or receives a **webhook** or event when the operation finishes, or both.
+
+Design details:
+- **Idempotency.** Accept an `Idempotency-Key` on the `POST`, so a retried request returns the same operation instead of starting another.
+- **Cancellation.** `POST /operations/op_81/cancel` (or `DELETE`), with clear semantics for work that has already been done.
+- **Retention.** How long operation records and results stay available.
+- **Authorisation.** Only the caller (or its tenant) can read the operation.
+- **gRPC and Google AIP-151** use the same idea: methods return a long-running `Operation` resource that clients poll or wait on.
+
+For very long or streamed work (exports of millions of rows), write the result to object storage and return a time-limited download URL.
+
+**What the interviewer is looking for:**
+`202` with an operation resource, polling or callbacks, and idempotency, cancellation and retention.
+
+**Follow-ups:**
+- How would you show progress in a UI without polling every second?
+- What happens to running operations during a deployment?
+
+**Red flags:**
+- A request that blocks for ten minutes "because the client waits anyway".
+- No way to find out what happened after a timeout.
+
+### How do you design a bulk endpoint that creates or updates many items in one call? {#bulk-operations}
+
+**Level:** Senior
+
+**Model answer:**
+First decide the **failure semantics**, because that shapes everything else:
+- **All-or-nothing.** One transaction; any invalid item rejects the whole batch with errors per item. Simple for clients, but limited by transaction size and lock duration.
+- **Partial success.** Each item succeeds or fails on its own. The response lists a result per item, in request order or keyed by a client-supplied reference:
+
+```json
+{
+  "results": [
+    { "ref": "line-1", "status": 201, "id": "prd_91" },
+    { "ref": "line-2", "status": 422, "error": { "type": "…/invalid-sku", "detail": "SKU 'X1' not found" } }
+  ]
+}
+```
+
+Return `200` for a processed batch whose items have their own outcomes (or `207 Multi-Status`, if your clients handle it), not a misleading `201` or `400` for the whole request.
+
+Other details:
+- **Limits:** a maximum number of items and payload size per request, documented and enforced.
+- **Idempotency:** an `Idempotency-Key` for the batch, and ideally a client reference per item, so a retry after a partial failure doesn't duplicate the successful items.
+- **Large batches go asynchronous:** accept a file or a job, return `202` and an operation, and report results per item when it finishes.
+- **Rate limits** count items, not requests, or a bulk endpoint becomes a way around them.
+- **Ordering:** say whether items are applied in order, and what happens when two items touch the same resource.
+
+**What the interviewer is looking for:**
+An explicit choice between atomic and partial success, results per item, limits, idempotency, and switching to asynchronous processing for large inputs.
+
+**Follow-ups:**
+- How would a client retry only the failed items?
+- When would you offer a file-upload import instead of a JSON bulk endpoint?
+
+**Red flags:**
+- `400` for a whole batch because one item failed, without saying which.
+- Unlimited batch sizes.
+
+### Partners want to react to events on your platform in near real time. Webhooks, a streaming API or an event feed? {#partner-event-delivery}
+
+**Level:** Architect
+
+**Model answer:**
+Each option puts the operational burden in a different place:
+
+| Option | How it works | Good for | Costs |
+|---|---|---|---|
+| **Webhooks** | You POST each event to the partner's endpoint | Most partners. Simple to consume, near real time | You run delivery: retries, backoff, signing, per-endpoint isolation, replay. Partners need a public endpoint |
+| **Event feed (polling)** | `GET /events?after=cursor` returns events in order | Partners behind firewalls, batch integrations, recovery after outages | Polling load and latency. You keep a durable, ordered event log per tenant |
+| **Streaming** (SSE, WebSockets, gRPC streams) | Partner holds a connection and receives events | Low-latency dashboards and trading-style use cases | Long-lived connections at scale, reconnection and resume logic |
+| **Cloud event bus** (for example, partner event sources on a cloud provider) | Events delivered into the partner's own cloud account | Partners already on that cloud | Ties integration to one provider |
+
+My default is **webhooks plus an event feed behind them**:
+- The feed is the source of truth: a durable log per tenant with stable event ids and cursors.
+- Webhooks are the low-latency notification of new entries, with signing, retries and a delivery log.
+- A partner whose endpoint was down catches up from the feed with its last cursor, instead of you replaying days of webhooks.
+
+Whatever you choose: a published event catalogue with schemas and versions, event ids for deduplication, no promise of global ordering (give per-resource versions instead), payloads that respect each partner's permissions, and thin events with a link to fetch details when the data is sensitive.
+
+**What the interviewer is looking for:**
+Where the operational burden falls in each option, recovery after downtime, and the feed-plus-webhooks combination.
+
+**Follow-ups:**
+- How long would you retain the event feed?
+- How do you stop a slow partner endpoint from delaying deliveries to everyone else?
+
+**Red flags:**
+- Fire-and-forget webhooks with no way to recover missed events.
+- Promising partners strict ordering across all events.
+
+### How would you approach SDKs for a public API? {#sdk-strategy}
+
+**Level:** Architect
+
+**Model answer:**
+An SDK is part of the product: for many developers it *is* the API. Decide deliberately:
+
+- **Which languages.** Choose from usage data and the customer base (often TypeScript, Python, Java, Go, C#). Each SDK is a product to maintain, so fewer, better SDKs beat many neglected ones.
+- **Generated or hand-written.** Generate the bulk from the OpenAPI contract (OpenAPI Generator, or commercial generators such as Speakeasy or Stainless). Hand-write a thin layer for the idiomatic parts: pagination iterators, webhook signature verification, file uploads.
+- **Build reliability in**, so every customer gets it by default:
+  - Retries with backoff and jitter on retryable errors only, honouring `Retry-After`.
+  - Automatic idempotency keys on retried `POST`s.
+  - Timeouts with sensible defaults.
+  - Typed errors that expose the Problem Details `type`.
+- **Versioning.** Semantic versioning of the SDK itself, and a pinned API version per SDK release, so upgrading the API is a deliberate choice.
+- **Observability.** A `User-Agent` with SDK name and version, so you can see adoption and find customers on buggy releases.
+- **Quality.** Tests against a mock server generated from the contract and against a sandbox, published changelogs, and examples that compile in CI.
+- **Lifecycle.** A support policy for old SDK versions, deprecation warnings at run time, and security fixes back-ported for the supported range.
+
+Keep the HTTP API fully usable without the SDK, documented with raw requests, so customers in other languages and tools aren't second-class.
+
+**What the interviewer is looking for:**
+Generation plus idiomatic hand-written layers, reliability defaults built in, versioning and telemetry, and SDKs treated as maintained products.
+
+**Follow-ups:**
+- How would you roll out a breaking change in the SDK?
+- How do you decide when to add support for a new language?
+
+**Red flags:**
+- Hand-written SDKs that drift from the API.
+- SDKs that retry every error, including non-idempotent `POST`s without keys.
+
 ## Cheat Sheet
 
 ### HTTP and REST
@@ -571,6 +825,16 @@ Outbox, at-least-once with backoff and isolation, HMAC signing with replay prote
 ### Evolution
 - **Expand and contract** — add the new alongside the old, migrate consumers, then remove.
 - **Webhook signing** — HMAC over timestamp + body, reject stale timestamps, rotate secrets.
+
+### Revisit
+
+- **Idempotency key claim** — `INSERT … ON CONFLICT DO NOTHING` on (client, key); the loser looks up the stored result.
+- **Idempotency request hash** — same key with a different body is a client bug: reject with 422.
+- **Contract-first** — write and review OpenAPI, Protobuf or SDL before code; generate mocks, clients and validation.
+- **Long-running operation** — `202 Accepted` plus an operation resource to poll, or a callback when it finishes.
+- **Bulk endpoint** — choose atomic or partial success, return a result per item, limit size, go async when large.
+- **Feed plus webhooks** — a durable, cursor-based event feed as the source of truth, webhooks as the fast notification.
+- **SDK reliability defaults** — retries with jitter on retryable errors, automatic idempotency keys, timeouts, typed errors.
 
 ## Further Reading
 
