@@ -6,7 +6,7 @@ tags: [runtime, backend, async]
 level: Senior
 estimatedMinutes: 60
 related: [javascript, typescript, api-styles]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -79,6 +79,56 @@ import { createGzip } from 'node:zlib';
 await pipeline(createReadStream('export.csv'), createGzip(), createWriteStream('export.csv.gz'));
 ```
 
+### Worked example: bounded concurrency without a library
+
+A nightly job must call an enrichment API for 50,000 customers. The obvious version is a trap:
+
+```ts
+// Starts 50,000 requests at once: sockets, memory and the API's rate limit all give out.
+await Promise.all(customers.map((c) => enrich(c)));
+```
+
+A small worker pool keeps a fixed number in flight, stops on the first error, and passes a cancellation signal to work already running:
+
+```ts
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, signal: AbortSignal) => Promise<R>,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  const failure = new AbortController();
+  const stop = signal ? AbortSignal.any([signal, failure.signal]) : failure.signal;
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      stop.throwIfAborted();
+      const i = next++;                  // safe: no await between reading and incrementing
+      try {
+        results[i] = await fn(items[i], stop);
+      } catch (err) {
+        failure.abort(err);              // tell the other workers to stop
+        throw err;
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// 20 in flight at a time, each request also limited to 2 s.
+await mapWithConcurrency(customers, 20, (c, signal) =>
+  enrich(c, { signal: AbortSignal.any([signal, AbortSignal.timeout(2_000)]) }),
+);
+```
+
+The arithmetic tells you whether it's acceptable: at 20 concurrent requests and about 40 ms each, 50,000 calls take 50,000 ÷ 20 × 0.04 s ≈ **100 seconds**, using at most 20 sockets. If the API allows 500 requests a second, 20 × (1 ÷ 0.04) = 500 is exactly its limit, so this is the right ceiling. A run with 1,000 items, a limit of 20 and a 10 ms task finishes in about 0.5 s with a peak of exactly 20 in flight.
+
+There's no race on `next++` because JavaScript runs one callback at a time: between two `await`s, nothing else touches it. The same reasoning would be wrong in a multi-threaded language.
+
 ### Async context and errors
 
 ```ts
@@ -118,6 +168,32 @@ flowchart TD
 ```
 
 The main thread should spend its time on short callbacks; anything long belongs to the OS, the thread pool, a worker, or another service.
+
+### One request through the event loop
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant JS as Main thread (JavaScript)
+  participant OS as OS network I/O (epoll)
+  participant TP as libuv thread pool
+  %% step: A login request arrives. Its handler runs on the main thread, the same thread every other request uses.
+  %% step: The handler queries the database. Writing to the socket is non-blocking, so the handler hands off and returns at the await.
+  %% step: While the query is in flight, the main thread is free to run callbacks for other requests. This is where Node gets its concurrency.
+  %% step: The rows arrive. In the poll phase, the event loop runs the continuation of the handler.
+  %% step: Verifying the password uses crypto.scrypt. It's CPU-heavy, so Node runs it on one of the libuv pool's 4 threads, not on the main thread.
+  %% step: When the hash is ready, its callback is queued for the event loop.
+  %% step: Back on the main thread, the handler compares the hashes in constant time and the promise resolves (a microtask).
+  %% step: The response goes out. Had the handler used scryptSync instead, every other request would have waited during the hash.
+  C->>JS: POST /login
+  JS->>OS: SELECT user (non-blocking socket write)
+  Note over JS: Main thread runs other requests' callbacks
+  OS-->>JS: Rows ready (poll phase)
+  JS->>TP: crypto.scrypt(password, salt)
+  TP-->>JS: Derived key (callback queued)
+  JS->>JS: timingSafeEqual, resolve the promise
+  JS-->>C: 200 with a session cookie
+```
 
 ## When to Use / Trade-offs
 
@@ -527,6 +603,164 @@ LTS discipline, automation, early testing, progressive rollout, fleet visibility
 - Running odd-numbered (non-LTS) releases in production long-term.
 - Services on end-of-life versions.
 
+### How should a Node.js service handle configuration and secrets? {#config-and-secrets}
+
+**Level:** Foundation
+
+**Model answer:**
+Follow the twelve-factor idea: **configuration comes from the environment**, not from code or files baked into the image, so one build runs in every environment.
+
+- **Load once, validate at start-up, fail fast.** Parse `process.env` into a typed object with a schema (Zod, for example). A missing or malformed value should stop the process at boot with a clear message, not cause an error at 3 a.m. on the first request that needs it.
+
+```ts
+import { z } from 'zod';
+
+const Config = z.object({
+  PORT: z.coerce.number().int().default(8080),
+  DATABASE_URL: z.string().url(),
+  PRICING_TIMEOUT_MS: z.coerce.number().int().positive().default(300),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+});
+export const config = Config.parse(process.env); // throws with every problem listed
+```
+
+- **Pass the config object in**, rather than reading `process.env` all over the code, which makes it hard to see what a module depends on and hard to test.
+- **Local development:** Node's built-in `--env-file=.env` loads a file without a dependency. Keep `.env` out of Git, and commit a `.env.example` instead.
+- **Secrets** come from a secret manager (AWS Secrets Manager, Azure Key Vault, Vault), injected as environment variables or mounted files by the platform, or fetched at start-up with workload identity. Never commit them, and never bake them into images.
+- **Don't leak them:** redact secrets in logs and error reports, and don't print the whole config at start-up.
+- **Rotation:** secrets that rotate need either a restart on change, or code that re-reads them (for example a database pool that picks up new credentials).
+
+**What the interviewer is looking for:**
+Environment-based config, schema validation at start-up, a secret manager rather than files in the repository, and care with logging.
+
+**Follow-ups:**
+- How would you rotate a database password without downtime?
+- When would you use a feature-flag service instead of configuration?
+
+**Red flags:**
+- Secrets in the repository or the Docker image.
+- `process.env.X` read deep inside business logic with no validation.
+
+### How do you test a Node.js service? {#testing-node-services}
+
+**Level:** Senior
+
+**Model answer:**
+Use the same layers as any service, with Node-specific tools:
+
+- **Unit tests** for pure logic, with the built-in `node:test` runner and `node:assert`, or Vitest or Jest. `node:test` includes mocking (`mock.fn`, `mock.method`) and **fake timers** (`mock.timers`) for code that uses `setTimeout` or `Date`.
+- **HTTP handler tests in-process**, without opening a port: Fastify's `app.inject()`, or Supertest for Express. They are fast and exercise routing, validation and serialisation.
+- **Integration tests against real dependencies**: Testcontainers starts PostgreSQL, Redis or Kafka in Docker for the test run. Real databases catch problems that mocks hide (transactions, constraints, query plans).
+- **Outbound HTTP**: undici's `MockAgent` intercepts `fetch` (the built-in one, too), so you can simulate slow or failing dependencies, timeouts and retries. Disable real network access in tests so nothing slips through.
+- **Contract tests** for APIs that other teams consume (Pact, or schema validation against the OpenAPI contract).
+- **Load tests** (k6, autocannon) for latency and event-loop behaviour under concurrency.
+
+Node-specific pitfalls:
+- **Open handles** (a database pool or a timer left running) stop the test process from exiting. Close resources in `after` hooks.
+- **Unawaited promises** in tests pass silently. Lint for floating promises, and make sure assertions are awaited.
+- **Shared state between test files**: run files in isolated processes or workers (the default in `node:test` and Vitest), and give each test its own data.
+
+**What the interviewer is looking for:**
+In-process HTTP tests, real dependencies through containers, controlled outbound HTTP and timers, and awareness of open handles and floating promises.
+
+**Follow-ups:**
+- How would you test a retry-with-backoff function without waiting real seconds?
+- How do you keep Testcontainers-based tests fast in CI?
+
+**Red flags:**
+- Mocking the database for everything.
+- Tests that call real third-party APIs.
+
+### How does garbage collection work in V8, and how do you tune it for containers? {#v8-gc}
+
+**Level:** Senior
+
+**Model answer:**
+V8's heap is **generational**, based on the observation that most objects die young:
+
+- **Young generation** (the "new space"): new objects are allocated here. It is small and collected often by the **Scavenger**, which copies surviving objects to another area. Collections are fast because only live objects are touched.
+- **Old generation**: objects that survive a couple of scavenges are promoted. It's collected by **mark-compact**. V8 does much of the marking incrementally and concurrently on background threads (the Orinoco project), so main-thread pauses are short, but a large old generation still costs CPU and can cause noticeable pauses.
+
+What causes GC trouble:
+- **High allocation rates** (building large intermediate arrays and strings per request) mean frequent scavenges and more promotion.
+- **Large, long-lived heaps** (big in-process caches) make old-generation collections expensive.
+- **A heap limit too close to the container limit**: V8 keeps growing the heap, the container exceeds its memory limit, and the kernel kills the process (OOMKilled) without a JavaScript error.
+
+Tuning for containers:
+- Set `--max-old-space-size` (in MB) explicitly, to about 70–80% of the container's memory limit, leaving room for buffers, native memory and the young generation. Recent Node versions take container limits into account when picking a default, but being explicit avoids surprises.
+- For allocation-heavy services, a larger young generation (`--max-semi-space-size`) can reduce promotion and scavenge frequency. Measure before and after.
+- Watch GC metrics (`perf_hooks` GC entries, or `--trace-gc` in staging) alongside event-loop delay and p99 latency.
+
+The best tuning is usually in the code: allocate less per request, stream instead of buffering, and bound caches.
+
+**What the interviewer is looking for:**
+Generational collection, why heap limits and container limits interact, and measuring GC before tuning flags.
+
+**Follow-ups:**
+- Heap usage is stable, but RSS keeps growing. What could it be?
+- When would a larger young generation help?
+
+**Red flags:**
+- Setting the heap limit equal to the container limit.
+- Tuning GC flags without measuring.
+
+### Your product needs PDF generation and image resizing in a Node.js platform. How do you build it? {#cpu-heavy-features}
+
+**Level:** Architect
+
+**Model answer:**
+Both are CPU-heavy and memory-hungry, so the first rule is **never on the main thread of an API process**. Choose where they run based on latency needs and volume:
+
+1. **Worker threads in the API service**, with a bounded pool (Piscina, for example). Good for small, fast tasks (resizing a thumbnail in tens of milliseconds) where the user waits for the result. Limit the pool to the CPUs the container has, and cap the queue so excess requests are rejected rather than piling up.
+2. **A separate service** (in Node, or in another language with better libraries) behind a queue. Good for heavier work, such as multi-page PDFs or large images. The API accepts the request, returns `202` with an operation id, and the worker writes the result to object storage and notifies. It scales independently, and a crash can't take the API down.
+3. **Managed or serverless options**: image CDNs that resize on the fly (very effective for images), or functions triggered by uploads to object storage.
+
+Libraries matter:
+- **Images:** `sharp` (built on libvips) is fast and memory-efficient, and runs its work off the main thread itself.
+- **PDFs:** HTML-to-PDF through a headless browser (Playwright or Puppeteer) is flexible but heavy: run it as its own service with a pool of browser instances, strict timeouts and memory limits. Templated libraries (pdf-lib, PDFKit) are lighter for simple documents.
+
+Operational concerns: set memory and time limits per job, validate inputs (pixel dimensions, page counts) to stop decompression bombs and abuse, isolate untrusted HTML rendering (no network access from the renderer, so it can't be used for SSRF), cache results by input hash, and monitor queue depth and job duration.
+
+**What the interviewer is looking for:**
+Keeping CPU work off the main thread, choosing between worker pools, a separate service and managed options, and the security and resource limits around rendering.
+
+**Follow-ups:**
+- How would you stop a malicious upload from using all the memory?
+- How do you keep a pool of headless browsers healthy?
+
+**Red flags:**
+- Running Puppeteer inside the main API process for every request.
+- No limits on input sizes.
+
+### After a Node.js major-version upgrade, a service's p99 latency doubled. How do you investigate? {#upgrade-regression}
+
+**Level:** Architect
+
+**Model answer:**
+**Contain it first.** If the upgrade is rolled out progressively, stop the rollout and roll back the affected services. The investigation doesn't have to happen in production.
+
+**Confirm it's the runtime.** Did anything else change in the same deploy, such as dependency updates through a lockfile refresh, a new base image, or different CPU or memory limits? Build the same commit on both Node versions and compare under the **same load test**. A difference that reproduces is a real regression. One that doesn't points elsewhere.
+
+**Then narrow it down:**
+- **Event-loop delay and CPU.** If CPU rose for the same throughput, the code got slower: compare CPU profiles (`--cpu-prof`) from both versions, and diff the hot functions.
+- **GC.** A new V8 can change heap sizing and GC heuristics. Compare GC time and pause counts (`--trace-gc`) and heap limits. An explicit `--max-old-space-size` may now be wrong.
+- **Native modules.** Addons rebuilt for the new ABI, or falling back to slower JavaScript implementations.
+- **Changed defaults.** New Node versions sometimes change defaults: HTTP client and server timeouts, keep-alive behaviour, DNS result ordering (IPv6 first), or the bundled undici version behind `fetch`. A DNS ordering change can add connection delays to hosts with broken IPv6.
+- **Deprecation warnings** and changes listed in the release notes for the APIs you use.
+
+**Fix and prevent:** patch, change configuration or upgrade the dependency, and report regressions upstream with a minimal reproduction. For the future, run CI on the next LTS early (a matrix build), include a performance benchmark in CI for critical services, and roll runtime upgrades out progressively with canaries that compare latency and memory against the old version.
+
+**What the interviewer is looking for:**
+Rolling back first, isolating the runtime from other changes, comparing profiles and GC between versions, checking changed defaults, and building early detection into the upgrade process.
+
+**Follow-ups:**
+- How would you write a CI benchmark that doesn't produce noisy results?
+- When is it acceptable to stay on the old version for a while?
+
+**Red flags:**
+- Debugging in production while the regression is still live.
+- Assuming the new Node version is at fault without a controlled comparison.
+
 ## Cheat Sheet
 
 ### Runtime model
@@ -549,6 +783,16 @@ LTS discipline, automation, early testing, progressive rollout, fleet visibility
 - **LTS** — even-numbered majors up to 26, every major from 27 (one per year); about 30 months of LTS; upgrade before EOL.
 - **Prototype pollution** — untrusted merges altering `Object.prototype`; validate and use safe maps.
 - **`vm` is not a sandbox** — never run untrusted code with it.
+
+### Revisit
+
+- **Bounded concurrency** — a fixed pool of workers pulling from a shared index, not `Promise.all` over every item.
+- **`next++` in a worker pool** — safe in JavaScript, because nothing else runs between two awaits.
+- **crypto.scrypt vs scryptSync** — the async version runs on the libuv pool; the sync one blocks every request.
+- **Config at start-up** — parse `process.env` with a schema once, and fail fast on missing values.
+- **Outbound HTTP in tests** — undici's `MockAgent` intercepts `fetch`, so you can simulate slow or failing dependencies.
+- **Heap limit in containers** — `--max-old-space-size` at about 70–80% of the container limit, leaving room for native memory.
+- **Upgrade regressions** — same commit, both versions, same load test; then compare CPU profiles, GC and changed defaults.
 
 ## Further Reading
 

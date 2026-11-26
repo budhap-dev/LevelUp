@@ -6,7 +6,7 @@ tags: [resilience, reliability, retries, circuit-breaker]
 level: Senior
 estimatedMinutes: 75
 related: [distributed-systems-fundamentals, system-design, observability-sre, architecture-patterns]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -122,17 +122,19 @@ export class CircuitBreaker {
   private state: State = 'closed';
   private openedAt = 0;
   private window: boolean[] = [];             // true = failure, last N calls
+  private trialInFlight = false;
 
   constructor(private readonly opts = { size: 50, minCalls: 20, failureRate: 0.5, coolDownMs: 10_000 }) {}
 
   async call<T>(fn: () => Promise<T>, fallback?: () => T | Promise<T>): Promise<T> {
-    if (this.state === 'open') {
-      if (performance.now() - this.openedAt < this.opts.coolDownMs) {
-        if (fallback) return fallback();
-        throw new Error('Circuit open');
-      }
-      this.state = 'half-open';
+    if (this.state === 'open' && performance.now() - this.openedAt >= this.opts.coolDownMs) this.state = 'half-open';
+    // Open, or half-open with its single trial already running: don't touch the dependency.
+    if (this.state === 'open' || (this.state === 'half-open' && this.trialInFlight)) {
+      if (fallback) return fallback();
+      throw new Error('Circuit open');
     }
+    const isTrial = this.state === 'half-open';
+    if (isTrial) this.trialInFlight = true;
     try {
       const result = await fn();
       this.record(false);
@@ -141,6 +143,8 @@ export class CircuitBreaker {
       this.record(true);
       if (fallback) return fallback();
       throw err;
+    } finally {
+      if (isTrial) this.trialInFlight = false;
     }
   }
 
@@ -160,6 +164,30 @@ export class CircuitBreaker {
 ```
 
 In production, use a maintained library rather than this sketch: **Resilience4j** (Java), **Polly** (.NET, with resilience pipelines from v8 and `Microsoft.Extensions.Http.Resilience`), and **cockatiel** or **opossum** (Node.js). Netflix's Hystrix has been in maintenance mode since 2018.
+
+### Worked example: choosing a timeout and retry policy from latency data
+
+A product page has an 800 ms deadline and calls a stock service. Its measured latency for this call is p50 40 ms, p99 180 ms and p99.9 450 ms. Most slow calls come from one replica at a time (garbage-collection pauses, a noisy neighbour), so a second attempt usually lands somewhere faster.
+
+Compare two policies:
+
+| | A: one long timeout | B: shorter timeout, one retry |
+|---|---|---|
+| Timeout | 500 ms | 250 ms |
+| Retries | None | 1, after 0–50 ms of jitter |
+| Calls that need a second attempt | 0 | ~0.5% (those slower than 250 ms) |
+| Calls that fail | ~0.05% (slower than 500 ms) | ~0.0025% (both attempts slower than 250 ms: 0.5% × 0.5%) |
+| Time taken by a slow call | Up to 450 ms, waiting it out | About 250 + 25 + 40 ≈ 315 ms |
+| Worst case | 500 ms | 250 + 50 + 250 = 550 ms, within the 800 ms deadline |
+| Extra load | None | ~0.5%, well inside a 10% retry budget |
+
+Policy B fails about twenty times less often *and* answers slow calls faster, for half a percent of extra calls. It works because the slowness is **uncorrelated**: a retry escapes the slow replica.
+
+The same policy is harmful when the whole dependency is slow. Then every call exceeds 250 ms, every call is retried, and the load doubles at the worst moment. Two guards make B safe:
+- The **retry budget** caps retries at about 10% of traffic, so a systemic slowdown can't double the load.
+- The **circuit breaker** sees the failures and opens, turning the problem into fast fallbacks.
+
+Re-check the numbers when the latency distribution changes. A timeout chosen from last quarter's p99 quietly becomes wrong when the dependency gets slower, or a new feature makes the call heavier.
 
 ### Bulkheads
 
@@ -246,6 +274,39 @@ flowchart TB
 ```
 
 With retries at only the edge and a 10% retry budget, the same outage costs the database about 1.1 queries per user request.
+
+### A circuit breaker's life
+
+```mermaid
+sequenceDiagram
+  participant C as Caller
+  participant B as Circuit breaker
+  participant D as Recommendations service
+  %% step: The breaker is closed. Calls go through, and it records each outcome in a sliding window.
+  %% step: The call reaches the recommendations service, which has become slow.
+  %% step: It times out. Over the last 40 calls, 20 have failed this way.
+  %% step: 50% failures with more than the minimum number of calls: the breaker trips open.
+  %% step: The next call arrives while the breaker is open.
+  %% step: The breaker answers immediately with the fallback ("popular items"). The struggling service gets no traffic from this caller.
+  %% step: After a 10-second cool-down, the breaker moves to half-open and will allow one trial call.
+  %% step: The next call becomes the trial.
+  %% step: Exactly one request goes through to the service. Concurrent callers still get the fallback.
+  %% step: The service answers normally: it has recovered.
+  %% step: The trial succeeded, so the breaker closes and resets its window. Had it failed, the breaker would reopen, often with a longer cool-down.
+  %% step: The caller gets the real response. State changes should appear on dashboards, because an open breaker is a symptom someone needs to see.
+  C->>B: Get recommendations
+  B->>D: Request (closed)
+  D--xB: Timeout
+  Note over B: 20 of 40 calls failed: open
+  C->>B: Get recommendations
+  B-->>C: Fallback, immediately
+  Note over B: Cool-down over: half-open
+  C->>B: Get recommendations
+  B->>D: One trial request
+  D-->>B: 200 OK
+  Note over B: Trial succeeded: closed
+  B-->>C: Recommendations
+```
 
 ## When to Use / Trade-offs
 
@@ -704,6 +765,165 @@ A clear split of responsibility between platform and application, avoiding dupli
 - "Install a service mesh and you're done."
 - A big-bang rewrite of all clients.
 
+### What is graceful degradation, and how do you decide what to degrade? {#graceful-degradation}
+
+**Level:** Foundation
+
+**Model answer:**
+Graceful degradation means that when part of a system fails or is overloaded, the product **keeps doing its most important job**, with reduced features, instead of failing completely.
+
+Examples:
+- A product page without reviews or recommendations still lets people buy.
+- A search page serves results from a slightly stale index, or without personalisation.
+- A dashboard shows cached figures with a "last updated 5 minutes ago" label.
+- Under heavy load, a video service lowers the default quality.
+
+Deciding what to degrade is a **product decision made in advance**:
+1. **List the user journeys and rank them.** Checkout matters more than recommendations, and login more than avatars.
+2. **For each dependency, decide what happens when it fails**: hide the feature, show cached or default data, queue the action for later, or fail the request. Some things must **fail closed**, such as authorisation, payments and anything with legal effect.
+3. **Build the switches**: fallbacks in code, timeouts short enough that the fallback actually runs, and feature flags or "kill switches" to turn off expensive features by hand during an incident.
+4. **Be honest in the UI**: "Reviews are unavailable right now" beats a spinner that never ends.
+5. **Test it.** Fallbacks that never run are broken by the time you need them, so exercise them in game days or with fault injection.
+
+**What the interviewer is looking for:**
+Ranking journeys, deciding the behaviour per dependency in advance, knowing what must fail closed, and testing the fallbacks.
+
+**Follow-ups:**
+- What would you degrade first on an e-commerce site under a traffic spike?
+- How do you make sure fallbacks still work six months later?
+
+**Red flags:**
+- A failure in an optional widget that takes down the whole page.
+- "Allow access if the permission service is down."
+
+### How does outlier detection work in a load balancer or service mesh? {#outlier-detection}
+
+**Level:** Senior
+
+**Model answer:**
+Health checks ask "is this instance up?" every few seconds, on a dedicated endpoint. **Outlier detection** watches **real traffic** and temporarily removes (ejects) individual instances that are performing much worse than their peers. That catches grey failures health checks miss: an instance whose health endpoint is fine but whose real requests fail or crawl, because of a bad disk, a full connection pool or a noisy neighbour.
+
+How it typically works (Envoy and Istio's `outlierDetection`, for example):
+- **Consecutive errors**: eject an instance after, say, 5 consecutive 5xx responses or connection failures.
+- **Success-rate or latency outliers**: compare each instance with the rest of the pool, and eject those far below the average success rate (or far above typical latency).
+- **Ejection time** grows with repeated ejections (a base time multiplied by the number of times ejected), so a flapping instance stays out longer.
+- **Maximum ejection percentage** caps how much of the pool can be removed at once, for example 50%. Without it, a problem that affects every instance (a dependency they all share) would eject the whole pool and cause a total outage.
+
+Compared with a circuit breaker: a breaker protects the caller from a whole dependency that is failing. Outlier detection routes around **individual bad instances** of a dependency that is otherwise healthy. They complement each other.
+
+Watch-outs: low traffic gives too few samples to judge, errors caused by the request (400s) must not count, and ejections should be visible on dashboards and alerted on, because they point at a real problem with that instance.
+
+**What the interviewer is looking for:**
+Passive detection from real traffic, ejection with growing back-off, the maximum-ejection safeguard, and how it differs from health checks and breakers.
+
+**Follow-ups:**
+- Why would a maximum ejection percentage of 100% be dangerous?
+- How would you detect an instance that is slow but not erroring?
+
+**Red flags:**
+- Relying only on a `/health` endpoint to find bad instances.
+- Counting client errors (4xx) as instance failures.
+
+### How do adaptive concurrency limits work, and why are they better than a fixed limit? {#adaptive-concurrency}
+
+**Level:** Senior
+
+**Model answer:**
+A fixed concurrency limit ("at most 100 requests in flight") is hard to choose. Set it too high and the server gets overloaded before it rejects anything. Set it too low and you waste capacity. And the right number changes with every deploy, instance size and traffic mix.
+
+**Adaptive limits discover the number from latency**, in the way TCP congestion control discovers bandwidth. Little's Law links the quantities: requests in flight = throughput × latency. While the server has spare capacity, more concurrency raises throughput and latency stays flat. Past capacity, requests start queueing: latency rises and throughput doesn't.
+
+So the limiter:
+1. Tracks the **minimum (no-load) latency** it has seen recently and the current latency.
+2. **Raises the limit** while current latency stays close to the minimum.
+3. **Lowers it** when latency climbs, meaning queues are forming.
+4. **Rejects requests beyond the limit straight away** (`503`, or `429` with `Retry-After`), so the requests it accepts finish quickly.
+
+Implementations: Netflix's `concurrency-limits` library (with Vegas and Gradient algorithms named after TCP variants), Envoy's adaptive concurrency filter, and AIMD-style limiters (additive increase, multiplicative decrease) in many proxies.
+
+The benefits: the server protects itself without hand-tuned numbers, rejection happens before the server is saturated, and goodput stays high during overload.
+
+Combine it with **priorities**, so the limiter sheds low-value traffic first, and with client-side **retry budgets**, so rejected requests don't come straight back.
+
+**What the interviewer is looking for:**
+Latency as the signal of queueing, the link to Little's Law and TCP congestion control, and fast rejection beyond the limit.
+
+**Follow-ups:**
+- What happens to an adaptive limiter when a dependency, not the server itself, gets slow?
+- How would you test one before relying on it?
+
+**Red flags:**
+- "Autoscaling makes concurrency limits unnecessary."
+- Queueing excess requests without bound instead of rejecting them.
+
+### How would you analyse a service's failure modes before an incident does it for you? {#failure-mode-analysis}
+
+**Level:** Architect
+
+**Model answer:**
+Run a lightweight **failure mode and effects analysis** for each important service, as a design-review exercise with the team.
+
+1. **Draw the request paths** for the critical user journeys, with every dependency: databases, caches, queues, other services, third parties, DNS, the identity provider and configuration services.
+2. **For each dependency, list how it can fail**: down, slow, returning errors, returning wrong or stale data, overloaded, or misconfigured after a deploy.
+3. **For each failure, fill in a row:**
+
+| Dependency | Failure | Effect on the user | How we detect it | Mitigation | Tested? |
+|---|---|---|---|---|---|
+| Pricing | Slow (2 s) | Product pages hang | p99 alert on the pricing client | 300 ms timeout, breaker, last-known price for 5 min | Game day in March |
+| Identity provider | Down | No new sign-ins; existing sessions continue | Synthetic login check | Sessions valid for 8 h; status banner | Not yet |
+| Config service | Unreachable | None if cached | Error log on refresh | Serve last known good config | Unit test only |
+
+4. **Rank by likelihood times impact**, and focus on the rows where the effect is severe and the mitigation is missing or untested.
+5. **Turn the top rows into work**: timeouts and fallbacks to add, alerts to create, runbooks to write, and chaos experiments to prove each mitigation works.
+6. **Revisit** when the architecture changes, and after incidents (did the analysis miss this failure mode?).
+
+Things this exercise often uncovers: dependencies nobody listed (DNS, time sync, a licence server), shared fate (two "independent" services on one database), fallbacks that depend on the thing that failed, and alerts that would fire only after customers noticed.
+
+**What the interviewer is looking for:**
+A systematic per-dependency analysis covering the kinds of failure, user impact, detection and mitigation, ranked and turned into tested work.
+
+**Follow-ups:**
+- How would you run this across 60 services without it becoming paperwork?
+- What would you do with a failure mode that has no reasonable mitigation?
+
+**Red flags:**
+- Listing only "service down" as a failure mode.
+- Mitigations that have never been tested.
+
+### Design the resilience of a mobile app's API client for unreliable networks and large outages. {#mobile-client-resilience}
+
+**Level:** Architect
+
+**Model answer:**
+Mobile clients are numerous, can't be patched quickly (users update slowly), and move between good and bad networks. Retry behaviour in millions of devices can take a recovering backend down again, so design both for the user and for the backend.
+
+**For the user:**
+- **Timeouts per network type**: more patient on mobile data than on Wi-Fi, with separate connect and read timeouts.
+- **Offline-first for writes where possible**: queue the action locally (a sent message, a saved form) with an **idempotency key** generated on the device, and send it when the connection returns. The key makes retries safe even if the first attempt reached the server.
+- **Cache reads** and show stale data with a timestamp rather than an error screen.
+- **Clear states**: "sending…", "saved offline", "failed, tap to retry".
+
+**For the backend:**
+- **Exponential backoff with full jitter and a cap**, a limit on attempts, and no retries on 4xx errors.
+- **Honour `Retry-After`** and `503`s from the server.
+- **Server-controlled behaviour**: a remote config or kill switch that can lengthen backoff, turn off non-essential calls (analytics, prefetch) or show a maintenance screen, without an app release.
+- **Avoid thundering herds** after outages and at predictable moments: random jitter when the app comes to the foreground, when push notifications trigger many devices to fetch at once, and for scheduled background syncs.
+- **Batch and coalesce** small requests, and deduplicate identical in-flight requests.
+- **Version awareness**: the server can tell old clients to back off or upgrade, because old retry logic stays in the field for years.
+
+**Observability:** client-side telemetry of failure rates, retry counts and offline queue sizes, by app version and network type.
+
+**What the interviewer is looking for:**
+Offline queues with device-generated idempotency keys, jittered and capped retries, server-side controls that can change client behaviour without a release, and herd avoidance.
+
+**Follow-ups:**
+- A push notification to 5 million users makes them all open the app at once. What happens, and how do you prevent it?
+- How long should the offline queue keep actions before giving up?
+
+**Red flags:**
+- Fixed-interval retries in a client installed on millions of devices.
+- No way to change client behaviour without shipping a new version.
+
 ## Cheat Sheet
 
 ### Timeouts and retries
@@ -730,6 +950,16 @@ A clear split of responsibility between platform and application, avoiding dupli
 - **Liveness probe** — checks the process only, never shared dependencies, to avoid restart storms.
 - **Metastable failure** — degradation sustained by a feedback loop after the trigger has gone.
 - **Static stability** — keeps working through a dependency failure without needing to change anything.
+
+### Revisit
+
+- **Short timeout plus one retry** — beats one long timeout when slowness is uncorrelated, provided a retry budget and a breaker are in place.
+- **Half-open trial** — one trial call at a time; success closes the breaker, failure reopens it.
+- **Graceful degradation** — rank journeys, decide the behaviour per dependency in advance, fail closed for auth and payments.
+- **Outlier detection** — eject individual bad instances using real traffic, capped by a maximum ejection percentage.
+- **Adaptive concurrency** — raise the limit while latency stays near its minimum, cut it when queues form, reject beyond it.
+- **Failure mode analysis** — per dependency: how it fails, the user effect, detection, mitigation, and whether it's tested.
+- **Mobile retry storms** — jitter on foreground and push-triggered fetches, plus server-controlled backoff.
 
 ## Further Reading
 

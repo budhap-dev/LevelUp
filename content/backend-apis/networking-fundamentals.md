@@ -6,7 +6,7 @@ tags: [networking, http, tls, dns]
 level: Senior
 estimatedMinutes: 75
 related: [system-design, web-performance, api-styles, cloud-fundamentals]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -84,11 +84,58 @@ setGlobalDispatcher(new Agent({
   connections: 50,            // max sockets per origin
   keepAliveTimeout: 30_000,   // close idle sockets before the server (e.g. 60 s) or LB does
   keepAliveMaxTimeout: 60_000,
-  connectTimeout: 2_000,
+  connect: { timeout: 2_000 }, // connection setup, including TLS
   headersTimeout: 5_000,      // time to receive response headers
   bodyTimeout: 10_000,
 }));
 ```
+
+### Worked example: timeouts and a pool for a Node.js service behind a load balancer
+
+A Node.js API sits behind an AWS Application Load Balancer (idle timeout 60 s) and calls a pricing service about 600 times a second per instance. Pricing's latency is 25 ms at p50 and 60 ms at p99.
+
+**Inbound: keep connections open longer than the load balancer does.**
+
+```ts
+import http from 'node:http';
+
+const server = http.createServer(app);
+server.keepAliveTimeout = 65_000; // longer than the ALB's 60 s idle timeout, so the ALB always closes first
+server.headersTimeout = 66_000;   // must be longer than keepAliveTimeout
+server.requestTimeout = 30_000;   // the whole request, protecting against very slow clients
+server.listen(8080);
+```
+
+With Node's default `keepAliveTimeout` of 5 seconds, Node would close idle connections the ALB still considers open, and the next request on one of them would come back as a 502.
+
+**Outbound: size the pool with Little's Law.** Connections in use ≈ requests per second × time each request holds a connection:
+- Typical: 600 × 0.025 s = **15**.
+- When pricing is slow (p99 for a sustained period): 600 × 0.060 s = **36**.
+
+So allow **40** connections, and fail fast beyond that instead of queueing for ever:
+
+```ts
+import { Agent, fetch } from 'undici';
+
+// One pool per dependency, so a slow pricing service can't take sockets from anything else.
+const pricingPool = new Agent({
+  connections: 40,
+  keepAliveTimeout: 30_000,   // shorter than the pricing servers' own 65 s, so we close first
+  connect: { timeout: 1_000 },
+  headersTimeout: 2_000,
+  bodyTimeout: 5_000,
+});
+
+export const getPrice = (sku: string) =>
+  fetch(`https://pricing.internal/prices/${sku}`, {
+    dispatcher: pricingPool,
+    signal: AbortSignal.timeout(300), // includes time spent waiting for a free connection
+  });
+```
+
+The whole chain now follows one rule: **each side closes idle connections before the side it talks to does.** The client is under 60 s, the ALB is at 60 s, and Node is at 65 s. Outbound, Node is at 30 s and pricing is at 65 s.
+
+The `AbortSignal.timeout(300)` matters most. If pricing slows down and all 40 connections are busy, new requests fail after 300 ms, where a circuit breaker or fallback can handle them, instead of piling up in the agent's queue.
 
 ### Real-time transports
 
@@ -126,6 +173,15 @@ sequenceDiagram
   participant C as Client
   participant R as DNS resolver
   participant S as Server (or CDN edge)
+  %% step: Before anything else, the client needs an address. It asks its resolver, unless the answer is still cached.
+  %% step: The resolver answers with A and AAAA records. Everyone along the way caches them for the TTL.
+  %% step: TCP opens with a SYN. Nothing useful can be sent yet.
+  %% step: The SYN-ACK comes back: one full round trip spent.
+  %% step: The client completes the handshake and, in the same flight, starts TLS 1.3 with its key share, the hostname (SNI) and the protocols it speaks (ALPN, offering h2).
+  %% step: The server replies with its key share, certificate and Finished. Both sides now have keys: a second round trip spent.
+  %% step: The client sends Finished and the HTTP request together.
+  %% step: The response arrives, one more round trip later.
+  %% step: On a 150 ms path that's about 300 ms of setup before the server even sees the request. A reused connection skips all of it, which is why pooling and CDNs matter.
   C->>R: Resolve api.example.com
   R-->>C: A and AAAA records (cached for the TTL)
   C->>S: TCP SYN
@@ -620,6 +676,162 @@ Choosing VPN versus private links on requirements, hub-and-spoke topology, real 
 - A single private connection with no backup.
 - Ignoring DNS resolution between environments.
 
+### What is NAT, and why can servers making many outbound connections run out of ports? {#nat-port-exhaustion}
+
+**Level:** Foundation
+
+**Model answer:**
+**Network address translation** lets many machines with private addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) share one or a few public IP addresses. For outbound traffic, the NAT device rewrites the source address and **source port** of each connection, and keeps a table entry so replies get back to the right machine.
+
+The catch is that a connection is identified by the tuple (source IP, source port, destination IP, destination port, protocol). With one public IP talking to **one destination IP and port**, only the source port can vary, so there's a ceiling of tens of thousands of simultaneous connections. AWS's NAT gateway, for example, supports up to 55,000 simultaneous connections to each unique destination per public IP address. Azure has a similar limit on SNAT ports per instance behind its load balancers.
+
+Symptoms of exhaustion: intermittent connection timeouts or failures to connect to one popular destination (a third-party API, a cloud service endpoint), while everything else works. The NAT's metrics show dropped connections or port allocation errors.
+
+Fixes, roughly in order:
+1. **Reuse connections**: keep-alive and connection pooling, so you need far fewer simultaneous connections. This is the real fix in most cases.
+2. **Avoid NAT for cloud services**: private endpoints or VPC endpoints for storage, queues and databases.
+3. **Add public IPs** to the NAT gateway, which multiplies the available ports.
+4. **Spread destinations**: if the partner offers several IPs, distribute across them.
+
+**What the interviewer is looking for:**
+What NAT rewrites, why the connection tuple limits ports per destination, and connection reuse as the main fix.
+
+**Follow-ups:**
+- Why does `TIME_WAIT` make the problem worse for short-lived connections?
+- How would you confirm that NAT port exhaustion is the cause?
+
+**Red flags:**
+- "Add bigger instances."
+- Opening a new connection per request to the same API.
+
+### What is MTU, and how do path MTU problems show up? {#mtu-pmtud}
+
+**Level:** Senior
+
+**Model answer:**
+The **MTU** (maximum transmission unit) is the largest packet a link carries: usually 1,500 bytes on Ethernet. Tunnels and overlays add headers, so the usable MTU inside them is smaller: IPsec VPNs, GRE, VXLAN in Kubernetes networks and cloud overlays.
+
+**Path MTU discovery** finds the smallest MTU along a route. A packet that is too large and marked "don't fragment" is dropped, and the router sends back an ICMP "fragmentation needed" (IPv4) or "packet too big" (IPv6) message, so the sender uses smaller packets.
+
+**The classic failure is a black hole.** A firewall blocks those ICMP messages, so the sender never learns. Small packets work and large ones vanish. The symptoms are distinctive:
+- The TCP handshake and the TLS ClientHello succeed, then the connection **hangs** when the server sends its certificate chain or a large response.
+- `curl` to some endpoints works and to others hangs. Small API responses work and large ones time out.
+- It happens only over the VPN, or only from one network.
+
+Diagnosis: `ping -M do -s 1472 host` on Linux (1,472 bytes of payload plus 28 bytes of headers is 1,500) and lower sizes until it passes; `tracepath` shows where the MTU drops; a packet capture shows retransmissions of full-size segments with no acknowledgements.
+
+Fixes: allow the ICMP messages through (they're needed, not optional), **clamp the TCP MSS** on the tunnel's router so TCP never sends segments larger than fit, or lower the interface MTU on hosts that use the tunnel. Kubernetes network plugins usually set a lower pod MTU for this reason.
+
+**What the interviewer is looking for:**
+Why tunnels reduce the MTU, how blocked ICMP creates a black hole, the "handshake works, then hangs" symptom, and MSS clamping as the fix.
+
+**Follow-ups:**
+- Why does IPv6 depend on path MTU discovery even more than IPv4?
+- How does QUIC handle MTU?
+
+**Red flags:**
+- Blocking all ICMP "for security".
+- Raising timeouts for a connection that hangs on large packets.
+
+### Why is a new connection slow for large responses, and what does TCP congestion control have to do with it? {#congestion-control}
+
+**Level:** Senior
+
+**Model answer:**
+TCP doesn't know how much bandwidth a path has, so it probes. A new connection starts with a small **congestion window**: commonly 10 segments, about 14 KB. The sender can only have that much unacknowledged data in flight. Each round trip, during **slow start**, the window roughly doubles, until loss or a threshold slows growth down.
+
+Consequences:
+- **The first ~14 KB arrives in the first round trip**; a 200 KB response on a new connection needs several more round trips. On a 150 ms path, that's a big part of the load time, whatever the bandwidth.
+- That's why performance guidance says to fit critical HTML and CSS into the first ~14 KB, and why **warm, reused connections** are much faster than new ones: their window has already grown.
+- **Idle connections may reset their window** after a pause (Linux's `tcp_slow_start_after_idle`, on by default).
+
+**Congestion control algorithms** decide how the window grows and reacts:
+- **CUBIC** (the Linux default) treats packet loss as the congestion signal. On lossy links (Wi-Fi, mobile), random loss makes it back off unnecessarily.
+- **BBR** (from Google) models the path's bandwidth and minimum round-trip time instead, and often gives better throughput and lower queueing on lossy or long paths. Many CDNs and large services use it.
+
+Practical levers: connection reuse, CDNs that terminate near the user (short round trips make slow start cheap), HTTP/2 or HTTP/3 to share one warm connection, smaller critical responses, and BBR on servers that send large responses over long paths.
+
+**What the interviewer is looking for:**
+The initial window and slow start, the round-trip cost for large responses on new connections, and the difference between loss-based and model-based congestion control.
+
+**Follow-ups:**
+- Why does a CDN help even for responses it can't cache?
+- What is bufferbloat?
+
+**Red flags:**
+- "More bandwidth will fix slow first loads."
+- Opening a new connection for every large download.
+
+### How would you plan an IPv6 or dual-stack rollout for a large platform? {#ipv6-dual-stack}
+
+**Level:** Architect
+
+**Model answer:**
+**Why now:** public IPv4 addresses are scarce and, at major cloud providers, now charged for. Many mobile networks are IPv6-first and reach IPv4 through translation (NAT64), and large private networks run out of RFC 1918 space, especially when acquisitions bring overlapping ranges.
+
+**Plan:**
+1. **Inventory** what depends on IPv4: allow-lists, firewall rules, logging and analytics that parse addresses, databases storing IPs in 32-bit columns, rate limiters keyed by IP, third-party integrations, and appliances.
+2. **Address plan.** Get a cloud or provider IPv6 allocation and plan it hierarchically (a `/56` or `/48` per region, a `/64` per subnet). There's no scarcity, so plan for clarity.
+3. **Edge first.** Enable dual-stack on the CDN and load balancers (publish `AAAA` records). This is low-risk, because clients choose with **Happy Eyeballs**: they race IPv6 and IPv4 and use whichever connects first.
+4. **Then internal networks**, dual-stack subnets and Kubernetes clusters, and eventually **IPv6-only** segments where possible, with NAT64/DNS64 for anything that still needs IPv4.
+
+**Things that break:**
+- Code that assumes addresses fit in 15 characters or match an IPv4 regex.
+- **Rate limiting and abuse controls**: a single customer controls a whole `/64` (or more), so limit by prefix, not by individual IPv6 address.
+- **Security parity**: IPv6 needs its own firewall rules and security groups. A common gap is a perfectly locked-down IPv4 stack with IPv6 wide open.
+- ICMPv6 must be allowed for neighbour discovery and path MTU discovery.
+
+**Measure and roll out by cohort**, watching connection success and latency per address family, and keep IPv4 working until the data says otherwise.
+
+**What the interviewer is looking for:**
+The business case, inventory of IPv4 assumptions, edge-first rollout relying on Happy Eyeballs, and the traps in rate limiting, security parity and ICMPv6.
+
+**Follow-ups:**
+- How would you rate-limit abusive IPv6 clients fairly?
+- What changes for logging and GDPR when you start seeing IPv6 addresses?
+
+**Red flags:**
+- Enabling IPv6 without matching firewall rules.
+- Rate limiting per individual IPv6 address.
+
+### How do you protect a public API from DDoS attacks at each layer? {#ddos-protection}
+
+**Level:** Architect
+
+**Model answer:**
+Attacks target different layers, so the defences are layered too:
+
+**Volumetric (L3/L4)**: UDP floods, reflection and amplification attacks (DNS, NTP, memcached) and SYN floods, measured in hundreds of Gbps or Tbps.
+- Only absorbable at the provider's edge: **anycast** networks spread the traffic across many locations. Use the cloud provider's protection (AWS Shield, Azure DDoS Protection, Cloud Armor) or a CDN.
+- Hide origins: accept traffic only from the CDN's address ranges or through private origin connectivity, so attackers can't bypass the edge.
+- SYN cookies at the edge handle SYN floods without keeping state.
+
+**Protocol attacks**: abuse of TLS or HTTP/2 itself, such as HTTP/2 Rapid Reset (2023), where clients open and cancel streams faster than servers can process them.
+- Keep the edge and proxies patched, and set limits on concurrent streams, header sizes and request rates per connection.
+
+**Application layer (L7)**: floods of valid-looking requests, often from botnets of residential IPs, aimed at expensive endpoints (search, login, report generation).
+- **WAF and bot management** at the edge: rate rules, managed rule sets, challenges for suspicious clients, and reputation signals.
+- **Rate limits per API key and per IP prefix**, and stricter limits on expensive endpoints.
+- **Make expensive work cheap to refuse**: caching, request collapsing, authentication before costly operations, and pagination limits.
+- **Load shedding by priority** in the services, so authenticated paying customers are served while anonymous traffic is shed.
+
+**Preparation:**
+- A runbook: who to call (provider DDoS response teams), which switches to flip (stricter WAF rules, "under attack" mode, disabling expensive features).
+- Dashboards showing traffic by source, endpoint and rule.
+- Cost protection where providers offer it, because autoscaling during an attack can be expensive.
+- Rehearse with the provider's sanctioned testing process.
+
+**What the interviewer is looking for:**
+Distinct defences for volumetric, protocol and application-layer attacks, origin protection, and preparation through runbooks and rehearsal.
+
+**Follow-ups:**
+- How would you tell a DDoS attack from a legitimate traffic spike?
+- What would you do if the attack targets your login endpoint?
+
+**Red flags:**
+- "Autoscaling will absorb it."
+- Origins reachable directly from the internet, bypassing the CDN.
+
 ## Cheat Sheet
 
 ### Round trips and transports
@@ -645,6 +857,16 @@ Choosing VPN versus private links on requirements, hub-and-spoke topology, real 
 - **Connection pool exhaustion** — requests queue invisibly, so set acquire timeouts and size pools by concurrency.
 - **curl -w timings** — breaks a request into DNS, connect, TLS, first byte and total.
 - **Certificate lifetimes** — public certificates fall to 47 days maximum by 2029, so automate renewal.
+
+### Revisit
+
+- **Inbound keep-alive behind a load balancer** — Node `keepAliveTimeout` above the LB idle timeout (65 s vs 60 s), `headersTimeout` above that.
+- **Pool sizing** — connections ≈ requests per second × seconds each holds a connection; size for the slow case, then fail fast.
+- **NAT port exhaustion** — one public IP to one destination IP and port has a fixed number of source ports; reuse connections.
+- **MTU black hole** — blocked ICMP means large packets vanish: the handshake works, then the connection hangs.
+- **Initial congestion window** — about 14 KB in the first round trip, then slow start; warm connections are much faster.
+- **IPv6 rate limiting** — limit by prefix (such as /64), because one client controls millions of addresses.
+- **DDoS layers** — volumetric at the anycast edge, protocol limits in proxies, L7 with WAF, rate limits and load shedding.
 
 ## Further Reading
 
