@@ -6035,5 +6035,177 @@
     "related": [
       "messaging-event-streaming"
     ]
+  },
+  {
+    "id": "graceful-degradation",
+    "term": "Graceful degradation",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "Keeping a product's most important functions working, with reduced features, when part of the system fails or is overloaded.",
+    "details": [
+      "Decided in advance per dependency: hide, serve cached or default data, queue for later, or fail closed.",
+      "Fallbacks must be exercised regularly, or they're broken when needed."
+    ],
+    "useCases": [
+      "A product page without reviews that still lets people buy."
+    ],
+    "related": [
+      "resilience-patterns",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "outlier-detection",
+    "term": "Outlier detection",
+    "aka": [
+      "outlier ejection"
+    ],
+    "group": "backend-apis",
+    "definition": "Temporarily removing individual backend instances from a load-balancing pool when their real traffic shows far more errors or latency than their peers.",
+    "details": [
+      "Ejection time grows with repeated ejections.",
+      "A maximum ejection percentage stops a shared problem from emptying the pool."
+    ],
+    "useCases": [
+      "Routing around one bad pod whose health endpoint still passes."
+    ],
+    "related": [
+      "resilience-patterns",
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "adaptive-concurrency-limit",
+    "term": "Adaptive concurrency limit",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A limit on in-flight requests that adjusts itself from observed latency, raising the limit while latency stays near its minimum and cutting it when queues form.",
+    "details": [
+      "Modelled on TCP congestion control (Vegas, Gradient, AIMD).",
+      "Requests beyond the limit are rejected immediately."
+    ],
+    "useCases": [
+      "Protecting a service from overload without hand-tuned limits."
+    ],
+    "related": [
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "failure-mode-analysis",
+    "term": "Failure mode and effects analysis (FMEA)",
+    "aka": [
+      "FMEA"
+    ],
+    "group": "backend-apis",
+    "definition": "A structured review listing, for each dependency, how it can fail, the effect on users, how the failure is detected, and the mitigation.",
+    "details": [
+      "Rank rows by likelihood and impact, and focus on untested mitigations.",
+      "Turn findings into timeouts, alerts, runbooks and chaos experiments."
+    ],
+    "useCases": [
+      "A design review before launching a critical service."
+    ],
+    "related": [
+      "resilience-patterns",
+      "incident-management"
+    ]
+  },
+  {
+    "id": "path-mtu-discovery",
+    "term": "Path MTU discovery",
+    "aka": [
+      "PMTUD"
+    ],
+    "group": "backend-apis",
+    "definition": "The mechanism by which a sender learns the largest packet size a route can carry, using ICMP 'fragmentation needed' or 'packet too big' messages.",
+    "details": [
+      "Blocking those ICMP messages creates a black hole: small packets work, large ones vanish.",
+      "MSS clamping on tunnel routers is the common fix."
+    ],
+    "useCases": [
+      "Diagnosing connections that hang after the TLS handshake over a VPN."
+    ],
+    "related": [
+      "networking-fundamentals"
+    ]
+  },
+  {
+    "id": "tcp-slow-start",
+    "term": "TCP slow start",
+    "aka": [
+      "initial congestion window"
+    ],
+    "group": "backend-apis",
+    "definition": "TCP's start-up behaviour: a new connection begins with a small congestion window (commonly about 14 KB) and roughly doubles it each round trip.",
+    "details": [
+      "Large responses on new connections need several round trips regardless of bandwidth.",
+      "Warm, reused connections avoid paying it again."
+    ],
+    "useCases": [
+      "Explaining why CDNs and connection reuse speed up first loads."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "web-performance"
+    ]
+  },
+  {
+    "id": "happy-eyeballs",
+    "term": "Happy Eyeballs",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "A client algorithm that races IPv6 and IPv4 connection attempts and uses whichever connects first, so a broken IPv6 path doesn't add long delays.",
+    "details": [
+      "Makes publishing AAAA records at the edge low-risk.",
+      "Defined in RFC 8305."
+    ],
+    "useCases": [
+      "Rolling out dual-stack at a CDN or load balancer."
+    ],
+    "related": [
+      "networking-fundamentals"
+    ]
+  },
+  {
+    "id": "ddos-mitigation",
+    "term": "DDoS mitigation",
+    "aka": [
+      "DDoS protection"
+    ],
+    "group": "backend-apis",
+    "definition": "Layered defences against distributed denial-of-service attacks: anycast absorption at the edge for volumetric floods, protocol limits in proxies, and WAF rules, rate limits and load shedding for application-layer attacks.",
+    "details": [
+      "Origins should accept traffic only through the protected edge.",
+      "Runbooks and provider contacts are prepared before an attack."
+    ],
+    "useCases": [
+      "Protecting a public API and its login endpoint."
+    ],
+    "related": [
+      "networking-fundamentals",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "generational-gc",
+    "term": "Generational garbage collection",
+    "aka": [
+      "V8 Scavenger",
+      "mark-compact"
+    ],
+    "group": "backend-apis",
+    "definition": "A garbage-collection design that splits the heap into a small, frequently collected young generation and a larger old generation for objects that survive.",
+    "details": [
+      "V8 collects the young generation with the Scavenger and the old generation with mark-compact, much of it concurrently.",
+      "In containers, set the old-generation limit well below the memory limit."
+    ],
+    "useCases": [
+      "Tuning Node.js memory for Kubernetes pods."
+    ],
+    "related": [
+      "nodejs",
+      "javascript"
+    ]
   }
 ]
