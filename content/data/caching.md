@@ -6,7 +6,7 @@ tags: [performance, redis, cdn]
 level: Senior
 estimatedMinutes: 75
 related: [databases-sql-nosql, system-design, web-performance]
-lastReviewed: 2026-11-20
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -53,6 +53,27 @@ Hit ratio is not linear in its effect. With a 1 ms cache and a 20 ms database:
 - 99% hit ratio → average ≈ 0.99 × 1 + 0.01 × 21 = **1.2 ms**, and 1% reaches the DB.
 
 The latency gain is modest; the **load** gain is 10x. That is why a cache that drops from 99% to 90% (a bad deploy that changes key format, a cold restart) can take the database down even though "the cache is still working". Capacity-plan the DB for the realistic *worst* hit ratio, not the average.
+
+### Worked example: how big should the cache be?
+
+A product catalogue serves **40,000 reads a second** across 6 million cacheable entries (2 million products in 3 locales). Each entry is about 4 KB of JSON plus roughly 100 bytes of key and per-entry overhead, so about **4.1 KB**. Caching everything would take about 25 GB. Is that needed?
+
+Popularity in catalogues is usually heavily skewed. Modelling it as a Zipf distribution (exponent 1, a common starting assumption), the hit ratio for a cache holding the N most popular entries is roughly H(N) ÷ H(total), where H is the harmonic number:
+
+| Entries cached | Share of all entries | Memory | Hit ratio | Reads reaching the database |
+|---|---|---|---|---|
+| 60,000 | 1% | 0.25 GB | ~72% | ~11,400 a second |
+| 300,000 | 5% | 1.2 GB | ~82% | ~7,400 a second |
+| 600,000 | 10% | 2.5 GB | ~86% | ~5,700 a second |
+| 1,200,000 | 20% | 4.9 GB | ~90% | ~4,000 a second |
+| 3,000,000 | 50% | 12.3 GB | ~96% | ~1,700 a second |
+
+What it shows:
+- **Diminishing returns.** The first 1% of entries gives 72% of the hits. Going from 20% to 50% of entries more than doubles memory for six more points of hit ratio.
+- **The database decides the size, not the hit ratio.** If PostgreSQL can comfortably serve 5,000 reads a second at peak, about 1.2 million entries (5 GB) is the minimum. Size for the database's limit at the **worst realistic hit ratio** (after a deploy or failover), not the average.
+- **Memory needs headroom** beyond the data: allow about 25–50% extra for fragmentation, replication buffers and the copy-on-write cost of snapshots.
+
+The model is only a starting point. Real skew varies by product and season, and a TTL caps the hit ratio for entries read less often than once per TTL. Before buying memory, **measure**: sample real keys and replay them through a cache simulator to get a hit-ratio curve for your traffic. Then watch the eviction rate and the hit ratio in production after the change.
 
 ### Cache key design
 
@@ -250,6 +271,14 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant A as Reader A
+
+  %% step: Reader A asks Redis for product 123.
+  %% step: It's a miss: the key expired or was never loaded.
+  %% step: Reader A reads the row from the database and gets version 1. Then it pauses, perhaps for a garbage-collection pause or a slow network hop.
+  %% step: Meanwhile, writer B updates the row to version 2 and commits.
+  %% step: Writer B deletes the cache key, as cache-aside says it should.
+  %% step: Reader A resumes and writes what it read, version 1, into the cache. The delete has already happened, so nothing removes it.
+  %% step: Every reader now gets stale version 1 until the TTL expires. Versioned writes, tombstones, leases or a short TTL close this gap.
   participant B as Writer B
   participant R as Redis
   participant DB as Database
@@ -716,6 +745,166 @@ Up-to-date platform awareness, licensing literacy and reversibility. Great answe
 - Choosing purely on benchmark numbers.
 - Tight coupling to engine-specific modules without acknowledging lock-in.
 
+### What is negative caching, and when is it dangerous? {#negative-caching}
+
+**Level:** Foundation
+
+**Model answer:**
+**Negative caching** stores the fact that something *doesn't exist* or *failed*, so repeated requests don't hit the database or a downstream service again. Examples: "user 999 not found", "no recommendations for this product", or DNS caching an NXDOMAIN answer.
+
+Why it's useful:
+- **Bots and scanners** requesting ids that don't exist would otherwise send every request to the database.
+- **Popular empty results** (a search with no matches, a product with no reviews) are as cacheable as full ones.
+- It stops a **failing dependency** from being hammered by retries during an outage.
+
+Why it's dangerous:
+- **Create-then-read**: a user signs up, the cache still says "not found" for their profile, and they see an error. Keep negative TTLs short (seconds), and **invalidate the negative entry on create**, just as you would on update.
+- **Caching errors as answers**: a timeout cached as "empty" for 10 minutes turns a 2-second blip into a 10-minute outage for that key. Cache *confirmed* absence, never an error, unless it's a deliberately short circuit-breaker style entry.
+- **Memory from attackers**: random ids create endless negative entries that evict useful data. Cap them with a separate small TTL and prefix, or use a Bloom filter of existing ids in front.
+
+**What the interviewer is looking for:**
+The purpose, short TTLs with invalidation on create, never caching transient errors as absence, and protection against key-flooding.
+
+**Follow-ups:**
+- How would a Bloom filter help here, and what's its failure mode?
+- How does DNS handle negative caching?
+
+**Red flags:**
+- Same TTL for "not found" as for real data.
+- Caching timeouts as empty results.
+
+### How do you size a cache, and how do you tell it's too small? {#cache-sizing}
+
+**Level:** Senior
+
+**Model answer:**
+**Start from what the cache must protect.**
+1. **Database or backend capacity**: the read rate it can serve safely at peak. The cache's job is to keep misses below that.
+2. **Hit ratio needed** = 1 − (safe backend reads ÷ peak reads). For 40,000 reads a second and a database good for 5,000, that's at least 87.5%.
+3. **Working set**: how many distinct entries make up that share of traffic. Measure it by sampling keys from real traffic and building a hit-ratio curve (hit ratio against cache size), using a cache simulator or a replay of logged keys.
+4. **Memory** = entries × (value + key + per-entry overhead), plus headroom for fragmentation, replication buffers and snapshots.
+
+**Signs it's too small:**
+- **Evictions** of keys that are still being read: a high `evicted_keys` rate alongside many misses for recently evicted keys.
+- **Hit ratio falling as traffic grows**, while the TTL hasn't changed.
+- **Database load tracking cache misses** at peak, close to its limit.
+- Memory at the `maxmemory` limit constantly.
+
+**Signs it's too big:** memory never close to the limit, almost no evictions, and most keys expiring by TTL without ever being read again. That's money spent on cold data.
+
+Other levers before adding memory: smaller values (compression, fewer fields, a binary format), shorter TTLs for long-tail keys, not caching one-off queries, and an L1 for the very hottest keys.
+
+**What the interviewer is looking for:**
+Sizing from backend capacity and the working set, hit-ratio curves from real keys, memory overheads, and the eviction signals.
+
+**Follow-ups:**
+- How would you build a hit-ratio curve without a production experiment?
+- The hit ratio is fine but p99 latency is high. What might be wrong?
+
+**Red flags:**
+- "Make it as big as the database."
+- Sizing from the average hit ratio rather than the worst case.
+
+### How do you warm a cache after a deploy, failover or cold start without overloading the database? {#cache-warming}
+
+**Level:** Senior
+
+**Model answer:**
+A cold cache sends almost every read to the database. At a 99% normal hit ratio, an empty cache can mean 100 times the usual database load.
+
+**Avoid going cold in the first place:**
+- **Don't change key formats** in a deploy unless you have to. A schema-version bump in the key is a deliberate cold start for that entity, so roll it out gradually: a percentage of instances, or old and new keys read side by side.
+- **Replicas and persistence**: a Redis or Valkey replica that's promoted keeps its data. Snapshots can reload a restarted node.
+- Roll restarts **one node at a time**, so most of the cache stays warm.
+
+**Warm deliberately when you must:**
+- **Pre-load the hot set** from a list of the most-read keys (from key sampling or yesterday's logs), at a rate limit the database can absorb, before switching traffic.
+- **Shadow traffic**: mirror a share of reads to the new cache cluster before cutting over.
+- **Gradual traffic shift**: move 5%, then 25%, then 100% of traffic to the new cache, watching database load.
+
+**Protect the database while it's cold:**
+- **Single-flight and request coalescing**, so a thousand concurrent misses for the same key make one query.
+- **A concurrency limit** on cache-miss loads, with stale or degraded responses when it's reached.
+- **Serve stale** content (stale-while-revalidate, and the CDN's `stale-if-error`) where the staleness budget allows.
+- Capacity-plan the database for the realistic cold-start load, or for the warm-up period at least.
+
+**What the interviewer is looking for:**
+The size of the cold-start effect, avoiding unnecessary cold starts, rate-limited pre-loading and gradual shifts, and miss-path protection.
+
+**Follow-ups:**
+- How would you migrate from one Redis cluster to another with no cold start?
+- What metric tells you warm-up is complete?
+
+**Red flags:**
+- Flushing the whole cache as part of a routine deploy.
+- No limit on how many misses can hit the database at once.
+
+### How do you cache pages and API responses that are partly personalised? {#personalised-caching}
+
+**Level:** Architect
+
+**Model answer:**
+Most "personalised" pages are mostly shared content with a small personal part: a product page is the same for everyone apart from the basket count, the price for a logged-in business customer, and recommendations. **Split the response by who it varies for**, then cache each part at the right layer.
+
+**Techniques:**
+- **Shell plus personal calls**: the shared page (HTML or JSON) is cached at the CDN for everyone. The browser makes small, uncached or privately cached calls for the personal parts (`/me/basket`, `/me/prices`).
+- **Vary by segment, not by user**: if prices differ by country or customer tier, cache one version per segment. Put the segment in the cache key explicitly (a normalised header or path parameter set at the edge), never `Vary: Cookie`, which creates one copy per user.
+- **Edge composition**: edge functions or ESI fill personal fragments into a cached page at the CDN.
+- **Server-side fragment caching**: cache the shared components of a response in Redis, and assemble them with the personal parts per request.
+- **Per-user caching** where reuse is real: the user's own dashboard, cached privately with a short TTL, keyed by user id, and invalidated on their writes.
+
+**Safety first:**
+- Personal responses get `Cache-Control: private` (or `no-store` for sensitive data), so shared caches never store them.
+- Never let a personalised response be cached under a shared key. Test this explicitly, because it's how data leaks between users.
+- Authentication tokens and cookies must not change a cached shared response unless they're part of the key.
+
+**Measure** the hit ratio per fragment and per segment. Too many segments (every country × tier × language × A/B variant) can fragment the cache into uselessness, so keep the number of variants deliberate.
+
+**What the interviewer is looking for:**
+Splitting shared from personal content, segment keys instead of per-user variation, edge and fragment composition, cache-control safety, and managing variant counts.
+
+**Follow-ups:**
+- How would you run an A/B test on a cached page?
+- A customer reports seeing another customer's name in the header. Where do you look?
+
+**Red flags:**
+- `Vary: Cookie` on a high-traffic page.
+- Disabling caching for the whole page because one element is personal.
+
+### When is it reasonable to use Redis or Valkey as a primary data store rather than a cache, and how must you run it then? {#redis-as-primary-store}
+
+**Level:** Architect
+
+**Model answer:**
+Redis-compatible stores are often used for data that **isn't** in any other database: sessions, rate-limit counters, leaderboards, queues (Streams), feature flag state and distributed locks. That's reasonable when you're honest about its durability and consistency, and you run it to that standard.
+
+**What you must understand:**
+- **Persistence is optional and asynchronous by default.** RDB snapshots lose everything since the last snapshot. AOF with `appendfsync everysec` can lose about a second of writes. `always` is safer but much slower.
+- **Replication is asynchronous.** A write acknowledged by the primary can be lost if the primary fails before replicating it. `WAIT` reduces that risk but doesn't make it strongly consistent.
+- **Memory is the limit.** The dataset must fit in RAM with headroom, and a full instance under `noeviction` rejects writes.
+
+**Fits well:** data where a small loss is tolerable or recoverable. Sessions (users sign in again), rate limits (a brief reset is acceptable), leaderboards that can be rebuilt from the source, and caches of course.
+
+**Fits badly:** money, orders, or anything that must never be lost or must be strictly consistent, unless you use a service built for durability. **Amazon MemoryDB**, for example, writes to a durable multi-AZ transaction log before acknowledging.
+
+**Distributed locks:** a lock in Redis can be lost on failover or outlive a paused client. Use them for efficiency (avoiding duplicate work), not correctness. For correctness, combine them with **fencing tokens** checked by the resource, or use a consensus-based store.
+
+**If you run it as a store:**
+- Replication across zones with automatic failover, persistence configured deliberately, and **tested backups and restores**.
+- `noeviction`, or a separate instance from your caches, so eviction can't delete primary data.
+- Monitoring of memory, replication lag, persistence errors and latency, with alerts. Capacity planning like any database.
+
+**What the interviewer is looking for:**
+Honest durability and consistency limits, matching data to tolerance for loss, durable alternatives, lock caveats with fencing tokens, and operating it like a database.
+
+**Follow-ups:**
+- How would you make a rate limiter tolerate a Redis failover?
+- Why shouldn't caches and primary data share one instance?
+
+**Red flags:**
+- Storing orders only in Redis with default persistence.
+- Using Redis locks to guarantee mutual exclusion for payments.
+
 ## Cheat Sheet
 
 ### Patterns
@@ -744,6 +933,16 @@ Up-to-date platform awareness, licensing literacy and reversibility. Great answe
 
 - **Hit ratio** — the key cache metric; also watch evictions, memory and latency.
 - **Valkey** — Linux Foundation fork of Redis after the 2024 licence change.
+
+### Revisit
+
+- **Cache sizing** — size from the database's safe read rate at the worst realistic hit ratio. Skewed popularity means the first 1% of entries can carry most hits.
+- **Stale write-back race** — a slow reader writes old data after the writer's delete. Close it with versions, tombstones, leases or a short TTL.
+- **Negative caching** — short TTLs, invalidate on create, never cache errors as absence, and cap attacker-driven keys.
+- **Signs a cache is too small** — evictions of keys still being read, hit ratio falling as traffic grows, database load tracking misses.
+- **Warming** — avoid cold starts (stable keys, rolling restarts, replicas), pre-load hot keys at a rate limit, and coalesce misses.
+- **Personalised pages** — cache the shared shell, vary by segment not by user, keep personal parts `private`.
+- **Redis as a store** — asynchronous replication and optional persistence. Fine for sessions and rate limits, not for money without a durable service.
 
 ## Further Reading
 

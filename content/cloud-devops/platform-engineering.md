@@ -6,7 +6,7 @@ tags: [platform-engineering, idp, golden-paths, devex]
 level: Architect
 estimatedMinutes: 75
 related: [docker-kubernetes, ci-cd-pipelines, infrastructure-as-code, dora-metrics]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -147,6 +147,30 @@ The goal is that the compliant way is also the fastest way.
 
 The CNCF platform engineering maturity model describes a progression across investment, adoption, interfaces, operations and measurement, from *provisional* through *operational* and *scalable* to *optimising*. It's a useful self-assessment, not a target.
 
+### Worked example: a business case for the platform team
+
+Leadership asks whether a 7-person platform team is worth it for 35 product teams (210 engineers). Build the case from measured time, and show how sensitive it is to the assumptions.
+
+**Evidence gathered first:** a two-week time study and a survey showed engineers spending about **4 hours a week** on work the platform could absorb: pipeline fixes, environment setup, upgrades and evidence for audits. New services took about **10 engineer-days** of setup each, and there are about 25 a year. Audit evidence took 3 people about 6 weeks, twice a year.
+
+**Capacity returned, if the platform halves the infrastructure toil:**
+
+| Source | Calculation | Full-time equivalents a year |
+|---|---|---|
+| Toil saved | 2 h × 210 engineers × 46 weeks ÷ 1,840 h | 10.5 |
+| Faster service setup | 9 days saved × 25 services ÷ 230 days | 1.0 |
+| Automated audit evidence | 2 × 6 weeks × 3 people ÷ 46 weeks | 0.8 |
+| **Total** | | **≈ 12.3** |
+
+At a fully loaded £100k per engineer, that's about **£1.23M a year**, against about **£850k** for the platform team (7 × £100k) plus £150k of tooling. The return is about 1.4 times the cost.
+
+**Sensitivity:** if the platform saves only **1 hour** a week instead of 2, the total falls to about 7.0 FTE (£0.70M), and the time savings alone no longer pay for it. So:
+- Say which assumption matters most (hours of toil saved), and **measure it** after the first quarter with the same time study.
+- List the benefits left out of the sum: fewer incidents from consistent pipelines, faster security fixes across all services at once, quicker onboarding, and retention.
+- Start with the **thinnest viable platform**, and grow the team only as adoption and measured savings justify it.
+
+A business case that shows its assumptions and a measurement plan is more credible than a bigger number.
+
 ## How It Works
 
 ### Platform layers
@@ -187,6 +211,15 @@ sequenceDiagram
   participant CI as CI pipeline
   participant CD as GitOps (Argo CD)
   participant Plat as Platform services
+
+  %% step: A developer asks the portal or CLI for a new TypeScript service, loyalty-api, owned by team-loyalty. They answer a few questions, not a page of YAML.
+  %% step: The template creates the repository with working code, a pipeline, a Dockerfile and catalogue metadata, and registers the service with its owner.
+  %% step: The first commit triggers the shared pipeline template. The team didn't write any pipeline YAML.
+  %% step: The pipeline builds, tests, scans dependencies and the image, generates an SBOM and signs the image. Security comes with the template, not as a later review.
+  %% step: It updates the dev environment's manifest in the GitOps repository with the new image digest.
+  %% step: Argo CD deploys it. The platform wires in secrets from the vault, OpenTelemetry export, a default dashboard, alerts and an SLO.
+  %% step: The developer gets a running URL and a dashboard link, typically within the hour.
+  %% step: Everything after the first form was automatic. That speed is the platform's value proposition, and the measure to track.
   Dev->>Portal: New TypeScript service "loyalty-api", owner team-loyalty
   Portal->>Git: Create repo from template, register in catalogue
   Git->>CI: First commit triggers pipeline
@@ -627,6 +660,180 @@ Value first, automation, segmentation, waves with enablement, and a sunset that 
 - Announcing a deadline before the path is proven.
 - Doing all migrations centrally by hand.
 
+### What is a software catalogue, and why does its ownership data matter so much? {#software-catalogue}
+
+**Level:** Foundation
+
+**Model answer:**
+A software catalogue is a **registry of everything the organisation runs**: services, websites, libraries, data pipelines, APIs and infrastructure resources. Each entry records:
+- **Who owns it**: a team, not a person, with how to contact them and their on-call rotation.
+- **What it is**: type, lifecycle stage (experimental, production, deprecated), system or domain.
+- **How it connects**: APIs it provides and consumes, and the resources it depends on.
+- **Where everything is**: repository, docs, dashboards, runbooks, pipelines.
+
+In Backstage it's built from a `catalog-info.yaml` file in each repository. Commercial portals and cloud tools work similarly.
+
+Why ownership matters most:
+- **Incidents**: "who owns this failing dependency?" needs an answer in seconds, not a Slack thread.
+- **Security**: when a critical vulnerability lands, you need every affected service and its owner today.
+- **Change**: deprecations and migrations need a list of consumers to contact.
+- **Cost and compliance**: spend and audit evidence are allocated to owners.
+
+Keeping it accurate is the hard part:
+- Store metadata **with the code**, reviewed in pull requests, rather than in a separate spreadsheet.
+- **Discover automatically** where possible: repositories, cloud resources, Kubernetes workloads and API specs.
+- **Validate**: CI fails if `owner` is missing or names a team that doesn't exist. Find orphans regularly.
+- **Use it daily**: when paging, cost reports and scorecards are driven by the catalogue, wrong data gets noticed and fixed.
+
+**What the interviewer is looking for:**
+What the catalogue contains, why ownership drives incidents, security and change, and how to keep it accurate.
+
+**Follow-ups:**
+- A team is reorganised and 30 services lose their owner. What should happen?
+- How would you find services that aren't in the catalogue?
+
+**Red flags:**
+- Owners recorded as individuals.
+- A catalogue filled once and never validated.
+
+### How would you design self-service infrastructure provisioning for product teams? {#self-service-provisioning}
+
+**Level:** Senior
+
+**Model answer:**
+The goal: a team gets a correctly configured database, queue or bucket **in minutes, without a ticket**, and the result complies with security, cost and reliability standards automatically.
+
+**Common interaction models:**
+
+| Model | How it works | Fits when |
+|---|---|---|
+| **IaC modules by pull request** | Teams add a module call (for example `module "db" { source = "platform/postgres" }`) to their repository, and the shared pipeline plans and applies it | Teams are comfortable with Terraform. Simple to start |
+| **Platform repository (GitOps)** | Teams add a small request file to a platform repository, and automation provisions it | Teams shouldn't touch IaC at all |
+| **Control-plane APIs** | Crossplane compositions or a platform orchestrator expose resources such as `PostgresInstance` as Kubernetes-style APIs, reconciled continuously | A Kubernetes-centred platform with many resource types |
+| **Workload spec** | The app declares "I need a PostgreSQL database" (Score, an internal `app.yaml`), and the platform decides how to provide it per environment | High abstraction, mostly standard services |
+
+**Design principles whatever the model:**
+- **Opinionated defaults with a few choices**: size, environment and high availability yes or no. Not every provider argument.
+- **Secure and compliant by construction**: private networking, encryption, backups, diagnostics and tags are in the module, not left to the requester.
+- **Credentials delivered automatically**: workload identity or secrets synced into the app's environment, so nobody copies passwords.
+- **Policy checks** in the pipeline for the hard rules, with clear error messages.
+- **Day-2 operations covered**: upgrades, resizing, restoring from backup and deletion are self-service too, not only creation.
+- **Ownership is recorded**: every resource is tagged with its owning team and appears in the catalogue.
+
+Measure time from request to usable resource, the share of resources provisioned through self-service, and support tickets per capability.
+
+**What the interviewer is looking for:**
+The interaction models and when each fits, secure defaults, credential delivery, day-2 operations and measurement.
+
+**Follow-ups:**
+- A team needs a database setting the module doesn't expose. What happens?
+- How do you upgrade 200 databases created from version 1 of the module?
+
+**Red flags:**
+- Self-service that still needs a ticket for the credentials.
+- Modules that expose every provider argument.
+
+### How do you run the platform itself reliably, when every team depends on it? {#platform-reliability}
+
+**Level:** Senior
+
+**Model answer:**
+A platform outage blocks every team at once, and a slow CI system taxes every engineer every day. Run the platform as a **production service** with the same disciplines product teams follow.
+
+**Define what reliable means:**
+- **SLOs per capability**: CI queue time and success rate (excluding test failures), deployment success and duration, provisioning time, portal availability, and the availability of shared runtime components (ingress, DNS, secrets, the container registry).
+- An **error budget policy**: when CI reliability drops below target, platform work shifts from features to reliability.
+
+**Operate it properly:**
+- **On-call** for the platform team, with alerts on those SLOs and runbooks.
+- **Incident process**: platform incidents are declared like any other, with status updates to the engineering organisation. Developers should hear about a CI outage from the platform, not discover it.
+- **Capacity planning** for runners, the registry, the cluster control planes and API rate limits, ahead of growth and peak periods.
+
+**Change safely, because changes reach everyone:**
+- **Version shared things**: pipeline templates, modules and base images get versions. Teams adopt new versions through automated pull requests (Renovate), or a canary group gets them first.
+- Roll out platform changes **progressively**: a few internal teams, then early adopters, then everyone.
+- **Avoid single points of failure**: CI that depends on one runner pool, one region or one secrets store can stop every team at once.
+
+**Communicate**: a status page for platform services, a changelog, and advance notice of breaking changes.
+
+**What the interviewer is looking for:**
+Platform SLOs and error budgets, on-call and incident handling, capacity planning, versioned and progressive change, and communication.
+
+**Follow-ups:**
+- A pipeline template change broke 60 builds. How do you prevent the next one?
+- Which three platform SLOs would you start with?
+
+**Red flags:**
+- No on-call for CI because it's "internal".
+- Pushing template changes to every team at once.
+
+### How do you build the business case for a platform team and keep it funded? {#platform-business-case}
+
+**Level:** Architect
+
+**Model answer:**
+**Start from measured pain, not the platform's features.**
+- Quantify where product engineers' time goes: time studies, surveys and support tickets. Typical findings are pipeline maintenance, environment setup, waiting for tickets and manual compliance evidence.
+- Measure lead times: new service to production, new joiner to first deploy, and time to patch a critical vulnerability across all services.
+
+**Turn it into a case leadership can test:**
+- **Capacity returned**: hours saved × engineers × weeks, converted to full-time equivalents and money, with the assumptions stated.
+- **Speed**: faster time to market for new services and features, expressed with the business's examples.
+- **Risk**: fewer incidents from inconsistent pipelines, the ability to patch every service in a day, and audit evidence produced automatically.
+- **Cost avoided**: tools consolidated, and fewer people needed in each team for infrastructure work.
+- Show **sensitivity**: which assumption, if wrong, breaks the case.
+
+**Start small and earn the rest:**
+- Fund the **thinnest viable platform** first, with targets for the first two quarters (for example, adoption of the pipeline template by 10 teams, and new-service setup down from 10 days to 1).
+- Report outcomes quarterly against the baseline: adoption, time saved, lead times and developer satisfaction, alongside one or two stories from teams.
+
+**Keep it funded:**
+- Treat it as a **product investment with a roadmap**, not a cost centre. Tie roadmap items to the pains you measured.
+- Make the value visible where leadership looks: DORA metrics on and off the platform, and the time-to-patch for the last big vulnerability.
+- Be honest when something doesn't land. Stopping a capability nobody uses builds credibility for the next request.
+
+**What the interviewer is looking for:**
+Measured baselines, a quantified case with stated assumptions and sensitivity, risk and speed benefits, starting thin with targets, and ongoing outcome reporting.
+
+**Follow-ups:**
+- The CFO asks why product teams can't just do this themselves. What do you say?
+- After a year, adoption is at 30%. What do you do?
+
+**Red flags:**
+- A case built on the number of features the platform will have.
+- No baseline, so value can never be shown.
+
+### How should an internal developer platform support AI coding agents? {#platform-ai-agents}
+
+**Level:** Architect
+
+**Model answer:**
+AI coding agents now write and change code, open pull requests and run commands. They benefit from a platform even more than people do, because golden paths give them **one correct way** to do common tasks. They also need guardrails people take for granted.
+
+**Make the platform usable by agents:**
+- **Machine-readable golden paths**: templates, modules and conventions documented in the repository (for example in agent instruction files), so an agent creating a service uses the template instead of inventing a pipeline.
+- **APIs and tools** for the platform's capabilities, for example through MCP servers: look up a service's owner and docs in the catalogue, create a preview environment, query logs for a service, check a deployment's status.
+- **Fast, reliable feedback**: agents iterate on CI results, so flaky tests and slow pipelines cost even more with agents than with people.
+
+**Keep control with the same guardrails:**
+- **Identity**: agents act with their own identities and least-privilege permissions, visible in audit logs. No shared human credentials or broad tokens.
+- **The same gates**: agent changes go through pull requests, required reviews, CI, policy checks and protected environments. Production deploys follow the normal path. An agent never gets a shortcut.
+- **Sandboxes**: agents run in isolated, ephemeral environments with limited network access, so a prompt injection hidden in a dependency or a web page can't reach secrets or production.
+- **Cost and limits**: model spend attributed to teams, with quotas and caching through a shared gateway.
+
+**Measure the effect:** change failure rate and review time for agent-authored changes, the share of changes landing on golden paths, and developer satisfaction. The platform team should own the agent tooling as a product, like any other capability.
+
+**What the interviewer is looking for:**
+Golden paths that agents can read, platform capabilities exposed as tools, agent identity and least privilege, unchanged gates, sandboxing, and measuring outcomes.
+
+**Follow-ups:**
+- An agent opens 200 pull requests overnight to upgrade a library. How should the platform handle that?
+- What would you never let an agent do directly?
+
+**Red flags:**
+- Agents using an engineer's personal token.
+- A separate fast path for agent changes that skips review or CI.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -652,6 +859,16 @@ Value first, automation, segmentation, waves with enablement, and a sunset that 
 - **Ticket-ops anti-pattern** — manual provisioning via tickets makes the platform a bottleneck.
 - **Mandate outcomes, not tools** — require controls, and earn adoption of the golden path.
 - **Platform size heuristic** — roughly 10–20% of engineering at scale.
+
+### Revisit
+
+- **Platform business case** — capacity returned (hours saved × engineers × weeks), speed and risk benefits, with assumptions stated and sensitivity shown. Measure after the first quarter.
+- **Golden path value** — from a short form to a running, observable, secure service in about an hour, with no pipeline YAML written by the team.
+- **Software catalogue** — team ownership, lifecycle, dependencies and links, stored with the code, validated in CI and used daily.
+- **Self-service models** — modules by PR, a platform GitOps repository, control-plane APIs, or workload specs. Cover day-2 operations, not just creation.
+- **Platform reliability** — SLOs for CI, deployments and provisioning, on-call, versioned templates and progressive rollout.
+- **Funding** — start with the thinnest viable platform, set quarterly targets, report outcomes against a baseline.
+- **AI agents on the platform** — readable golden paths and tool APIs, own identities with least privilege, the same gates, sandboxes.
 
 ## Further Reading
 
