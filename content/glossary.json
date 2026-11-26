@@ -5861,5 +5861,179 @@
       "technical-debt",
       "platform-engineering"
     ]
+  },
+  {
+    "id": "problem-details",
+    "term": "Problem Details (RFC 9457)",
+    "aka": [
+      "application/problem+json"
+    ],
+    "group": "backend-apis",
+    "definition": "A standard JSON format for HTTP API errors, with type, title, status, detail and instance fields plus custom extensions.",
+    "details": [
+      "Clients branch on the stable type URI, not on message text.",
+      "RFC 9457 obsoleted RFC 7807."
+    ],
+    "useCases": [
+      "Consistent validation and business-rule errors across all of an organisation's APIs."
+    ],
+    "related": [
+      "api-styles"
+    ]
+  },
+  {
+    "id": "contract-first-api",
+    "term": "Contract-first API development",
+    "aka": [
+      "design-first"
+    ],
+    "group": "backend-apis",
+    "definition": "Writing and reviewing the API contract (OpenAPI, Protobuf, GraphQL SDL or AsyncAPI) before implementing it, and treating it as the source of truth.",
+    "details": [
+      "Mocks, clients, server stubs and validation are generated from the contract.",
+      "CI lints the contract and blocks unintended breaking changes."
+    ],
+    "useCases": [
+      "Letting frontend and partner teams build against a mock while the backend is written."
+    ],
+    "related": [
+      "api-styles",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "asynchronous-request-reply",
+    "term": "Asynchronous request–reply",
+    "aka": [
+      "long-running operation"
+    ],
+    "group": "backend-apis",
+    "definition": "An API pattern for slow work: the request returns 202 Accepted with a link to an operation resource, which the client polls or is notified about when it completes.",
+    "details": [
+      "Combine with an idempotency key so a retried request doesn't start a second operation.",
+      "Google AIP-151 defines the same idea for gRPC APIs."
+    ],
+    "useCases": [
+      "Report generation, large exports and provisioning."
+    ],
+    "related": [
+      "api-styles"
+    ]
+  },
+  {
+    "id": "dpop",
+    "term": "DPoP (Demonstrating Proof of Possession)",
+    "aka": [
+      "RFC 9449"
+    ],
+    "group": "backend-apis",
+    "definition": "An OAuth mechanism that binds an access token to a client-held key; every request carries a signed proof covering the method, URL and token, so a stolen token alone can't be used.",
+    "details": [
+      "The token's cnf.jkt claim holds the key thumbprint.",
+      "Required or recommended by high-security profiles such as FAPI 2.0."
+    ],
+    "useCases": [
+      "Open banking and payment APIs.",
+      "Protecting refresh tokens on mobile clients."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "step-up-authentication",
+    "term": "Step-up authentication",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "Requiring a stronger or more recent authentication before a sensitive action, checked server-side against the token's acr, amr and auth_time claims.",
+    "details": [
+      "RFC 9470 defines the insufficient_user_authentication challenge an API returns.",
+      "Combine with notifications and cooling-off periods for the riskiest changes."
+    ],
+    "useCases": [
+      "Changing payout details.",
+      "Viewing or exporting sensitive records."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "refresh-token-rotation",
+    "term": "Refresh-token rotation",
+    "aka": [
+      "reuse detection"
+    ],
+    "group": "backend-apis",
+    "definition": "Issuing a new refresh token on every refresh and invalidating the old one; if an already-used token is presented again, the whole token family is revoked as stolen.",
+    "details": [
+      "A short reuse interval avoids false alarms when a client retries a refresh after a dropped response.",
+      "Store only hashes of refresh tokens."
+    ],
+    "useCases": [
+      "Mobile and single-page apps with long-lived sessions."
+    ],
+    "related": [
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "log-compaction",
+    "term": "Log compaction",
+    "aka": [
+      "compacted topic"
+    ],
+    "group": "backend-apis",
+    "definition": "A Kafka retention policy that keeps at least the latest message for each key instead of deleting by time, turning a topic into a changelog of current state.",
+    "details": [
+      "A tombstone (null value) deletes a key after delete.retention.ms.",
+      "Consumers may still see some older values that haven't been compacted yet."
+    ],
+    "useCases": [
+      "Entity snapshot topics.",
+      "Kafka Streams state store changelogs."
+    ],
+    "related": [
+      "messaging-event-streaming"
+    ]
+  },
+  {
+    "id": "consumer-lag",
+    "term": "Consumer lag",
+    "aka": [],
+    "group": "backend-apis",
+    "definition": "How far a consumer group is behind the newest messages: per partition, the latest offset minus the committed offset, ideally also expressed as the age of the oldest unprocessed message.",
+    "details": [
+      "Monitor per partition, so one stuck partition isn't hidden by healthy ones.",
+      "Adding consumers beyond the partition count doesn't reduce it."
+    ],
+    "useCases": [
+      "Alerting on stream-processing health.",
+      "Autoscaling consumers (for example with KEDA)."
+    ],
+    "related": [
+      "messaging-event-streaming",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "durable-timer",
+    "term": "Durable timer",
+    "aka": [
+      "scheduled job store"
+    ],
+    "group": "backend-apis",
+    "definition": "A timer persisted in a store so it survives restarts and can be cancelled or changed, fired by workers that poll for due entries.",
+    "details": [
+      "SELECT … FOR UPDATE SKIP LOCKED lets several schedulers poll without blocking each other.",
+      "Workflow engines such as Temporal provide durable timers built in."
+    ],
+    "useCases": [
+      "Reminders at a user's local time.",
+      "Expiring holds and trials."
+    ],
+    "related": [
+      "messaging-event-streaming"
+    ]
   }
 ]
