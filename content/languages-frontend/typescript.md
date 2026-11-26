@@ -6,7 +6,7 @@ tags: [language, type-system]
 level: Senior
 estimatedMinutes: 75
 related: [javascript, reactjs, nodejs]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -16,7 +16,7 @@ status: complete
 - The type system is **structural**, not nominal. Two types with the same shape are interchangeable, which is convenient until an `OrderId` is accepted where a `UserId` was expected; use branded types for identifiers.
 - The highest-leverage features are **discriminated unions + exhaustive checks**, `unknown` at boundaries, and `strict` mode. Clever conditional types are rarely where the value is.
 - At scale, TypeScript is a **build-performance and module-boundary** problem: project references, `isolatedDeclarations`, and keeping type-only imports cheap.
-- The toolchain is shifting: TypeScript 7 is a native (Go) port of the compiler, and Node.js can now run `.ts` files by stripping types. Both reward "erasable-only" syntax (no `enum`, no `namespace`).
+- The toolchain has shifted: TypeScript 7 (July 2026) is a native (Go) port of the compiler, and Node.js can run `.ts` files by stripping types. Both reward "erasable-only" syntax (no `enum`, no `namespace`).
 
 ## Core Concepts
 
@@ -66,6 +66,31 @@ function describe(p: Payment): string {
 }
 ```
 
+### Worked example: following the narrowing line by line
+
+TypeScript tracks what a value can be at each point in the code (**control-flow analysis**), narrowing its type after each check:
+
+```ts
+function label(input: string | number | null | undefined): string {
+  if (input == null) return 'none';                  // ①
+  if (typeof input === 'number') return input.toFixed(2); // ②
+  const trimmed = input.trim();                       // ③
+  return trimmed || 'empty';
+}
+```
+
+| Point | Check | Type of `input` afterwards |
+|---|---|---|
+| Start | — | `string \| number \| null \| undefined` |
+| ① | `input == null` returns early. Loose equality matches both `null` and `undefined` | `string \| number` |
+| ② | `typeof input === 'number'` returns early | `string` |
+| ③ | `input.trim()` compiles, because only `string` is left | `string` |
+
+Three details catch people out:
+- **Filtering out `undefined`**: `ids.filter((id) => id !== undefined)` used to keep the type `(string | undefined)[]`. Since TypeScript 5.5, the compiler **infers the type predicate** from such simple callbacks and returns `string[]`. In older versions, or for complex callbacks, write the predicate yourself: `(id): id is string => id !== undefined`.
+- **Narrowing inside callbacks**: a narrowed `let` variable used in a closure can lose its narrowing, because the variable might be reassigned before the closure runs. Since TypeScript 5.4, narrowing is kept in closures created after the variable's last assignment. Using `const` avoids the problem entirely.
+- **Narrowing isn't re-checked after function calls**: if you narrow `order.status` and then call a function that changes it, TypeScript still assumes the narrowed type. That's a deliberate trade-off for usability, and a reason to prefer immutable data.
+
 ### Validate at the boundary, infer inside
 
 Types describe what you *believe*; a schema library checks what you *receive*. Derive the type from the schema so the two cannot drift.
@@ -107,7 +132,7 @@ type RouteName = keyof typeof routes; // 'home' | 'topic', not string
 
 Node.js can execute TypeScript directly by **stripping** type annotations. Type stripping is enabled by default from Node.js 23.6 and was backported to 22.18. Stripping cannot handle syntax that generates runtime code: `enum`, `namespace` with values, and constructor parameter properties. TypeScript 5.8 added `--erasableSyntaxOnly` to forbid those constructs. Prefer union literal types or `as const` objects over `enum`.
 
-TypeScript 7 is the native port of the compiler and language service, giving large speed-ups on big codebases. TypeScript 7 removes options that 6.0 deprecated (for example `target: ES5` and `moduleResolution: node10`). Check your `tsconfig` against the release notes before upgrading.
+TypeScript 6.0 (March 2026) was the last release built on the original JavaScript-based compiler. TypeScript 7.0 (July 2026) is the native Go port of the compiler and language service, often around 10 times faster on big codebases. It removes the options 6.0 deprecated (for example `target: ES5` and `moduleResolution: node10`), so check your `tsconfig` against the release notes before upgrading. 7.0 doesn't yet ship the full programmatic API (planned for 7.1), so tools that drive the compiler through its API may need to stay on 6.x for a while.
 
 ## How It Works
 
@@ -125,6 +150,34 @@ flowchart LR
 ```
 
 Bundlers (esbuild, swc, Vite) usually only *strip* types per file for speed and run `tsc --noEmit` separately for checking. That is why `isolatedModules` matters: each file must be transpilable without whole-program type information.
+
+### Validating a request at the boundary
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant H as HTTP handler
+  participant Z as Schema
+  participant S as Domain service
+  %% step: A client posts a JSON body to create an order.
+  %% step: The handler receives the body as unknown. Whatever the client's types say, TypeScript has no knowledge of this data at runtime.
+  %% step: The handler parses it with the schema, OrderInput.safeParse(body).
+  %% step: Parsing fails with a precise path: items[0].quantity expected a number but received a string.
+  %% step: The handler returns 400 with a Problem Details body listing the invalid field. No exception, no partial processing.
+  %% step: The client fixes the request and sends it again.
+  %% step: The handler parses the new body.
+  %% step: This time it succeeds, and the result is typed as OrderInput, a type inferred from the same schema, so the type and the check can't drift apart.
+  %% step: From here on, the domain service receives fully typed data, and no code inside needs to defend against bad shapes again.
+  C->>H: POST /orders with JSON body
+  Note over H: Body is unknown at runtime
+  H->>Z: OrderInput.safeParse(body)
+  Z-->>H: Error at items[0].quantity
+  H-->>C: 400 Problem Details
+  C->>H: POST again, corrected
+  H->>Z: safeParse(body)
+  Z-->>H: Success, typed OrderInput
+  H->>S: createOrder(data), typed from here on
+```
 
 ## When to Use / Trade-offs
 
@@ -575,6 +628,199 @@ Automation over policing, ratchets for legacy code, runtime-boundary standards, 
 - Mandating strict mode everywhere overnight.
 - Rules without reasons, enforced only in code review.
 
+### What does `strict` mode enable, and which further flags are worth turning on? {#strict-mode}
+
+**Level:** Foundation
+
+**Model answer:**
+`"strict": true` in `tsconfig.json` turns on a family of checks. The most important are:
+- **`strictNullChecks`**: `null` and `undefined` aren't assignable to other types unless declared, so the compiler makes you handle missing values. This alone prevents a large class of production crashes.
+- **`noImplicitAny`**: values whose type can't be inferred must be annotated, instead of silently becoming `any`.
+- **`strictFunctionTypes`**: checks function parameter types correctly (contravariantly) for function types.
+- **`strictPropertyInitialization`**: class properties must be initialised in the constructor or declared optional.
+- **`useUnknownInCatchVariables`**: `catch (e)` gives `unknown` rather than `any`, so you must narrow errors before using them.
+- Also `strictBindCallApply`, `noImplicitThis` and `alwaysStrict`.
+
+**Worth adding beyond `strict`:**
+- **`noUncheckedIndexedAccess`**: `array[i]` and `record[key]` include `undefined` in their type, because the element might not exist. It's noisy at first, but it catches real out-of-range bugs.
+- **`exactOptionalPropertyTypes`**: distinguishes "property missing" from "property present with `undefined`".
+- **`noImplicitOverride`**, **`noFallthroughCasesInSwitch`** and **`noImplicitReturns`**.
+
+For new code, turn strict on from day one. For existing code, enable it per project or package, use the compiler's error counts to plan the work, and don't allow new code to add violations.
+
+**What the interviewer is looking for:**
+The key strict flags and what each prevents, especially strict null checks, and useful additional flags.
+
+**Follow-ups:**
+- How would you turn on `strictNullChecks` in a large codebase with thousands of errors?
+- What does `noUncheckedIndexedAccess` catch that `strict` doesn't?
+
+**Red flags:**
+- Production TypeScript without `strict`.
+- Silencing errors with `!` and `as` everywhere.
+
+### How do you type React components and hooks well? {#typing-react}
+
+**Level:** Senior
+
+**Model answer:**
+**Props:**
+- Declare props as a type or interface. Use `React.ReactNode` for `children`, and specific function types for callbacks: `onSelect: (id: ProductId) => void`.
+- **Extend native element props** for components that wrap HTML elements, so every standard attribute works:
+
+```tsx
+type ButtonProps = React.ComponentProps<'button'> & { variant: 'primary' | 'secondary' };
+export function Button({ variant, ...rest }: ButtonProps) {
+  return <button className={styles[variant]} {...rest} />;
+}
+```
+
+- Use **discriminated unions** for props that depend on each other: `{ mode: 'link'; href: string } | { mode: 'button'; onClick: () => void }`, so invalid combinations don't compile.
+
+**Generic components** keep types flowing through, for example a table or select whose item type is inferred:
+
+```tsx
+type SelectProps<T> = { items: T[]; getLabel: (item: T) => string; onChange: (item: T) => void };
+export function Select<T>({ items, getLabel, onChange }: SelectProps<T>) { /* ... */ }
+```
+
+**Events and refs:** use React's event types (`React.ChangeEvent<HTMLInputElement>`), or let them be inferred from inline handlers. Type refs to the element (`useRef<HTMLInputElement>(null)`).
+
+**Hooks:**
+- Return objects for hooks with several values, or tuples marked `as const` so their element types stay precise.
+- **Context**: create it with `undefined` as the default and provide a custom hook that throws if used outside the provider. Consumers then get a non-optional type.
+
+**Avoid:** `any` in props, overly clever type gymnastics in shared components (they slow the editor and confuse users), and `React.FC` purely out of habit (it adds little now).
+
+**What the interviewer is looking for:**
+Props with native element types, discriminated-union props, generic components, events and refs, typed context with guards, and restraint.
+
+**Follow-ups:**
+- How would you type a polymorphic `as` prop?
+- How do you type a component that forwards a ref in React 19?
+
+**Red flags:**
+- `props: any`.
+- Optional everything, with runtime checks for combinations the types could prevent.
+
+### What are template literal types, and when are they useful? {#template-literal-types}
+
+**Level:** Senior
+
+**Model answer:**
+**Template literal types** build string types from other types, using the same syntax as template strings:
+
+```ts
+type Entity = 'order' | 'payment';
+type Action = 'created' | 'failed';
+type EventName = `${Entity}:${Action}`;   // 'order:created' | 'order:failed' | 'payment:created' | 'payment:failed'
+```
+
+Useful applications:
+- **Typed event or message names**, so a typo in `'order:craeted'` is a compile error.
+- **Extracting parameters from strings** with `infer`, for example route parameters:
+
+```ts
+type Params<P extends string> =
+  P extends `${string}:${infer Name}/${infer Rest}` ? Name | Params<`/${Rest}`>
+  : P extends `${string}:${infer Name}` ? Name
+  : never;
+
+type T = Params<'/orgs/:orgId/projects/:projectId'>;  // 'orgId' | 'projectId'
+```
+
+- **Constrained string formats**: CSS values such as `` `${number}px` ``, prefixed ids such as `` `ord_${string}` ``, and translation keys built from nested message objects.
+- **Mapping object keys**, combined with mapped types: `` { [K in keyof T as `on${Capitalize<string & K>}`]: (v: T[K]) => void } ``, turning `{ change: string }` into `{ onChange: (v: string) => void }`.
+- The built-in helpers `Uppercase`, `Lowercase`, `Capitalize` and `Uncapitalize` work on these types.
+
+**Limits:**
+- Unions **multiply**: three unions of 10 members produce 1,000 combinations, and large combinations slow the compiler or hit its limits.
+- They check the **shape of strings at compile time only**. Values arriving at runtime still need validation.
+- Readability matters: hide complex type-level parsing inside a library, with simple types at the call site.
+
+**What the interviewer is looking for:**
+The syntax, combining unions, `infer` for parsing strings, practical uses such as events, routes and key mapping, and the performance and runtime limits.
+
+**Follow-ups:**
+- How do typed routing libraries know a route's parameters?
+- When would you choose a branded type instead?
+
+**Red flags:**
+- Giant generated unions that make editors slow.
+- Assuming a template literal type validates runtime input.
+
+### How would you move a large monorepo to TypeScript 7? {#typescript-7-migration}
+
+**Level:** Architect
+
+**Model answer:**
+**What changed:** TypeScript 6.0 (March 2026) was the last release built on the original JavaScript-based compiler, and a bridge release that deprecated options. TypeScript 7.0 (July 2026) is the **native port written in Go**, often around **10 times faster**, and it **removes the options 6.0 deprecated**. TypeScript 7.0 doesn't yet ship the full programmatic API (planned for 7.1), so tools that drive the compiler through its API need care.
+
+**1. Get clean on 6.0 first.**
+- Upgrade to 6.0, and fix every deprecation warning: old `target` and `moduleResolution` values, and other removed settings. Anything deprecated in 6.0 is an error in 7.0.
+- Make `tsconfig`s consistent across packages (a shared base config helps).
+
+**2. Inventory what depends on the compiler API.**
+- Type-aware lint rules (typescript-eslint), bundler loaders and plugins that type-check or transform with TypeScript, code generators and codemods (ts-morph), framework compilers, documentation generators and IDE plugins.
+- For each, check its support for 7.0. Where it isn't ready, keep **6.x installed for that tool** while 7.0 does the type-checking.
+
+**3. Run them side by side.**
+- Add a CI job that type-checks with 7.0 alongside the existing 6.0 check, and compare the diagnostics. Differences should be rare, but investigate any.
+- Measure the speed-up per package and in the editor, using the new language service.
+
+**4. Switch over in stages.**
+- Make 7.0 the required type-check in CI, with 6.0 kept only for the tools that need its API.
+- Roll the new editor experience out to developers, and gather feedback on stability.
+- Use the time saved: re-evaluate project references and how the monorepo is split, since some workarounds for slow checking may no longer be needed.
+
+**5. Finish when the ecosystem catches up:** remove 6.x once the API-dependent tools support 7.x.
+
+**What the interviewer is looking for:**
+What 6.0 and 7.0 changed, clearing deprecations first, the compiler-API dependency inventory, a side-by-side CI comparison, and a staged switch.
+
+**Follow-ups:**
+- A critical webpack loader relies on the TypeScript API. What are your options?
+- How would you measure the developer-experience impact of the faster compiler?
+
+**Red flags:**
+- Jumping straight from 5.x to 7.0 without clearing deprecations.
+- Ignoring tools that depend on the compiler API.
+
+### Design type-safe configuration and environment handling for 40 services and several front ends. {#typed-config}
+
+**Level:** Architect
+
+**Model answer:**
+Configuration bugs (a missing variable, a typo in a name, a string where a number was expected) are a common source of outages, and plain `process.env.X` gives no protection: every value is `string | undefined`.
+
+**Validate once, at startup:**
+- Define each service's configuration as a **schema** (zod, valibot or a dedicated env library), parse `process.env` against it **when the service starts**, and **fail fast** with a clear list of what's missing or invalid.
+- Export **one typed config object**. The rest of the code imports it, and never reads `process.env` directly (enforce with a lint rule).
+- Convert types explicitly: numbers, booleans (`'false'` is truthy as a string), URLs, durations and enums. Give each value a default, or make it explicitly required.
+
+**Secrets:**
+- Mark secrets separately: load them from a vault or the platform's secret store at startup, never commit them, and never log the config object as a whole (or redact secrets when you do).
+- Rotate secrets without redeploying where possible.
+
+**Shared conventions across 40 services:**
+- A small shared package of **common schema pieces** (database URL, log level, OpenTelemetry settings, feature flag service), so names and formats are consistent.
+- **Generate documentation** of each service's configuration from its schema, and validate environment manifests (Helm values, Terraform outputs) in CI against it, so a deploy with missing config fails before it reaches production.
+
+**Front ends are different:**
+- Anything in a browser bundle is **public**. Allow only explicitly public variables (most frameworks require a prefix), and never put secrets there.
+- Decide between **build-time** values (baked into the bundle, one build per environment, which goes against build once, deploy many) and **runtime** configuration (served as a small JSON file or injected by the server). Runtime configuration lets one artefact serve every environment.
+
+**What the interviewer is looking for:**
+Schema validation at startup with fail-fast, one typed config object, explicit type conversion, secret handling, shared conventions and CI validation, and front-end public versus runtime configuration.
+
+**Follow-ups:**
+- How would you change a configuration value in production without a deploy?
+- A service starts but crashes later because of a bad value. How do you prevent that class of bug?
+
+**Red flags:**
+- `process.env` reads scattered through the code.
+- Secrets in front-end environment variables.
+
 ## Cheat Sheet
 
 ### Types
@@ -599,6 +845,16 @@ Automation over policing, ratchets for legacy code, runtime-boundary standards, 
 - **Type predicate** — `x is T` return type; the compiler trusts it blindly, so keep the check honest.
 - **`infer`** — captures part of a type inside a conditional type, e.g. `T extends Promise<infer U> ? U : T`.
 - **`exactOptionalPropertyTypes`** — `a?: string` stops accepting an explicit `undefined`; catches spread-overrides-default bugs.
+
+### Revisit
+
+- **Narrowing** — each check removes possibilities (`== null`, `typeof`, discriminants). TypeScript 5.5 infers simple type predicates, and 5.4 keeps narrowing in closures after the last assignment.
+- **Validate at the boundary** — request bodies are `unknown`. Parse them with a schema, return 400 with the failing path, and use the inferred type inside.
+- **`strict` and beyond** — strictNullChecks, noImplicitAny and unknown in catch, plus noUncheckedIndexedAccess and exactOptionalPropertyTypes.
+- **Typing React** — `ComponentProps<'button'>` for wrappers, discriminated-union props, generic components, context with a throwing hook.
+- **Template literal types** — build and parse string types (events, routes, key mapping). Watch union size and remember they're compile-time only.
+- **TypeScript 7** — the native Go compiler (July 2026), about 10x faster. Clear 6.0 deprecations first, and keep 6.x for tools that need the compiler API until 7.1.
+- **Typed config** — a schema parsed at startup, fail fast, one typed object, secrets from a vault, public-only front-end variables.
 
 ## Further Reading
 
