@@ -6,7 +6,7 @@ tags: [containers, kubernetes]
 level: Senior
 estimatedMinutes: 90
 related: [cloud-fundamentals, observability-sre]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -73,7 +73,7 @@ CMD ["dist/server.js"]
 | DaemonSet | One pod per node (log shippers, agents) |
 | Job / CronJob | Run-to-completion and scheduled tasks |
 | Service | Stable virtual IP/DNS for a set of pods (ClusterIP, NodePort, LoadBalancer) |
-| Ingress / Gateway API | HTTP routing from outside the cluster; Gateway API is the newer, more expressive standard |
+| Ingress / Gateway API | HTTP routing from outside the cluster; Gateway API is the newer, more expressive standard (the Ingress API is frozen, and the popular Ingress NGINX controller was retired in March 2026) |
 | ConfigMap / Secret | Configuration and sensitive values (Secrets are only base64-encoded by default — enable encryption at rest or use external stores) |
 | PersistentVolumeClaim | Request for storage |
 | HorizontalPodAutoscaler | Scale replicas on metrics |
@@ -127,6 +127,28 @@ spec:
 - **QoS classes:** Guaranteed (requests = limits), Burstable, BestEffort (none) — affects eviction order under node pressure.
 - Over-requesting wastes money (nodes look full but idle); under-requesting causes noisy neighbours and evictions. Right-size from metrics (VPA recommendations).
 
+### Worked example: right-sizing requests from metrics
+
+A service runs 60 replicas, each requesting **1 CPU and 2 GiB**. Its nodes have 4 vCPUs and 16 GiB, of which about **3.8 vCPU and 14 GiB are allocatable** after system reservations. Two weeks of metrics per pod show:
+
+| | Typical (p95) | Highest seen |
+|---|---|---|
+| CPU | 180m | 450m |
+| Memory | 600 MiB | 700 MiB |
+
+**Before:** the scheduler packs by *requests*, not usage. CPU allows 3 pods per node (3.8 ÷ 1) and memory 7 (14 ÷ 2), so CPU wins: **3 pods per node, 20 nodes**. Real CPU use per node is about 3 × 180m ≈ 0.5 vCPU, so the nodes are 85% idle while the scheduler reports them full.
+
+**After:**
+- **CPU request 250m**, just above p95, with **no CPU limit**, so a pod can burst into idle CPU without being throttled.
+- **Memory request = limit = 1 GiB.** That's about 45% above the highest value seen. Memory can't be borrowed safely: going over the limit means an OOM kill, so request what the pod really needs and give the limit the same value.
+
+Now CPU allows 15 pods per node (3.8 ÷ 0.25) and memory 14 (14 ÷ 1), so **14 pods per node**. 60 replicas fit on **5 nodes instead of 20**.
+
+Check the new packing before celebrating:
+- **Correlated peaks.** If all 14 pods on a node hit 450m at once, they want 6.3 vCPU of 3.8. Without CPU limits they share by request weight and slow down rather than fail. Check whether peaks really coincide, and let the HPA add replicas on sustained load.
+- **Blast radius.** A node now holds 14 replicas instead of 3, so losing one node removes almost a quarter of the service. Keep topology spread across zones and a PodDisruptionBudget, and keep enough replicas to lose a node.
+- **Keep measuring.** Usage drifts with features and traffic. Use VPA in recommendation mode, or a cost tool, and review requests every quarter.
+
 ### Probes and graceful shutdown
 
 - **Readiness:** "can I receive traffic?" — failing removes the pod from Service endpoints.
@@ -156,6 +178,35 @@ sequenceDiagram
 ```
 
 Everything is a reconciliation loop: controllers compare desired and actual state and act until they match — which is why Kubernetes self-heals (rescheduling pods from failed nodes) and why manual changes get overwritten.
+
+### A pod shutting down without dropping requests
+
+```mermaid
+sequenceDiagram
+  participant API as API server
+  participant EP as EndpointSlice controller
+  participant KP as kube-proxy and ingress
+  participant KL as kubelet
+  participant C as App container
+  %% step: A rolling update deletes an old pod. The API server marks it terminating, and the EndpointSlice controller sees the change.
+  %% step: The kubelet on the pod's node sees the same change at the same moment. The two paths now run in parallel, which is where requests get dropped.
+  %% step: The kubelet runs the preStop hook first: a 5-second sleep. The app keeps serving normally during it.
+  %% step: Meanwhile the controller removes the pod from the EndpointSlice, and the update propagates to every node's kube-proxy and to the ingress or gateway.
+  %% step: Within a few seconds, nothing sends new connections to the pod. Without the preStop delay, SIGTERM could arrive before this point.
+  %% step: The preStop hook finishes, and the kubelet sends SIGTERM to the container.
+  %% step: The app stops accepting connections, finishes in-flight requests, closes keep-alive connections and flushes telemetry.
+  %% step: It exits cleanly, well within terminationGracePeriodSeconds, which counts from the start of the preStop hook.
+  %% step: Had it still been running when the grace period ran out, the kubelet would have sent SIGKILL, and any requests still in flight would have failed.
+  API->>EP: Pod terminating
+  API->>KL: Pod terminating
+  KL->>C: Run preStop, sleep 5 s
+  EP->>KP: EndpointSlice without the pod
+  Note over KP: No new connections routed
+  KL->>C: SIGTERM
+  Note over C: Drain in-flight requests
+  C-->>KL: Exit 0
+  Note over KL: SIGKILL at end of grace period
+```
 
 ## When to Use / Trade-offs
 
@@ -561,6 +612,172 @@ Clear reasons, fleet management, global routing, regional independence, data con
 **Red flags:**
 - Stretching a single cluster across distant regions.
 
+### How do ConfigMaps and Secrets work, and how should you manage secrets on Kubernetes? {#kubernetes-config-secrets}
+
+**Level:** Foundation
+
+**Model answer:**
+**ConfigMaps** hold non-sensitive configuration, and **Secrets** hold sensitive values. Both are limited to 1 MiB. Pods consume them as:
+- **Environment variables**, which are read once at container start. Changes need a restart, usually triggered by a rollout.
+- **Mounted files**, which the kubelet updates in place within about a minute, so an app that re-reads files can pick up changes without a restart. `subPath` mounts don't update.
+
+Marking a ConfigMap or Secret **immutable** protects against accidental edits, and reduces load on the API server in big clusters.
+
+**Secrets aren't secret by default.** They're base64-encoded, not encrypted, and anyone who can read Secrets in a namespace (or create pods there) can read them. To make them safe:
+- **Encrypt them at rest in etcd** with a KMS provider. Managed services offer envelope encryption with the cloud's KMS.
+- **Lock down RBAC**: few people and service accounts may `get` or `list` Secrets, and audit those reads.
+- **Keep the source of truth in a vault** (AWS Secrets Manager, Azure Key Vault, HashiCorp Vault) and sync it in with the **External Secrets Operator**, or mount it with the **Secrets Store CSI driver**.
+- **Never commit plaintext Secrets to Git.** With GitOps, commit encrypted ones (Sealed Secrets, SOPS) or only the external-secret references.
+- Prefer **workload identity** for cloud APIs, so there's no secret at all.
+
+**What the interviewer is looking for:**
+How each is consumed and updated, the base64 caveat, encryption at rest, RBAC, and vault integration.
+
+**Follow-ups:**
+- How do you roll pods automatically when a ConfigMap changes?
+- Who can read a Secret besides users with `get` on it?
+
+**Red flags:**
+- "Secrets are encrypted, so they're safe in Git."
+- Expecting environment variables to pick up changes without a restart.
+
+### What is the Gateway API, and how would you move a cluster off Ingress? {#ingress-vs-gateway-api}
+
+**Level:** Senior
+
+**Model answer:**
+**Ingress** is a single resource for HTTP routing. Anything beyond host and path matching (timeouts, header matching, traffic weights, rewrites) depends on controller-specific **annotations**, which aren't portable. The Ingress API is stable but **frozen**: it gets no new features.
+
+The **Gateway API** splits the job by role:
+- **GatewayClass**: the implementation, chosen by the infrastructure provider (for example Envoy Gateway, Istio, Cilium, NGINX Gateway Fabric, or a cloud load balancer controller).
+- **Gateway**: the listeners, ports and TLS certificates, owned by the cluster operator.
+- **HTTPRoute** and **GRPCRoute**: the routing rules, owned by application teams in their own namespaces and attached to a shared Gateway. **ReferenceGrant** controls references across namespaces.
+
+The features that needed annotations are built in: header and query matching, **weighted backends** for canaries, request and response header changes, redirects, rewrites, mirroring and timeouts. Implementations are tested against a shared conformance suite.
+
+**Why migrate now:** the widely used **Ingress NGINX controller was retired in March 2026**. It gets no more releases or security fixes, so clusters still running it are carrying unpatched risk.
+
+**Migration plan:**
+1. **Inventory** every Ingress and its annotations. The annotations are the hard part, because each must map to Gateway API features or the new implementation's policies.
+2. **Choose an implementation** that passes conformance for the features you need.
+3. **Convert** with `ingress2gateway` as a starting point, then review the routes by hand.
+4. **Run both side by side**: the new Gateway gets its own load balancer, and you compare responses, then shift DNS or traffic gradually per host.
+5. **Remove the old controller** once traffic and alerts show nothing still uses it.
+
+**What the interviewer is looking for:**
+The role-oriented model, portable features versus annotations, the Ingress NGINX retirement, and a side-by-side migration.
+
+**Follow-ups:**
+- How do you let teams attach routes to a shared Gateway without letting them steal each other's hostnames?
+- How would you run a canary with an HTTPRoute?
+
+**Red flags:**
+- Still running Ingress NGINX in production with no plan.
+- Believing the Ingress API itself is being removed.
+
+### How do NetworkPolicies work, and how would you roll out default-deny across a busy cluster? {#network-policies}
+
+**Level:** Senior
+
+**Model answer:**
+By default every pod can reach every other pod. A **NetworkPolicy** selects pods by label and lists the traffic allowed to them (ingress) or from them (egress):
+- Policies only **allow**. Once any policy selects a pod for a direction, everything not explicitly allowed in that direction is denied.
+- Rules match by pod labels, namespace labels, IP blocks and ports. Core NetworkPolicy has no layer 7 rules and no DNS-name rules.
+- They're enforced by the **CNI plugin** (Cilium, Calico, cloud CNIs with policy support). On a CNI without enforcement, policies are silently ignored.
+
+**Rolling out default-deny without an outage:**
+1. **Observe real traffic first** with flow logs: Cilium Hubble, Calico flow logs or cloud flow logs. Build the dependency map from data, not memory.
+2. **Fix labels.** Policies are only as good as the labels they select on, so agree standard `app` and `team` labels and namespace labels.
+3. **Start per namespace**: allow traffic within the namespace, from the ingress gateway, and from monitoring. Then add a default-deny for ingress.
+4. **Egress is harder.** Always allow DNS to the cluster DNS service (UDP and TCP port 53), then the specific dependencies. Use CNI-specific FQDN policies for external APIs where available.
+5. **Roll out namespace by namespace**, watching dropped-flow metrics, and with a quick way to revert.
+6. **Make it the default**: new namespaces get the baseline policies from the platform's templates, and admission policies (Kyverno or Gatekeeper) require them.
+
+For cluster-wide rules that tenants can't override, use the CNI's cluster policies, or the upstream **AdminNetworkPolicy** API where your CNI supports it.
+
+**What the interviewer is looking for:**
+Allow-list semantics, CNI enforcement, observing before denying, the DNS egress trap, and a staged rollout.
+
+**Follow-ups:**
+- A pod can't resolve DNS after a new policy. Why?
+- How would you restrict egress to a single third-party API?
+
+**Red flags:**
+- Writing policies on a CNI that doesn't enforce them.
+- Applying default-deny egress cluster-wide in one change.
+
+### How would you run GPU inference and training workloads on Kubernetes? {#gpu-workloads}
+
+**Level:** Architect
+
+**Model answer:**
+**Getting GPUs to pods:**
+- The **NVIDIA GPU Operator** (or the cloud's managed equivalent) installs drivers, the device plugin and the DCGM metrics exporter on GPU nodes.
+- The device plugin exposes GPUs as an extended resource (`nvidia.com/gpu: 1`). They're whole devices: no fractions, no overcommit.
+- **Dynamic Resource Allocation**, GA since Kubernetes 1.34, lets pods request devices by attributes (model, memory), and supports sharing and partitions. It's the long-term replacement for simple counts.
+- **Sharing** for small inference models: MIG partitions on supported GPUs (hardware isolation), or time-slicing (no isolation, so only for trusted workloads).
+
+**Isolating expensive nodes:** GPU node pools with a **taint**, so only pods that tolerate it and request GPUs land there. Several pools by GPU type, labelled for affinity.
+
+**Inference:**
+- **Scale on the right signal**: requests in flight, queue length or tokens per second, via KEDA or custom metrics. GPU utilisation alone lags and can mislead.
+- **Model loading is the cold start.** Weights of tens of gigabytes take minutes to pull and load, so keep a warm minimum, cache weights on node-local disks or a shared volume, and don't put them in the container image.
+- Use a serving framework that batches requests (vLLM, Triton, KServe) to raise throughput per GPU.
+
+**Training and batch:**
+- **Queue and share fairly** with Kueue: quotas per team, borrowing of idle capacity, and **gang scheduling**, so a distributed job starts only when all its pods can run.
+- **Checkpoint regularly**, so jobs can run on spot capacity and survive preemption.
+- Respect topology: for multi-GPU training, place pods on nodes with fast interconnects.
+
+**Cost and capacity:** GPUs are the most expensive thing in the cluster, so track utilisation and cost per team. Reserve capacity for steady inference, scale training to zero between jobs, and alert on idle GPU nodes.
+
+**What the interviewer is looking for:**
+Device plugin versus DRA, sharing options, taints, inference scaling signals, model-loading cold starts, Kueue for batch, and cost control.
+
+**Follow-ups:**
+- Inference latency doubles when traffic rises, but GPU utilisation is only 50%. What might be happening?
+- How do you stop one team's training jobs from starving another team's inference?
+
+**Red flags:**
+- Untainted GPU nodes running ordinary pods.
+- Baking model weights into a 40 GB image.
+
+### How would you move a 40-service Kubernetes platform from x86 to Arm nodes to cut costs? {#arm-migration}
+
+**Level:** Architect
+
+**Model answer:**
+Arm instances (AWS Graviton, Azure Cobalt, Google Axion) often give noticeably better price-performance for typical services, but the migration is mostly about images and dependencies, not Kubernetes.
+
+**1. Make images multi-architecture:**
+- Build an **OCI image index** (a multi-arch manifest) with `docker buildx` for `linux/amd64` and `linux/arm64`. Native Arm CI runners are much faster than QEMU emulation.
+- Check base images and **native dependencies**: Node.js modules with compiled add-ons, Python wheels, JNI libraries, and downloaded binaries in Dockerfiles (`curl .../linux-amd64/...` is a common trap).
+- Check everything else that runs on the nodes: **DaemonSets** (log agents, security agents, CNI and CSI components), sidecars, and operators. One amd64-only DaemonSet blocks the whole node pool.
+
+**2. Add an Arm node pool, opt-in:**
+- Give the pool a **taint**, so only services that declare a toleration and a node affinity for `kubernetes.io/arch: arm64` move.
+- With autoscalers such as Karpenter, allow both architectures and let services opt in by requirement.
+
+**3. Migrate service by service:**
+- Start with stateless, low-risk services. Run a canary on Arm next to x86 pods and compare latency, error rate and **cost per request**, not just CPU use.
+- Expect differences: some workloads gain a lot, a few (heavy use of x86-specific instructions, some JIT or crypto paths) don't. Decide per service.
+- Rolling back is just removing the toleration.
+
+**4. Make it the default:**
+- Platform templates build multi-arch images by default, and CI tests on both architectures.
+- New services land on Arm unless they opt out. Rightsize again afterwards, because the CPU profile changes.
+
+**What the interviewer is looking for:**
+Multi-arch images, native-dependency and DaemonSet traps, opt-in scheduling with taints and affinity, measuring cost per request, and easy rollback.
+
+**Follow-ups:**
+- One critical vendor agent has no Arm build. What are your options?
+- How would you measure whether the migration actually saved money?
+
+**Red flags:**
+- Switching node pools wholesale without testing images.
+- Measuring success by CPU utilisation instead of cost per request.
+
 ## Cheat Sheet
 
 ### Containers
@@ -584,6 +801,16 @@ Clear reasons, fleet management, global routing, regional independence, data con
 - **PDB + topology spread** — survive drains and zone failures.
 - **HPA / KEDA / VPA / node autoscaling** — replicas on metrics/events, right-sizing, node capacity.
 - **Upgrade cadence** — minor versions supported roughly a year; scan for deprecated APIs.
+
+### Revisit
+
+- **Requests drive packing** — the scheduler packs by requests, not usage. Set CPU requests near p95 with no CPU limit, and memory request equal to its limit, above the highest usage seen.
+- **Shutdown race** — endpoint removal and SIGTERM happen in parallel. A preStop sleep gives routing time to update, and the grace period includes it.
+- **Config updates** — environment variables need a restart. Mounted files update within about a minute, except `subPath` mounts.
+- **Secrets** — base64, not encrypted. Use KMS encryption at rest, tight RBAC, and a vault synced with the External Secrets Operator or CSI driver.
+- **Gateway API** — GatewayClass, Gateway and Routes split by role. Ingress NGINX was retired in March 2026.
+- **NetworkPolicy** — allow-only, enforced by the CNI. Observe flows first, and always allow DNS egress.
+- **GPUs** — taint GPU pools, scale inference on requests in flight, queue training with Kueue, and keep model weights out of images.
 
 ## Further Reading
 
