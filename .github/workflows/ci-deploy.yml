@@ -11,8 +11,10 @@ permissions:
   contents: read
   pull-requests: write # SWA posts the preview URL on the PR
 
+# Key PR runs on the PR number: for a merged PR's `closed` event github.ref is
+# refs/heads/main, so keying on github.ref let it cancel the production deploy.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
