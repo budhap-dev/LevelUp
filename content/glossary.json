@@ -7717,5 +7717,119 @@
       "web-performance",
       "micro-frontends"
     ]
+  },
+  {
+    "id": "react-compiler",
+    "term": "React Compiler",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "A build-time compiler for React, stable since version 1.0 in October 2025, that automatically memoises components and values so manual useMemo, useCallback and React.memo are rarely needed.",
+    "details": [
+      "Relies on code following the Rules of React, and skips components it can't safely optimise.",
+      "Adopt it incrementally, with its lint rules enabled first."
+    ],
+    "useCases": [
+      "Reducing unnecessary re-renders across a large app without hand-written memoisation."
+    ],
+    "related": [
+      "reactjs",
+      "web-performance"
+    ]
+  },
+  {
+    "id": "server-functions",
+    "term": "Server Functions",
+    "aka": [
+      "Server Actions"
+    ],
+    "group": "languages-frontend",
+    "definition": "Functions marked to run on the server that client code, including forms, can call directly in frameworks supporting React Server Components. React serialises the arguments and results over HTTP.",
+    "details": [
+      "Each one is effectively a public endpoint, so authenticate, authorise and validate inside it.",
+      "A critical RCE in Server Components handling (CVE-2025-55182, December 2025) showed the need for fast patching."
+    ],
+    "useCases": [
+      "Form submissions that work before JavaScript loads."
+    ],
+    "related": [
+      "reactjs",
+      "state-management"
+    ]
+  },
+  {
+    "id": "use-effect-event",
+    "term": "useEffectEvent",
+    "aka": [
+      "effect event"
+    ],
+    "group": "languages-frontend",
+    "definition": "A React hook, stable since React 19.2, that defines event-like logic used inside an effect, which always sees the latest props and state without becoming one of the effect's dependencies.",
+    "details": [
+      "Stops effects re-running (for example reconnecting) when a value used only for side logic changes.",
+      "Only call it from inside effects."
+    ],
+    "useCases": [
+      "Showing a toast with the current theme when a chat connection opens."
+    ],
+    "related": [
+      "reactjs"
+    ]
+  },
+  {
+    "id": "signals",
+    "term": "Signals",
+    "aka": [
+      "fine-grained reactivity"
+    ],
+    "group": "languages-frontend",
+    "definition": "Reactive value containers that automatically track which computations and UI read them, and update only those dependents when the value changes.",
+    "details": [
+      "Used by Solid, Preact Signals, Angular, Vue (refs) and others.",
+      "A TC39 proposal to standardise them in JavaScript is at an early stage."
+    ],
+    "useCases": [
+      "Updating a single text node on change without re-running a component."
+    ],
+    "related": [
+      "state-management",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "type-narrowing",
+    "term": "Type narrowing",
+    "aka": [
+      "control-flow analysis",
+      "type guard"
+    ],
+    "group": "languages-frontend",
+    "definition": "TypeScript's refinement of a value's type at each point in the code, based on checks such as typeof, equality, in, instanceof, discriminant properties and user-defined type predicates.",
+    "details": [
+      "TypeScript 5.5 infers type predicates from simple callbacks such as filter(x => x !== undefined).",
+      "Narrowing isn't re-checked after function calls that might mutate an object."
+    ],
+    "useCases": [
+      "Handling union types safely without casts."
+    ],
+    "related": [
+      "typescript"
+    ]
+  },
+  {
+    "id": "template-literal-type",
+    "term": "Template literal type",
+    "aka": [],
+    "group": "languages-frontend",
+    "definition": "A TypeScript type built from string literal types using template string syntax, which can combine unions and, with infer, parse parts of strings at compile time.",
+    "details": [
+      "Used for typed event names, route parameters and key remapping.",
+      "Large unions multiply and can slow the compiler."
+    ],
+    "useCases": [
+      "Extracting orgId and projectId from a route pattern."
+    ],
+    "related": [
+      "typescript"
+    ]
   }
 ]

@@ -6,7 +6,7 @@ tags: [frontend, architecture]
 level: Senior
 estimatedMinutes: 45
 related: [reactjs, caching]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -81,6 +81,26 @@ export const useBasket = create<BasketState>((set) => ({
 const itemCount = useBasket((s) => s.lines.reduce((n, l) => n + l.qty, 0));
 ```
 
+### Worked example: counting re-renders, Context vs a selector store
+
+A shop keeps its basket in **one React Context** provided at the root: `{ lines, add, remove, isOpen, setOpen }`. 120 components consume it: 100 product cards (each shows "In basket" for its own product), the header badge, the mini-basket drawer, and some others.
+
+A Context consumer re-renders whenever the context **value** changes, whatever part of it the component reads:
+
+| Event | Components that actually need to change | Renders with one Context | Renders with a selector store |
+|---|---|---|---|
+| User opens the mini-basket (`isOpen` flips) | 1 (the drawer) | **120** | **1** |
+| User adds product 42 | 3 (header badge, drawer, product 42's card) | **120** | **3** |
+| Background refresh replaces `lines` with equal data | 0 | **120** | **0** (if selectors return equal values) |
+
+With a store such as Zustand, each component subscribes to the **slice it reads**: the product card uses `useBasket((s) => s.lines.some((l) => l.sku === sku))`, which is a boolean, so it only re-renders when that boolean changes for its product.
+
+Whether 120 re-renders matter depends on their cost. Usually they're cheap, and measuring with the React Profiler comes first. When they do matter (large lists, slow devices, frequent updates), the fixes are:
+- **Split the context** by how often each part changes: actions in one context (stable), `isOpen` in another, `lines` in a third.
+- **Memoise the context value**, so it only changes when its contents do.
+- **Move frequently changing shared state into a store with selectors**, and keep Context for low-frequency values such as theme, locale and the signed-in user.
+- **Derive in selectors** (counts, "is this item in the basket"), returning primitives or memoised values so equality checks work.
+
 ### State machines for complex UI
 
 Explicit states and transitions (XState or a reducer with a discriminated union) make impossible states unrepresentable: a payment form can't be both `submitting` and `succeeded`; retries and cancellations are defined transitions.
@@ -107,6 +127,34 @@ flowchart TD
   G -->|"rarely: theme, locale, user"| C["Context"]
   G -->|"often: basket, editor, canvas"| ST["Store with selectors"]
   Q -->|"complex lifecycle with rules"| M["State machine"]
+```
+
+### An optimistic update that has to roll back
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant C as Component
+  participant Q as Query cache
+  participant S as Server
+  %% step: The user taps "Mark as done" on task 7.
+  %% step: The mutation's onMutate runs first. It cancels any in-flight fetches of the tasks list, so a slow response can't overwrite the optimistic change.
+  %% step: It snapshots the current list, then writes task 7 as done into the cache.
+  %% step: Every component showing that list updates at once. The app feels instant.
+  %% step: Meanwhile, the request goes to the server.
+  %% step: The server rejects it: another user archived the task, or the request failed.
+  %% step: onError restores the snapshot taken before the change.
+  %% step: The UI shows task 7 as not done again, with a clear message, so the user knows their action didn't stick.
+  %% step: onSettled invalidates the tasks query, whatever the outcome, so the cache refetches the server's true state rather than trusting either guess.
+  U->>C: Tap "Mark as done" on task 7
+  C->>Q: Cancel in-flight fetches of tasks
+  C->>Q: Snapshot, then write task 7 as done
+  Q-->>U: List shows task 7 done at once
+  C->>S: PATCH /tasks/7
+  S-->>C: Error, change rejected
+  C->>Q: Restore the snapshot
+  Q-->>U: Task 7 not done, with a message
+  C->>Q: Invalidate tasks, refetch true state
 ```
 
 ## When to Use / Trade-offs
@@ -520,6 +568,179 @@ Independence, URL and platform services, event-based communication with contract
 **Red flags:**
 - A global Redux store shared by all micro-frontends.
 
+### How do you persist client state safely across reloads? {#persisted-state}
+
+**Level:** Foundation
+
+**Model answer:**
+Some client state should survive a reload or a later visit: preferences, a half-written draft, a basket for signed-out users, offline data.
+
+**Choosing the storage:**
+- **`localStorage`**: simple key–value strings, a few megabytes per origin, and **synchronous**, so large reads and writes block the main thread. Fine for small preferences.
+- **IndexedDB**: asynchronous, much larger, stores structured data and blobs. Use it for offline data and anything big, usually through a small wrapper library.
+- **Cookies** only for what the server needs on every request, such as a session cookie (HttpOnly). They're sent with every request, so keep them small.
+- **The server**, for anything that should follow the user across devices, such as preferences for signed-in users.
+
+**Doing it safely:**
+- **Version the stored shape** and migrate it. The app will change, and yesterday's stored data must not crash today's code. Store libraries' persistence helpers support a `version` and a `migrate` function.
+- **Validate on read**: treat stored data as untrusted input. It may be old, corrupted or edited by the user.
+- **Never store secrets or tokens** in `localStorage`. Any script running on the page (including injected XSS) can read it. Avoid personal data, or clear it on sign-out.
+- Handle **failures**: storage can be full, disabled or unavailable in some private modes. Wrap access in try/catch and keep the app usable.
+- **Sync across tabs** if needed, with the `storage` event or BroadcastChannel, so two tabs don't overwrite each other's changes.
+
+**What the interviewer is looking for:**
+Choosing storage by size, sync behaviour and audience, versioning and migration, validation, security of tokens, failure handling and cross-tab sync.
+
+**Follow-ups:**
+- A release changes the shape of the persisted basket. What happens to existing users?
+- Where would you keep an access token in a browser app?
+
+**Red flags:**
+- Tokens in `localStorage`.
+- Persisted state read with no version or validation.
+
+### What are signals, and how do they differ from React's state model? {#signals}
+
+**Level:** Senior
+
+**Model answer:**
+A **signal** is a reactive value container. Code that reads a signal is automatically registered as depending on it, and when the signal changes, **only those dependents** update.
+
+```ts
+const count = signal(0);
+const doubled = computed(() => count.value * 2);   // recomputes only when count changes
+effect(() => console.log(doubled.value));           // re-runs when doubled changes
+count.value = 5;                                    // logs 10
+```
+
+Signals are used by Solid, Preact Signals, Angular (since its signals APIs), Vue's refs (a similar idea), Qwik and others. A TC39 proposal to standardise signals in JavaScript exists, at an early stage.
+
+**How React differs:**
+- React's state triggers a **re-render of the component** (and, by default, its children). React then works out the DOM changes by comparing trees. Updates are coarse-grained, and fine-grained efficiency comes from memoisation, now increasingly automated by the React Compiler.
+- With signals, a change can update **one text node directly**, without re-running the component function. There's no virtual DOM diff for that update.
+
+**Trade-offs:**
+- **Signals**: fine-grained updates with very little re-render overhead, and derived values are naturally efficient. But dependencies are implicit, behaviour can be harder to trace in large graphs, and mixing signals into React needs adapters that work against React's model.
+- **React's model**: easy to reason about (UI is a function of state, recomputed), with great tooling. But it needs attention to re-render cost in large trees.
+
+In practice: inside React, use React state, stores with selectors, and the compiler. Choose signals when using a framework built on them, or for isolated high-frequency widgets.
+
+**What the interviewer is looking for:**
+What signals are, automatic dependency tracking, fine-grained versus component-level updates, which frameworks use them, and balanced trade-offs.
+
+**Follow-ups:**
+- Why hasn't React adopted signals?
+- How would you integrate a signal-based library into a React app?
+
+**Red flags:**
+- Claiming signals make re-render problems impossible in any framework.
+- Mixing several reactivity models in one app without a reason.
+
+### A mutation affects data shown in several cached queries. How do you keep them all correct? {#cache-invalidation-client}
+
+**Level:** Senior
+
+**Model answer:**
+Example: renaming a project changes the project detail, the project list, the search results and the sidebar, which are four cached queries.
+
+**Options, from simplest:**
+1. **Invalidate by key prefix**: design query keys hierarchically (`['projects']`, `['projects', id]`, `['projects', 'list', filters]`) and invalidate `['projects']` after the mutation. Every matching query refetches when next used. Simple and correct, at the cost of extra requests.
+2. **Update the cache directly from the response**: the mutation returns the updated project, so write it into the detail query with `setQueryData`, and patch it into lists where it appears. That means fewer requests, but you must find every place it appears and update it correctly.
+3. **Normalised caches** (Apollo, Relay, some RTK Query setups) store each entity once by id. Updating the entity updates every query referencing it automatically. That's powerful, but it adds conceptual weight and is less natural for REST.
+4. **Server-driven invalidation**: the server publishes change events (WebSocket or server-sent events) with entity ids, and the client invalidates the matching keys. That's needed when **other users or systems** change the data.
+
+**Guidelines:**
+- **Design query keys deliberately**, as a hierarchy that mirrors how data relates, so invalidation can be broad or precise.
+- **Prefer invalidation by default**, and add direct cache updates where the extra request is noticeable.
+- Combine **optimistic updates** with invalidation when settled, so the cache ends up matching the server.
+- Remember queries that aren't on screen: invalidated inactive queries refetch when they're next used, which is usually what you want.
+
+**What the interviewer is looking for:**
+Hierarchical keys and prefix invalidation, direct cache updates, normalised caches, server-driven invalidation, and sensible defaults.
+
+**Follow-ups:**
+- How do you handle a mutation that changes the sort order of a paginated list?
+- When would you choose a normalised cache?
+
+**Red flags:**
+- Manually copying data into many caches with no settled invalidation.
+- Flat, ad hoc query keys that can't be invalidated as a group.
+
+### With Server Components and server rendering, which state belongs on the server and which on the client? {#server-components-state}
+
+**Level:** Architect
+
+**Model answer:**
+Server Components change the default: much data that once went through a client-side cache can be **fetched and rendered on the server**, with no client state at all.
+
+**On the server (Server Components, loaders):**
+- Data needed for the initial render: product details, lists, the user's profile. It's fetched close to the database, rendered to HTML, and **no data-fetching code ships to the browser**.
+- Authorisation-dependent content, so decisions stay server-side.
+
+**In the URL:**
+- Filters, sort, pagination, selected tabs and search terms. Server components read them from the request, so links, refresh and back buttons all work, and the server renders the right view.
+
+**On the client (Client Components):**
+- **Interaction state**: open menus, input drafts, drag positions, local optimistic states.
+- **Highly interactive or live data**: infinite scroll, polling dashboards, collaborative editing, where a client cache (TanStack Query, SWR) or a sync engine still fits better.
+- A **few shared client values** (a basket badge, theme), through small stores or Context.
+
+**Mutations:**
+- Server Functions (or API calls) change data, then **revalidate** the affected server-rendered data (by path or cache tag), so server components re-render with fresh data. `useOptimistic` covers the gap while that happens.
+
+**Hybrid patterns:**
+- Prefetch on the server and **hydrate a client query cache** for pages that need both a fast first render and rich client interactivity.
+- Keep the **boundary small and explicit**: pass Client Components the minimal serialisable data they need, not whole records.
+
+**Common mistakes:** copying server data into a global client store "to have it everywhere", which creates two sources of truth. Making whole pages client components because one widget needs state. Forgetting to revalidate after mutations, which leaves stale server-rendered UI.
+
+**What the interviewer is looking for:**
+Server-first data with URL state for view parameters, client state for interaction and live data, revalidation after mutations, hybrid prefetch and hydrate, and a small boundary.
+
+**Follow-ups:**
+- A dashboard needs data updating every 5 seconds. Server or client?
+- How would you migrate a Redux-heavy app to this model?
+
+**Red flags:**
+- Duplicating server data in a global client store.
+- Marking the whole tree `'use client'`.
+
+### Design the client state for an AI assistant with streaming replies, tool calls and editable messages. {#chat-state}
+
+**Level:** Architect
+
+**Model answer:**
+**The data model:**
+- **Conversations** contain **messages stored by id**, each with a `parentId`. Editing an earlier message creates a **new branch** from its parent instead of overwriting history, so the conversation is a tree, and the UI shows the active path with a way to switch between branches.
+- Each assistant message has a **status** as a discriminated union: `streaming`, `complete`, `stopped`, or `error` (with a retry option).
+- **Tool calls** are part of a message, each with their own state (`pending`, `running`, `succeeded` with a result, `failed` with an error) and, where needed, `awaiting-approval` for actions the user must confirm.
+
+**Streaming without jank:**
+- Append incoming tokens to a **buffer** and flush it to the message at most once per animation frame. Re-rendering the whole message list on every token is the classic performance problem.
+- Render the streaming message in its own component, so the rest of the list doesn't re-render. Memoise completed messages (or let the compiler do it).
+- **Stop** uses an AbortController, marking the message `stopped` with its partial content kept.
+
+**Server as source of truth:**
+- User messages appear **optimistically** with a client-generated id, reconciled with the server id when acknowledged.
+- Persist conversations on the server, so a reload or another device shows the same history. Support **resuming** an in-progress stream after a reload where the backend allows it, or show the result once complete.
+
+**Other state:**
+- The input draft per conversation (persisted locally, so it survives navigation), attachments with upload progress, and model or settings choices.
+- The conversation list as server state (a client cache with invalidation when titles change).
+
+**Accessibility and observability:** announce completed replies, not tokens, and record the timing (time to first token, total time) and errors per message for quality monitoring.
+
+**What the interviewer is looking for:**
+Messages as a tree for branching, explicit status unions for messages and tool calls, frame-batched streaming with isolated rendering, stop and resume, optimistic user messages and server persistence.
+
+**Follow-ups:**
+- How would you show and approve a tool call that sends an email?
+- How do you handle two tabs open on the same conversation?
+
+**Red flags:**
+- Re-rendering every message on every token.
+- Editing a message by overwriting history.
+
 ## Cheat Sheet
 
 - **State categories** — server, local UI, shared client, URL, form, persistent, derived.
@@ -536,6 +757,16 @@ Independence, URL and platform services, event-based communication with contract
 - **CRDTs** — data structures that merge concurrent edits without conflicts.
 - **Micro-frontend state** — own your state; share via URL, platform services and typed events.
 - **Normalisation** — store entities by id to simplify updates and selectors.
+
+### Revisit
+
+- **Context vs selectors** — every Context consumer re-renders when the value changes (120 renders to open a drawer). Selector stores re-render only the components whose slice changed.
+- **Optimistic rollback** — cancel in-flight fetches, snapshot, apply, restore on error, and always invalidate once settled.
+- **Persisted state** — localStorage for small sync data, IndexedDB for large or offline data. Version and migrate, validate on read, no tokens.
+- **Signals** — values that track their dependents automatically and update only those. React instead re-renders components and relies on memoisation and the compiler.
+- **Invalidating many queries** — hierarchical keys with prefix invalidation by default, direct cache updates where needed, server events for other users' changes.
+- **Server vs client state** — server-render data, keep view parameters in the URL, client state for interaction and live data, revalidate after mutations.
+- **Assistant UI state** — a message tree for branches, status unions for messages and tool calls, token buffers flushed per frame, optimistic user messages.
 
 ## Further Reading
 

@@ -6,7 +6,7 @@ tags: [frontend, ui, rendering]
 level: Senior
 estimatedMinutes: 75
 related: [state-management, web-performance, typescript]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -55,6 +55,31 @@ export function ProductCard({ product, onAdd }: Props) {
 
 A parent re-render re-renders its children by default; usually fine. Optimise with `React.memo`, `useMemo`, `useCallback` only where profiling shows cost — or let the **React Compiler** memoise automatically (stable since React Compiler 1.0 in October 2025, and it can be adopted incrementally).
 
+### Worked example: why the wrong row kept its quantity
+
+A basket renders each line with its own quantity input, which holds local state, and uses the **array index as the key**:
+
+```tsx
+{lines.map((line, i) => <BasketLine key={i} line={line} />)}   // BasketLine has its own useState(qty)
+```
+
+The user sets quantities, then removes Apples:
+
+| Position (key) | Before: item and its state | After removing Apples, with `key={i}` | After, with `key={line.id}` |
+|---|---|---|---|
+| 0 | Apples, qty **3** | **Bananas, qty 3** (wrong) | Bananas, qty 1 |
+| 1 | Bananas, qty **1** | **Cherries, qty 1** (wrong) | Cherries, qty 5 |
+| 2 | Cherries, qty **5** | Removed. Cherries' state is lost | — |
+
+**Why:** React matches old and new children **by key**. With index keys, key 0 still exists after the removal, so React keeps component 0 and its state (qty 3), and only changes its `line` prop to Bananas. The state stays attached to the *position*, not the *item*. The component that actually unmounts is the last one, so Cherries' state is lost.
+
+**With stable ids as keys**, React sees that `apples` disappeared, unmounts that component, and keeps the Bananas and Cherries components, with their state, at their new positions.
+
+Rules that follow:
+- Use a **stable, unique id from the data** as the key. Index keys are only safe for lists that never reorder, filter or insert, and whose items hold no state.
+- Never use random keys (`Math.random()`): every render then remounts every item, losing state and wasting work.
+- The same mechanism is useful on purpose. Changing a component's `key` (`<Profile key={userId} />`) resets its state, which is cleaner than an effect that resets fields when a prop changes.
+
 ### Hooks rules and essentials
 
 - Call hooks **at the top level** of components or custom hooks — never in conditions, loops or after early returns — so React can match hook state by call order.
@@ -83,6 +108,8 @@ Effects are often misused. Don't use them to:
 - **`use()`** to read promises and context during render (with Suspense).
 - **Server Components and Server Functions** (via frameworks): components that run on the server, send serialised UI to the client and never ship their code to the browser.
 - `ref` as a regular prop for function components; improved hydration error messages; document metadata support.
+- **React 19.2** (October 2025): `<Activity>` hides part of the UI while keeping its state (with effects cleaned up while hidden), and `useEffectEvent` became stable for event-like logic inside effects.
+- **Security note:** in December 2025 a critical remote code execution vulnerability in Server Components handling (CVE-2025-55182) and follow-up issues were fixed. Safe versions are 19.0.3, 19.1.4, 19.2.3 or later, plus the matching framework releases.
 
 ### Rendering strategies
 
@@ -102,6 +129,16 @@ sequenceDiagram
   participant R as React
   participant C as Components
   participant D as DOM
+
+  %% step: The user clicks "Add to basket". The browser fires the event, and React calls the handler.
+  %% step: The handler calls a state setter with the new basket. Nothing renders yet: React records the update.
+  %% step: React batches it with any other updates from the same event, and schedules a render, urgent here, or lower priority if wrapped in a transition.
+  %% step: React calls the affected components. Rendering must be pure: no side effects, just computing what the UI should look like.
+  %% step: The components return a new element tree.
+  %% step: React reconciles it with the previous tree, using element types and keys to work out what actually changed.
+  %% step: In the commit phase, React applies only the minimal DOM changes, such as a new line in the basket and a new total.
+  %% step: Layout effects run synchronously after the DOM changes. Passive effects (useEffect) run after the browser has painted.
+  %% step: The user sees the updated basket. Most of this took a few milliseconds, which is why re-renders are usually cheap.
   U->>H: click "Add to basket"
   H->>R: setState(newBasket)
   R->>R: batch updates, schedule render (urgent or transition)
@@ -500,6 +537,208 @@ Incremental sequencing, tooling and upgrades, testing migration, server-state ex
 **Red flags:**
 - Freezing features for a six-month rewrite.
 
+### When would you use `useRef` instead of `useState`? {#useref-vs-usestate}
+
+**Level:** Foundation
+
+**Model answer:**
+Both persist a value across renders. The difference is whether changing it should **update what's on screen**.
+
+| | `useState` | `useRef` |
+|---|---|---|
+| Changing it triggers a re-render | Yes | No |
+| How you change it | The setter function | Assign to `ref.current` directly |
+| Value during render | A snapshot for that render | Whatever `current` holds now |
+| Use for | Anything shown in the UI | Values the UI doesn't depend on |
+
+Use **`useRef`** for:
+- **DOM elements**: focusing an input, measuring size, integrating a non-React widget (`<input ref={inputRef} />`).
+- **Mutable instance values** that don't affect rendering: timer and interval ids, an `AbortController`, the previous value of a prop, a flag such as "has this request been sent?".
+- **Values read in callbacks** without wanting re-renders.
+
+Use **`useState`** whenever the value appears in the UI or should cause the component to update. Storing displayed data in a ref means the screen won't update when it changes.
+
+Two cautions:
+- **Don't read or write `ref.current` during render** (except for lazy initialisation). It makes rendering impure and unpredictable.
+- In React 19, `ref` is a regular prop for function components, so passing a ref to a child no longer needs `forwardRef`.
+
+**What the interviewer is looking for:**
+Re-render versus no re-render, DOM and instance-value uses, and not touching refs during render.
+
+**Follow-ups:**
+- How would you keep track of the previous value of a prop?
+- Why might a value stored in a ref appear stale in the UI?
+
+**Red flags:**
+- Storing displayed data in a ref to "avoid re-renders".
+- Using state for timer ids, causing pointless re-renders.
+
+### What problems do `<Activity>` and `useEffectEvent` solve? {#activity-useeffectevent}
+
+**Level:** Senior
+
+**Model answer:**
+Both arrived as stable features in **React 19.2** (October 2025).
+
+**`<Activity>`** hides part of the UI **without unmounting it**:
+
+```tsx
+<Activity mode={tab === 'details' ? 'visible' : 'hidden'}>
+  <DetailsPanel />
+</Activity>
+```
+
+- Before, hiding meant conditional rendering (`{show && <Panel />}`), which **destroys state** (form inputs, scroll position, fetched data) and rebuilds it next time. Or CSS hiding, which keeps everything **running**: effects, subscriptions and re-renders.
+- With `mode="hidden"`, React keeps the component's state and DOM, but **cleans up its effects** and gives its updates low priority. Returning to `visible` restores it instantly, with effects set up again.
+- Uses: tabs and navigation where users return to the same place, and **pre-rendering** a likely next screen in the background.
+
+**`useEffectEvent`** separates "event-like" logic from an effect's dependencies:
+
+```tsx
+const onConnected = useEffectEvent(() => showToast(`Connected to ${roomId}`, theme));
+
+useEffect(() => {
+  const conn = connect(roomId);
+  conn.on('connected', onConnected);  // reads the latest theme
+  return () => conn.disconnect();
+}, [roomId]);                          // theme isn't a dependency: changing it doesn't reconnect
+```
+
+- Without it, using `theme` inside the effect forces it into the dependency list, so changing the theme would **reconnect** to the room. The usual workarounds were silencing the lint rule (risking stale values) or refs.
+- An effect event always sees the **latest** props and state, but isn't reactive. Only call it from inside effects, never during render or as a prop.
+
+**What the interviewer is looking for:**
+Hiding while keeping state versus unmounting or CSS hiding, effects cleaned up while hidden, and separating non-reactive logic from effect dependencies.
+
+**Follow-ups:**
+- What happens to a hidden Activity's subscriptions?
+- Why can't you pass an effect event to a child as a callback prop?
+
+**Red flags:**
+- Disabling the exhaustive-deps lint rule to avoid re-running effects.
+- Keeping hidden tabs mounted with CSS, with all their effects still running.
+
+### How do you build forms with React 19 Actions? {#react-actions-forms}
+
+**Level:** Senior
+
+**Model answer:**
+**Actions** are async functions used for transitions, especially form submissions. React tracks their **pending state**, errors and results, so you don't hand-roll `isSubmitting` flags.
+
+```tsx
+async function saveProfile(prev: State, formData: FormData): Promise<State> {
+  const result = await api.updateProfile({ name: String(formData.get('name')) });
+  return result.ok ? { status: 'saved' } : { status: 'error', message: result.error };
+}
+
+function ProfileForm() {
+  const [state, formAction, isPending] = useActionState(saveProfile, { status: 'idle' });
+  return (
+    <form action={formAction}>
+      <input name="name" required />
+      <SubmitButton />
+      {state.status === 'error' && <p role="alert">{state.message}</p>}
+    </form>
+  );
+}
+
+function SubmitButton() {
+  const { pending } = useFormStatus();          // reads the parent form's status
+  return <button disabled={pending}>{pending ? 'Saving…' : 'Save'}</button>;
+}
+```
+
+The pieces:
+- **`<form action={fn}>`**: React calls the action with the form's `FormData`, wraps it in a transition, and resets uncontrolled fields after success.
+- **`useActionState`**: keeps the action's last result (success or error messages) and a pending flag.
+- **`useFormStatus`**: lets a nested component such as the submit button read the form's pending state without prop drilling.
+- **`useOptimistic`**: shows the expected result immediately ("comment posted"), reverting automatically if the action fails.
+
+With a framework, actions can be **Server Functions**, so the form works even before JavaScript loads (progressive enhancement), and the function runs on the server.
+
+**Keep the basics:** validate on the server whatever the client does, show errors next to fields and announce them to screen readers, and make submissions idempotent, because users double-click and networks retry.
+
+**What the interviewer is looking for:**
+What Actions are, `useActionState`, `useFormStatus` and `useOptimistic`, progressive enhancement with Server Functions, and server-side validation.
+
+**Follow-ups:**
+- When would you still use a form library such as React Hook Form?
+- How do you show field-level errors returned from a Server Function?
+
+**Red flags:**
+- Manual loading flags and `preventDefault` boilerplate for every form.
+- Trusting client-side validation alone.
+
+### How do you secure applications that use React Server Components and Server Functions? {#rsc-security}
+
+**Level:** Architect
+
+**Model answer:**
+Server Components and Server Functions blur the line between client and server code. That is convenient, and it creates **new server-side attack surface** that must be treated like any API.
+
+**A real example:** in December 2025, a critical remote code execution vulnerability (**CVE-2025-55182**, rated 10.0) was disclosed in React's Server Components packages. Specially crafted requests to Server Function endpoints could run code on the server, affecting React 19.0 to 19.2 and frameworks built on them, such as the Next.js App Router. Follow-up advisories added denial-of-service and source-code exposure issues, and the first patches were incomplete, so safe versions became **19.0.3, 19.1.4, 19.2.3 or later**. Teams that couldn't upgrade quickly were exposed even if their own code was flawless.
+
+**Treat every Server Function as a public HTTP endpoint:**
+- Anyone can call it with any arguments, not just your UI. **Authenticate and authorise inside the function**, every time. Don't rely on the button only being shown to admins.
+- **Validate inputs** with a schema, because the arguments come from the network, whatever TypeScript says.
+- Apply **rate limiting**, CSRF protections (frameworks provide some by default, so understand which), and idempotency for side effects.
+
+**Don't leak server data into the client:**
+- Everything a Server Component passes as props to a Client Component is **serialised and sent to the browser**. Pass the minimal fields, not whole database records with internal or personal data.
+- Keep secrets in server-only modules. Mark them with `server-only` imports (or the framework's equivalent), so an accidental import into client code fails the build.
+- Use framework features for **tainting** sensitive values where available.
+
+**Supply chain and patching:**
+- React, the framework and the bundler integration are now part of your **server's attack surface**. Track their advisories, keep automated dependency updates flowing, and be able to deploy a framework patch the same day.
+- A WAF can provide temporary protection for known exploit patterns while you patch, but it doesn't replace patching.
+
+**What the interviewer is looking for:**
+Server Functions as public endpoints with authorisation and validation, serialisation leaks across the boundary, server-only modules, and awareness of the 2025 RSC vulnerabilities and fast patching.
+
+**Follow-ups:**
+- How would you find every Server Function in a large codebase and check its authorisation?
+- A Server Component passes a full user record to a client component. What's the risk?
+
+**Red flags:**
+- Assuming Server Functions are private because they aren't in an API route file.
+- Months-old framework versions in production.
+
+### How would you adopt the React Compiler in a large codebase? {#adopting-react-compiler}
+
+**Level:** Architect
+
+**Model answer:**
+The **React Compiler** (stable since 1.0 in October 2025) analyses components and hooks at build time and inserts memoisation automatically, so manual `useMemo`, `useCallback` and `React.memo` are rarely needed. It only works correctly on code that follows the **Rules of React**: pure rendering, no mutation of props or state, hooks called unconditionally.
+
+**1. Measure and prepare:**
+- Record a baseline: interaction latency (INP), render counts and timings in key flows with the React Profiler, and bundle size.
+- Turn on the **React Hooks ESLint plugin's compiler-related rules** first, and fix violations. They show where code breaks the rules the compiler relies on. These are often real bugs anyway.
+
+**2. Roll out incrementally:**
+- Enable the compiler for a **directory or package at a time** (it supports opt-in modes), starting with leaf UI components and well-tested areas.
+- The compiler **skips components it can't safely optimise**, rather than breaking them. Its reports show which ones were skipped, and why.
+- Use the `"use no memo"` directive as a temporary escape hatch for a component that misbehaves, with a ticket to fix it.
+
+**3. Verify:**
+- Run the full test suite and end-to-end tests. Watch for behaviour that depended on re-rendering, such as effects that silently relied on a new object identity each render.
+- Compare the profiler numbers with the baseline. Expect fewer re-renders in typical apps. The gains are largest in apps with lots of context or prop changes.
+
+**4. Clean up gradually:**
+- Remove manual memoisation once the compiler covers an area, as normal refactoring rather than a big-bang change. Keep `useMemo` where it expresses something the compiler can't know, such as truly expensive computations with explicit caching intent.
+
+**5. Make it the default:** new code is written for the compiler (pure, rules-compliant), with lint rules enforced in CI.
+
+**What the interviewer is looking for:**
+What the compiler does and its reliance on the Rules of React, lint-first preparation, incremental rollout with skip reports, verification against a baseline, and gradual clean-up.
+
+**Follow-ups:**
+- A component behaves differently once compiled. How do you investigate?
+- Does the compiler remove the need to understand re-renders?
+
+**Red flags:**
+- Turning it on everywhere at once with no baseline.
+- Disabling the lint rules that flag Rules of React violations.
+
 ## Cheat Sheet
 
 ### Fundamentals
@@ -522,6 +761,16 @@ Incremental sequencing, tooling and upgrades, testing migration, server-state ex
 - **Server state vs client state** — use data libraries/loaders for server data.
 - **Hydration** — attaching interactivity to server-rendered HTML; mismatches cause bugs.
 - **Server Components** — run only on the server, ship no JS; Server Actions are public endpoints.
+
+### Revisit
+
+- **Index keys and state** — state follows the key, not the item. Removing the first row with index keys shifts quantities to the wrong items. Use stable ids.
+- **Render cycle** — setState records an update, React batches and renders pure components, reconciles by type and key, commits minimal DOM changes, then runs effects after paint.
+- **`useRef` vs `useState`** — refs persist without re-rendering (DOM nodes, timer ids, controllers). State is for anything shown on screen.
+- **`<Activity>` (19.2)** — hides UI while keeping state, and cleans up effects while hidden. Good for tabs and pre-rendering.
+- **`useEffectEvent` (19.2)** — non-reactive logic inside effects that reads the latest values without becoming a dependency.
+- **Actions** — `<form action>`, `useActionState`, `useFormStatus` and `useOptimistic` replace hand-rolled pending and error state.
+- **RSC security** — Server Functions are public endpoints: authorise and validate inside them, minimise serialised props, and patch fast (CVE-2025-55182).
 
 ## Further Reading
 
