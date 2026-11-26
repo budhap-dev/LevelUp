@@ -6,7 +6,7 @@ tags: [saas, multi-tenancy, isolation, architecture]
 level: Architect
 estimatedMinutes: 75
 related: [architecture-patterns, data-modelling, authentication-authorisation, finops]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -94,6 +94,22 @@ The application connects with a role that doesn't have `BYPASSRLS` and isn't a s
 
 Other stores: partition keys that start with the tenant id (DynamoDB, Cosmos DB), per-tenant prefixes with IAM conditions on object storage (`s3:prefix` matching `${aws:PrincipalTag/tenant}`), and per-tenant encryption keys where customers require them.
 
+### Worked example: what RLS does on one pooled connection
+
+Take the policy above and run these statements in order on the **same pooled connection**, as the application role:
+
+| # | Statements | Result |
+|---|---|---|
+| 1 | `BEGIN; SELECT set_config('app.tenant_id', '<acme>', true); SELECT count(*) FROM invoices; COMMIT;` | Acme's 1,204 invoices |
+| 2 | Same, with Globex's id, then `SELECT * FROM invoices WHERE id = '<an acme invoice>'` | 0 rows. The row exists, but the policy hides it |
+| 3 | As Globex: `INSERT INTO invoices (tenant_id, …) VALUES ('<acme>', …)` | `ERROR: new row violates row-level security policy for table "invoices"` (the `WITH CHECK` clause) |
+| 4 | A code path that forgot `withTenantTx`: `SELECT count(*) FROM invoices` | `ERROR: invalid input syntax for type uuid: ""`. The transaction-local setting has reverted to an empty string, so the cast fails |
+| 5 | The same query on a brand-new connection | `ERROR: unrecognized configuration parameter "app.tenant_id"` |
+
+Steps 4 and 5 are the important ones. A missing tenant fails closed, and loudly, so it shows up in error tracking instead of in a customer's screenshot. If you'd rather return no rows than raise an error, write the policy as `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`. The `true` argument returns `NULL` for an unknown setting, and `tenant_id = NULL` matches nothing.
+
+Compare this with a session-level `SET app.tenant_id = '<globex>'`. The setting would survive `COMMIT`, so in step 4 the next request on that connection, possibly for Acme, would silently read Globex's invoices.
+
 ### Noisy neighbours and fairness
 
 - **Rate limits and quotas per tenant** (and per tier) at the API gateway, plus concurrency limits for expensive operations.
@@ -157,6 +173,37 @@ sequenceDiagram
   DB-->>S: Only acme rows (policy enforced by the database)
   S-->>U: Invoices
   Note over S,DB: A query that forgets its tenant filter still returns only acme rows
+```
+
+### Moving a tenant from the pool to a dedicated database
+
+```mermaid
+sequenceDiagram
+  participant M as Migration tool
+  participant CP as Control plane
+  participant GW as API gateway
+  participant Pool as Pooled DB
+  participant Ded as Dedicated DB
+  %% step: Copy Acme's existing rows into the new dedicated database, table by table, filtered by tenant_id. Acme stays live on the pool throughout.
+  %% step: Logical replication with a row filter (PostgreSQL 15+) streams Acme's ongoing changes to the dedicated database.
+  %% step: Verify before switching: row counts and checksums per table, plus shadow reads of key queries against both databases.
+  %% step: The cutover starts. The gateway briefly holds or rejects Acme's writes. Every other tenant is unaffected.
+  %% step: Wait for replication lag to reach zero, so the dedicated database has every committed write.
+  %% step: Flip Acme's database in the tenant registry. The control plane is the single source of truth for routing.
+  %% step: The gateway picks up the new route for Acme.
+  %% step: Writes resume. The pause lasted seconds, not a maintenance window.
+  %% step: Acme's requests now go to the dedicated database.
+  %% step: Keep Acme's pooled rows for a rollback window, then delete them and update cost allocation.
+  M->>Ded: Bulk copy acme's rows
+  Pool->>Ded: Stream acme's changes (row-filtered logical replication)
+  M->>Ded: Verify counts, checksums, shadow reads
+  M->>GW: Pause writes for acme
+  Note over Pool,Ded: Wait until replication lag is zero
+  M->>CP: Set acme's database to dedicated
+  CP-->>GW: New route for acme
+  M->>GW: Resume writes for acme
+  GW->>Ded: acme's requests
+  Note over Pool: Old rows kept for the rollback window, then deleted
 ```
 
 ## When to Use / Trade-offs
@@ -306,7 +353,7 @@ Use **defence in depth**:
 5. **Application layer**: repositories still filter by tenant (for clarity and index use), and the tenant comes from verified context.
 6. **Tests**: automated cross-tenant access tests for every endpoint, and tests that a query without the tenant setting fails or returns nothing.
 
-Watch for performance (policies add predicates, so index on `tenant_id`), views and functions with `SECURITY DEFINER` that bypass RLS, and reporting replicas that need the same controls.
+Watch for performance (policies add predicates, so index on `tenant_id`), objects that run with their owner's privileges and so can bypass RLS (views, unless created with `security_invoker` in PostgreSQL 15+, and `SECURITY DEFINER` functions), and reporting replicas that need the same controls.
 
 **What the interviewer is looking for:**
 RLS mechanics including `FORCE`, transaction-local settings with pooling, roles that can bypass RLS, and testing.
@@ -600,6 +647,166 @@ Explicit trade-offs (blast radius, capacity, fixed cost), placement through the 
 - No tested capacity limit for a cell.
 - Cells that drift into different configurations.
 
+### How do you model users who belong to several tenants? {#multi-tenant-users}
+
+**Level:** Foundation
+
+**Model answer:**
+Separate **identity** from **membership**:
+- A **user** is a global identity: one login and one profile.
+- A **membership** links a user to a tenant with a role and a status: `(user_id, tenant_id, role, status)`. Authorisation is always checked against the membership for the **active** tenant, never against the user alone. A user can be an admin in one tenant and a viewer in another.
+
+How the active tenant works:
+- The user chooses a tenant (a tenant switcher, or a tenant subdomain), and the server issues a session or token **scoped to that tenant**, with `tenant_id` and the role as claims.
+- Switching tenants means getting a new token. Endpoints never take a tenant id from the request body and check membership themselves.
+
+Enterprise details:
+- **Per-tenant SSO.** A tenant can require its own identity provider (SAML or OIDC) for its members. Home-realm discovery uses verified email domains. A user who signs in with a password for one tenant must still go through that tenant's SSO to get its token.
+- **SCIM provisioning** from the tenant's identity provider creates and removes memberships. Deprovisioning removes that one membership, not the whole user.
+- **Guests** (consultants, auditors) are memberships with a guest role, and are audited like everyone else.
+
+**What the interviewer is looking for:**
+The user–membership split, tokens scoped to one active tenant, and how per-tenant SSO fits in.
+
+**Follow-ups:**
+- What happens when two tenants claim the same email domain?
+- What happens to a user's content when they leave one tenant?
+
+**Red flags:**
+- A `role` column on the user table.
+- Trusting a tenant id sent in the request body.
+
+### How do you test tenant isolation automatically? {#isolation-testing}
+
+**Level:** Senior
+
+**Model answer:**
+Make isolation a property the build checks, not something reviewers have to remember:
+
+1. **Two-tenant fixtures.** Seed tenants A and B with the same kinds of data.
+2. **Generated cross-tenant API tests.** From the OpenAPI spec or the router table, call every route that takes a resource id as tenant A with tenant B's ids, and expect 404. A 404 is better than a 403 because it doesn't reveal that the resource exists. For list endpoints, assert that none of B's ids appear. New routes are covered automatically, and a route the generator can't handle fails the build.
+3. **Database guards in CI.** Check that every table with a `tenant_id` column has RLS enabled and forced, and that the application role can't bypass it:
+
+   ```sql
+   -- Must return no rows.
+   SELECT c.relname
+   FROM pg_class c
+   JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'app'
+     AND c.relkind IN ('r', 'p')
+     AND EXISTS (SELECT 1 FROM pg_attribute a
+                 WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped)
+     AND NOT (c.relrowsecurity AND c.relforcerowsecurity);
+
+   -- Must also return no rows.
+   SELECT rolname FROM pg_roles WHERE rolname = 'app_user' AND (rolsuper OR rolbypassrls);
+   ```
+
+   Also test that a query without a tenant setting raises an error.
+4. **Asynchronous paths.** Warm a cache as A, then read as B. Publish a message for A, and check that B's data is untouched. Run a job for A, and check its output.
+5. **Static checks.** A lint rule that forbids using the raw database client outside `withTenantTx`, and code owners on data-access code.
+6. **Production probes.** Synthetic canary tenants that keep trying to read each other's data, with an alert on any success.
+
+**What the interviewer is looking for:**
+Generated tests that cover new endpoints automatically, database-level checks, and coverage of caches, queues and jobs.
+
+**Follow-ups:**
+- How would you test isolation in a search index shared by all tenants?
+- What would you check for GraphQL, where one query can reach many resources?
+
+**Red flags:**
+- An annual penetration test as the only check.
+- Tests that only ever run as a single tenant.
+
+### How do you give support engineers access to a tenant's data safely? {#support-access}
+
+**Level:** Senior
+
+**Model answer:**
+Start from **no standing access** to production customer data, and make the safe path the easy one:
+
+- **Tools before data.** A support console shows the tenant's configuration, entitlements, health, recent errors and job status from telemetry, without showing customer content. Most tickets need nothing more.
+- **Just-in-time access** when content is needed. A request tied to a ticket, approved by a second person (or by the customer, where the contract requires it, as with Microsoft's Customer Lockbox), scoped to one tenant, time-boxed to a few hours, and read-only by default.
+- **Impersonation through the application.** "View as this user" runs through the normal app, so tenant context, RLS and permissions still apply. Show a visible banner, record actions as "support on behalf of", block access to secrets, and require extra approval for writes.
+- **Audit everything.** Who accessed which tenant, why, when and what they viewed. Put it in the tenant's own exportable audit log.
+- **Break-glass for incidents.** A separate role with alarms on every use and a review afterwards.
+- **Residency.** Where the contract requires it, EU tenants are supported by staff in the EU.
+
+**What the interviewer is looking for:**
+No standing access, just-in-time grants with approval and expiry, impersonation that keeps isolation in force, and a full audit trail.
+
+**Follow-ups:**
+- How would you handle a support request that requires changing a tenant's data?
+- What would you show an enterprise customer who asks who accessed their data last month?
+
+**Red flags:**
+- Support engineers sharing a database admin login.
+- Impersonation that skips the audit log.
+
+### A large customer wants features nobody else has and asks to stay on an older version. How do you handle customisation in a multi-tenant product? {#tenant-customisation}
+
+**Level:** Architect
+
+**Model answer:**
+**The principle: one codebase, one version.** Every fork or pinned version multiplies testing, migrations, security patching and incident surface, and it is what turns SaaS back into on-premises consulting.
+
+Work through options from cheapest to most expensive:
+1. **Configuration.** Workflows, fields, notifications and branding as per-tenant settings.
+2. **A product feature behind an entitlement.** The request often reveals a gap other customers have too. Build it properly and sell it as a tier or an add-on.
+3. **Custom fields.** Per-tenant field definitions stored as validated JSON (a JSONB column in PostgreSQL), with GIN or expression indexes for the few that need fast queries.
+4. **Extension points.** Webhooks, events, a public API, embedded app frameworks, or sandboxed scripts (for example WebAssembly or V8 isolates with time and memory limits).
+5. **Integrations outside the core.** Professional services build on the public API, so nothing tenant-specific lives in the product.
+
+**On versions:** offer **rollout rings** instead of pinning. Enterprise tenants can sit in a later ring (getting each release a week or two after everyone else), get advance notice of visible changes behind flags, and have change freezes around their critical periods. Every ring converges on the same version within a bounded lag.
+
+**Commercially:** price custom work so its cost is visible, and write the "no forks" rule into contracts.
+
+**What the interviewer is looking for:**
+A firm line against forks and pinned versions, a ladder of customisation options, and rollout rings as the answer to the stability concern.
+
+**Follow-ups:**
+- How would you let tenants run custom logic without risking the whole pool?
+- How do you migrate tenants' custom-field data when the product adds a real field for it?
+
+**Red flags:**
+- `if (tenantId === 'acme')` in product code.
+- A branch per enterprise customer.
+
+### Design per-tenant usage metering that billing can trust. {#usage-metering}
+
+**Level:** Architect
+
+**Model answer:**
+**Separate three jobs:** *metering* (what was used), *rating* (what it costs) and *invoicing*. A billing platform can do rating and invoicing. You own the accuracy of metering.
+
+**Capture:**
+- Emit a usage event where consumption happens: `{ eventId, tenantId, meter, quantity, occurredAt, source }`.
+- Make `eventId` deterministic (for example, the request id plus the meter name), so retries produce duplicates that can be removed.
+- Record it with the business operation through a transactional outbox, so usage exists if and only if the operation committed. For API calls, gateway logs are a reasonable source.
+- **Counters versus gauges.** API calls are counters. Storage is a gauge: snapshot it on a schedule (hourly, say) and bill on the average or the peak, whichever the contract states.
+
+**Pipeline:**
+1. At-least-once stream, deduplicated by `eventId`.
+2. Aggregate per tenant, meter and hour, by event time, not arrival time.
+3. Accept late events up to a cut-off. After a billing period closes, later events are billed in the next period as adjustments.
+4. **Never edit history.** Corrections are new adjustment events with a reason.
+
+**Trust:**
+- **Reconcile** aggregates daily against sources of truth (storage sizes, database counts, provider invoices for resold usage). Alert on drift above an agreed threshold.
+- **Show tenants the same numbers** in a usage dashboard and API, broken down by day. Disputes drop when customers can see what they're paying for.
+- **Keep enforcement separate.** Real-time limits use fast approximate counters (in Redis, for example). Bill from the accurate pipeline, never from rate-limiter counters.
+
+**What the interviewer is looking for:**
+Idempotent capture tied to the business transaction, event-time aggregation with late-data rules, immutable corrections, reconciliation, and transparency to customers.
+
+**Follow-ups:**
+- How do you handle a tenant changing plans in the middle of a billing period?
+- How would you backfill usage after a pipeline outage?
+
+**Red flags:**
+- Billing from sampled logs or rate-limiter counters.
+- Silently recalculating past periods.
+
 ## Cheat Sheet
 
 ### Models
@@ -625,6 +832,16 @@ Explicit trade-offs (blast radius, capacity, fixed cost), placement through the 
 - **Entitlements as data** — plans define features, limits and isolation, checked through one service.
 - **Cost per tenant** — direct costs plus shared costs allocated by usage drivers.
 - **Fleet migrations** — backward-compatible changes, orchestrated per database, rolled out progressively.
+
+### Revisit
+
+- **Membership model** — a global user plus a membership per tenant with its own role. Tokens carry the active tenant.
+- **RLS fails closed** — with no tenant set, the policy's uuid cast raises an error (or, with `NULLIF`, matches nothing) instead of returning every tenant.
+- **RLS coverage check** — a CI query on `pg_class` proves every table with `tenant_id` has RLS enabled and forced.
+- **Just-in-time support access** — tied to a ticket, approved, scoped to one tenant, time-boxed, read-only by default and audited.
+- **Configuration over customisation** — settings, entitlements and extension points, never a fork per tenant.
+- **Rollout rings** — enterprise tenants can take releases later, but every ring converges on one version.
+- **Trusted metering** — deterministic event ids, event-time aggregation, corrections as adjustments, daily reconciliation.
 
 ## Further Reading
 
