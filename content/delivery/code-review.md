@@ -6,7 +6,7 @@ tags: [code-review, pull-requests, collaboration, quality]
 level: Senior
 estimatedMinutes: 60
 related: [solid-clean-code, ci-cd-pipelines, dora-metrics, mentorship]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -59,6 +59,40 @@ Customers in the EU see prices without VAT on the basket page (JIRA PRICE-412).
 Behind flag `price-display-policy`, rolled out to 10% of EU traffic first.
 Reviewer focus: the rounding in `applyVat` — I'm not sure banker's rounding is right here.
 ```
+
+### Worked example: splitting a 1,400-line pull request
+
+A pull request titled "Add bank transfer payments" has been waiting four days. Nobody wants to review 1,400 lines. Here's what's in it:
+
+| Part | Lines |
+|---|---|
+| Rename `PaymentMethod` values and move files into a `payments/methods/` folder | 420 |
+| Database migration: add `bank_reference` column, and backfill it | 90 |
+| New `BankTransferProvider` client and its tests | 380 |
+| Wire the provider into checkout | 120 |
+| Checkout UI for choosing bank transfer | 310 |
+| Remove old card-only code paths | 80 |
+
+**Re-cut it as a stack**, where each pull request is reviewable on its own, safe to merge, and goes to the right reviewers:
+
+| # | Pull request | Lines | Reviewer focus | Safe to merge because |
+|---|---|---|---|---|
+| 1 | Rename and move, **no behaviour change** | 420 | Quick scan, since it's mechanical. The description says how it was done (IDE refactoring) and tests are unchanged | Nothing behaves differently |
+| 2 | Add a nullable `bank_reference` column (expand only) | 30 | Platform or DBA: locks and compatibility | Old code ignores the column |
+| 3 | `BankTransferProvider` client and tests, not wired in | 380 | Payments team: API handling, retries, error mapping | Unused code |
+| 4 | Wire into checkout behind the `bank-transfer` flag, off by default | 120 | Payments: the flow and its failure handling | The flag is off |
+| 5 | Checkout UI behind the same flag | 310 | Frontend: UX, accessibility | The flag is off |
+| 6 | After rollout: remove the card-only paths and the flag | 80 | Owning team | All traffic uses the new path |
+
+The backfill becomes a separate job, run between PRs 2 and 4.
+
+What changes:
+- Each pull request takes **under 30 minutes** to review, so reviews arrive the same day instead of after four days.
+- **The right expertise reviews each part.** The DBA doesn't read UI code, and the frontend reviewer doesn't read migration SQL.
+- Problems surface earlier and in isolation. A design objection to the provider client doesn't block the rename.
+- **Rollout is controlled by the flag**, not the merge, so merging early carries little risk.
+
+Plan the stack before writing the code next time. The split follows the same seams as expand and contract and feature flags.
 
 ### What reviewers look at
 
@@ -143,6 +177,18 @@ sequenceDiagram
   participant CI as CI checks
   participant R as Reviewer
   participant M as Main branch
+
+  %% step: Before asking anyone, the author keeps the change small, reads their own diff, and writes a description covering why, what, how it was tested, and the risks.
+  %% step: Opening the pull request starts CI.
+  %% step: Machines check what machines can: formatting, lint, types, tests, security scans and size. The author fixes failures before asking for a human's time.
+  %% step: The author requests review. CODEOWNERS adds the owning team automatically for sensitive areas.
+  %% step: The reviewer looks at what tools can't judge: design fit, behaviour and edge cases, whether the tests would catch a break, and readability.
+  %% step: Comments are labelled by importance (nit, suggestion, question, blocking), so the author knows what must change before merging.
+  %% step: The author fixes the blocking items, replies to the rest, and pushes the changes.
+  %% step: They re-request review, ideally the same day.
+  %% step: The reviewer approves, because the change improves the codebase, even if it's not exactly how they'd have written it.
+  %% step: The author squash-merges and deletes the branch.
+  %% step: The whole loop is fast because each step is small. The first response should come within a few working hours.
   A->>A: Small change, self-review, clear description
   A->>CI: Open pull request
   CI-->>A: Format, lint, types, tests, scans, size check
@@ -629,6 +675,165 @@ Up-front proposals, automation, trusted committers, explicit service levels and 
 - "Contributions welcome" without process or capacity.
 - Owners rewriting every contribution themselves.
 
+### How should you review the tests in a pull request? {#reviewing-tests}
+
+**Level:** Foundation
+
+**Model answer:**
+Tests are code that protects the rest of the code, so they deserve as much attention as the change itself. Often more, because bad tests give false confidence for years.
+
+What to check:
+- **Do they test the behaviour that changed?** For a bug fix, there should be a test that fails without the fix. For a feature, tests for the main path *and* the edge cases: empty input, limits, errors, concurrency, permissions.
+- **Would they fail if the code broke?** Mentally break the code (invert a condition, remove a line). If no test would notice, the tests are decoration. Asserting only that "no exception was thrown", or snapshotting huge outputs nobody reads, are common examples.
+- **Are they testing behaviour, not implementation?** Tests coupled to private details (call counts on internal mocks, the exact order of internal steps) break on every refactor without catching bugs.
+- **Is the test at the right level?** Logic in unit tests, integration with the database or another service in integration or contract tests, and only critical journeys end to end.
+- **Are they readable?** A clear name stating the behaviour, arrange–act–assert structure, and only the setup that matters for this test.
+- **Are they deterministic?** No real time, randomness, network calls or ordering assumptions that make them flaky. Use controlled clocks and seeds.
+
+If a change has no tests, ask why. Sometimes the answer is reasonable, such as a configuration change covered by an existing smoke test. Often it isn't.
+
+**What the interviewer is looking for:**
+Tests that would fail on breakage, coverage of edge cases, behaviour over implementation, the right level, readability and determinism.
+
+**Follow-ups:**
+- How would you check that a bug-fix test really reproduces the bug?
+- When are snapshot tests useful, and when are they harmful?
+
+**Red flags:**
+- Approving because "coverage went up".
+- Tests that mock the unit under test.
+
+### Some changes can't be small, such as a generated migration, a framework upgrade or a large refactor. How do you review them? {#reviewing-large-changes}
+
+**Level:** Senior
+
+**Model answer:**
+**First, challenge whether it really can't be split.** Most large changes can be cut into preparatory refactors, a mechanical part and a behavioural part, or staged behind a flag. When it truly can't, change *how* it's reviewed.
+
+**Separate the mechanical from the meaningful:**
+- Put **generated or mechanical changes** (codemods, renames, lockfile updates, generated clients, formatting) in their own commits or pull requests, with the exact command used to produce them. Reviewers check the command and its configuration, spot-check the output, and rely on CI.
+- Keep the **hand-written changes** separate and small, and review them properly.
+
+**Guide the reviewer:**
+- A description with a **map**: what changed, in what order to read it, which files carry the real logic, and which are mechanical.
+- **Comments on the diff** by the author, pointing at the risky parts and explaining decisions.
+- A **walkthrough call** for very large changes, recorded or summarised for others.
+
+**Use more verification, not just more eyes:**
+- Strong automated evidence: the full test suite, contract tests, performance comparisons, and a **canary or shadow run** in production where possible.
+- For framework or major dependency upgrades, a staged rollout with monitoring, and a tested rollback.
+
+**Share the work:** split the review by area among several reviewers, each owning a part, with one person accountable for the whole.
+
+**What the interviewer is looking for:**
+Pushing back on size first, separating mechanical from behavioural changes, guiding reviewers, and leaning on automated and production evidence.
+
+**Follow-ups:**
+- How would you review a codemod applied to 3,000 files?
+- What would make you reject a large change outright?
+
+**Red flags:**
+- "LGTM" on 5,000 lines after ten minutes.
+- Generated code mixed into hand-written changes.
+
+### What should every reviewer look for from a security point of view? {#security-in-review}
+
+**Level:** Senior
+
+**Model answer:**
+Reviewers don't need to be security specialists, but they should recognise the common patterns behind real vulnerabilities, and know when to call in a specialist.
+
+**Look for:**
+- **Input reaching dangerous places**: user-controlled data in SQL (use parameters), shell commands, file paths, HTML output (escaping), redirects, URLs fetched by the server (SSRF), and deserialisation.
+- **Authorisation**: does every new endpoint or query check that *this user* may access *this resource*? Insecure direct object references (`/orders/{id}` without an ownership check) are one of the commonest serious bugs.
+- **Authentication and sessions**: changes to login, tokens, password reset, cookies (`Secure`, `HttpOnly`, `SameSite`) and CORS.
+- **Secrets and sensitive data**: credentials in code or config, personal data in logs, error messages that reveal internals.
+- **Dependencies**: new packages. Are they needed, maintained, popular, and spelled correctly (typosquatting)?
+- **Cryptography**: home-made crypto, weak algorithms, predictable random values for tokens.
+- **Infrastructure and pipeline changes**: public exposure, broad IAM permissions, workflow changes that grant secrets to untrusted code.
+
+**Make it systematic:**
+- Automated checks catch much of this first: SAST, dependency and secret scanning, and IaC policy checks. Reviewers focus on logic, especially authorisation, which tools handle poorly.
+- **CODEOWNERS** routes security-sensitive areas (authentication, payments, crypto, workflows) to people with the right expertise.
+- A short checklist in the pull request template for changes touching those areas, and threat modelling for new features before the code exists.
+
+**What the interviewer is looking for:**
+Common vulnerability patterns with authorisation emphasised, dependency and pipeline risks, automation first, and routing sensitive changes to experts.
+
+**Follow-ups:**
+- How would you spot a missing authorisation check in a diff?
+- What would you do if you found a vulnerability in a colleague's merged code?
+
+**Red flags:**
+- Assuming security scanning tools catch authorisation bugs.
+- Approving new dependencies without a look.
+
+### How should design review and code review work together for changes that span many pull requests and teams? {#design-review-vs-code-review}
+
+**Level:** Architect
+
+**Model answer:**
+Code review is the **wrong place** to discover that the design is wrong. By then the work is done, the author is invested, and the reviewer sees one slice of a bigger change. So separate the two.
+
+**Before the code: design review.**
+- For changes that are architecturally significant (new services, data model changes, new dependencies, cross-team contracts, security-sensitive flows), write a **short design doc or RFC**: the problem, options considered, the chosen approach, risks, and rollout and migration plans.
+- Review it with the right people: the owning teams of affected systems, platform and security where relevant, and a senior engineer from outside the team for perspective.
+- Record the decision as an **ADR**, so later code reviews can point to it instead of reopening the debate.
+- Keep it proportionate. A one-page doc and a 30-minute discussion is often enough.
+
+**During implementation: code review against the agreed design.**
+- Reviewers check that the code **implements the design well**: correctness, tests, readability. Design debates in code review are a sign the design step was skipped or unclear.
+- Link pull requests to the design doc, and note any **deviations** found during implementation. Significant ones go back to the design discussion.
+- **Contract changes** between teams (APIs, events, schemas) get their own pull requests reviewed by consuming teams, ideally with contract tests.
+
+**Decide what counts as significant**, with written criteria such as "new public API, new data store, change to authentication". Otherwise either everything gets a design review (slow) or nothing does (rework).
+
+**What the interviewer is looking for:**
+Design discussions before code, proportionate design docs and ADRs, code review focused on implementation, contract changes reviewed by consumers, and clear criteria for what needs design review.
+
+**Follow-ups:**
+- A reviewer raises a fundamental design objection on a nearly finished change. What now?
+- How do you stop design reviews becoming a bottleneck?
+
+**Red flags:**
+- Architecture decided in pull request comments.
+- Design reviews required for every change.
+
+### A respected senior engineer's reviews are harsh and slow, and several people have started avoiding them. What do you do? {#harsh-reviewer}
+
+**Level:** Architect
+
+**Model answer:**
+This hurts the team twice: people route work away from the most experienced reviewer, and others learn that harshness is the standard. It needs addressing directly, but fairly.
+
+**Understand it first:**
+- Look at examples: the comments, their tone, how many are blocking, and turnaround times. Talk to a few people who've received them.
+- Talk privately with the engineer. Often they care deeply about quality, are overloaded, and don't realise the effect. Ask how they see their reviews and what's making them slow.
+
+**Give specific feedback:**
+- Use examples and their impact: "On these three pull requests, comments like 'this is wrong' without an explanation left authors unsure what to change. Two of them waited four days."
+- Be clear about expectations: **kind, specific, explained** comments, labelled by importance, and a response within the team's agreed time.
+- Separate standards from style: their standards may be right, and the goal is to keep them while changing the delivery.
+
+**Change the system too:**
+- **Team review norms** in writing: comment labels, response times, and "approve when it improves the codebase". That makes it a team standard rather than one person's problem.
+- **Reduce their load**: if they're the only reviewer for critical areas, grow other reviewers through pairing on reviews, and spread CODEOWNERS.
+- **Move recurring issues upstream**: if they keep flagging the same patterns, turn them into lint rules, templates or a short guide. That's a great use of their expertise.
+- **Use their strength**: invite them to run design reviews or teach a session on the areas they care about.
+
+**Afterwards:** check in after a few weeks, ask the team how it's going, and recognise improvement. If nothing changes, escalate it as a performance issue, because behaviour that drives people away from collaboration affects the whole team.
+
+**What the interviewer is looking for:**
+Gathering evidence, a private and specific conversation, clear expectations, structural fixes (norms, load, automation), using their expertise well, and follow-through.
+
+**Follow-ups:**
+- What if they say the team's code quality really is poor?
+- How do you handle it if they're senior to you?
+
+**Red flags:**
+- Ignoring it because they're "the best engineer".
+- Public criticism in a team meeting.
+
 ## Cheat Sheet
 
 ### Purpose and principles
@@ -653,6 +858,16 @@ Up-front proposals, automation, trusted committers, explicit service levels and 
 - **Ship / Show / Ask** — merge directly, merge then show, or ask before merging, chosen by risk.
 - **Separation of duties** — enforced by branch protection, with pull request and pipeline records as audit evidence.
 - **Metrics to avoid** — comments per reviewer, lines per developer and individual leaderboards.
+
+### Revisit
+
+- **Splitting a big PR** — mechanical refactor, expand-only migration, unwired new code, flagged wiring, flagged UI, later clean-up. Each piece is safe to merge and goes to the right reviewer.
+- **Review loop** — self-review and green CI first, labelled comments, same-day turnaround, and approve when it improves the codebase.
+- **Reviewing tests** — would they fail if the code broke? Edge cases, behaviour over implementation, the right level, deterministic.
+- **Unavoidably large changes** — separate generated or mechanical changes with the command that made them, map the diff, and lean on automated and production evidence.
+- **Security in review** — input reaching dangerous sinks, authorisation on every resource, secrets and logs, new dependencies, pipeline changes.
+- **Design review first** — proportionate design docs and ADRs before code. Code review checks the implementation against them.
+- **Harsh reviewer** — evidence, a private specific conversation, written team norms, spread the load, and turn repeated comments into tooling.
 
 ## Further Reading
 

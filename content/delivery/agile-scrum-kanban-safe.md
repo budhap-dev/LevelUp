@@ -6,7 +6,7 @@ tags: [agile, scrum, kanban]
 level: Senior
 estimatedMinutes: 60
 related: [estimation, dora-metrics]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -60,9 +60,34 @@ No prescribed roles or iterations; you start with what you do now and evolve.
 
 **Little's Law:** average WIP = average throughput × average cycle time. With throughput fixed by capacity, **cutting WIP cuts cycle time**. A team with 20 items in progress and throughput of 5/week has an average cycle time of 4 weeks; cutting WIP to 10 halves it.
 
+### Worked example: what the board's numbers say
+
+A team's last 12 weeks show a **throughput of about 6 items a week**, with cycle times of **5 days at the 50th percentile** and **12 days at the 85th**. Today the board has **24 items in progress**.
+
+**Little's Law** says that if WIP stays at 24 and throughput stays at 6 a week, the average cycle time will drift towards 24 ÷ 6 = **4 weeks**. That's far above the 5 days people are used to. WIP has crept up, and delivery times will follow, even though everyone feels busy and productive.
+
+**Work item age** shows where the risk already is. Here are the six oldest of the 24 items:
+
+| Item | Column | Age (days) | Compared with history |
+|---|---|---|---|
+| PAY-112 | Waiting for security review | 31 | Older than 95% of past items |
+| PAY-118 | In review | 23 | Above the 85th percentile |
+| PAY-121 | Development | 14 | Above the 85th percentile |
+| PAY-130 | Development | 9 | Getting close |
+| PAY-133 | Testing | 4 | Normal |
+| PAY-135 | Development | 3 | Normal |
+
+What the team decides at stand-up:
+1. **Stop starting.** No new items until WIP is back under a limit, for example 12 for six people.
+2. **Swarm on the oldest items.** PAY-112 is waiting on another team, so someone takes it up with the security team today. PAY-118 gets two reviewers this morning.
+3. **Make the waiting visible.** "Waiting for security review" becomes its own column, because 31 days of waiting is a process problem, not a people problem.
+4. **Forecast honestly.** For a new item, "85% chance within 12 days" holds only once WIP is back to normal. Until then, say so.
+
+Age is the leading signal. Cycle time is only known once an item finishes, but an ageing item can be helped while it's still in progress.
+
 ### Scaling frameworks
 
-- **SAFe (Scaled Agile Framework):** organises teams into Agile Release Trains (50–125 people), with **PI (Program Increment) Planning** every 8–12 weeks, a Release Train Engineer, portfolio management layers and many roles. Gives large enterprises a structured way to align; criticised for heaviness and for re-creating waterfall planning at a larger scale.
+- **SAFe (Scaled Agile Framework):** organises teams into Agile Release Trains (50–125 people), with **PI Planning** (PI now stands for Planning Interval, renamed from Program Increment in SAFe 6.0, 2023) every 8–12 weeks, a Release Train Engineer, portfolio management layers and many roles. Gives large enterprises a structured way to align; criticised for heaviness and for re-creating waterfall planning at a larger scale.
 - **LeSS (Large-Scale Scrum):** one Product Owner and one Product Backlog for many teams; emphasises organisational simplification.
 - **Nexus:** Scrum.org's framework for 3–9 Scrum teams with an integration team.
 - **"Spotify model":** squads, tribes, chapters, guilds — a description of one company's organisation at a point in time, not a framework to copy (Spotify itself has said so).
@@ -93,6 +118,32 @@ flowchart LR
     DN --> MET["Flow metrics: cycle time, throughput, age"]
     MET --> RP
   end
+```
+
+### A WIP limit doing its job
+
+```mermaid
+sequenceDiagram
+  participant D as Developer
+  participant B as Kanban board
+  participant R as Reviewer
+  participant P as Product owner
+  %% step: A developer finishes coding item 41 and wants to move it to Review.
+  %% step: The board shows Review already at its limit of 3 items, so item 41 stays where it is. The limit is a signal, not a nuisance.
+  %% step: The obvious move, starting item 42, would add more work in progress. The team's explicit policy says to help downstream first.
+  %% step: So the developer pairs with a reviewer on item 37, the oldest item in Review.
+  %% step: Item 37 is approved and moves to Done. Finishing it freed capacity for everyone behind it.
+  %% step: Review now has space, so item 41 moves in.
+  %% step: At the weekly replenishment, the product owner has ordered the top of the Ready column, so the next pull is a deliberate choice.
+  %% step: With WIP back under its limit, the developer pulls item 42. Less was started, and more finished.
+  D->>B: Item 41 coded, move to Review?
+  B-->>D: Review full, 3 of 3
+  Note over D: Policy: help downstream before starting new work
+  D->>R: Pair on reviewing item 37, the oldest
+  R->>B: Item 37 to Done
+  B-->>D: Review has space, item 41 moves in
+  P->>B: Ready column ordered at replenishment
+  D->>B: Pull item 42 from Ready
 ```
 
 ## When to Use / Trade-offs
@@ -497,6 +548,167 @@ Outcome-based, multi-dimensional measurement used for learning, with awareness o
 - Measuring adherence to ceremonies or velocity.
 - Ranking teams.
 
+### What is a Sprint Goal, and why does it matter more than the list of tickets? {#sprint-goal}
+
+**Level:** Foundation
+
+**Model answer:**
+The **Sprint Goal** is the single objective for the sprint, agreed at Sprint Planning: *why* this sprint is valuable. The Sprint Backlog is the plan for achieving it. For example: "Customers can pay by bank transfer in the UK", rather than "PAY-112, PAY-118, PAY-121".
+
+Why it matters:
+- **Focus and trade-offs.** When something unexpected happens, the team asks "does this help the goal?" Scope can change during the sprint, but the goal holds. Without a goal, every ticket is equally important, so nothing is.
+- **Collaboration.** A shared outcome makes people help each other finish, instead of each person working through their own tickets.
+- **Meaningful reviews.** The Sprint Review discusses progress towards a product outcome with stakeholders, instead of reading out a ticket list.
+- **Commitment to something worth committing to.** The Scrum Guide makes the Sprint Goal the Developers' commitment for the Sprint Backlog. Committing to an outcome allows adapting the plan. Committing to a fixed list doesn't.
+
+A good Sprint Goal is **outcome-oriented, small enough to achieve, and connected to the Product Goal**. If a team can never write one, because its work is unrelated tickets and interruptions, that's a useful finding: Kanban may fit better, or the backlog needs reshaping.
+
+**What the interviewer is looking for:**
+The goal as the sprint's purpose, its role in trade-offs and collaboration, and what its absence reveals.
+
+**Follow-ups:**
+- Halfway through the sprint, the goal turns out to be impossible. What happens?
+- How would you write a Sprint Goal for a platform team?
+
+**Red flags:**
+- "The goal is to finish all the tickets."
+- Treating the Sprint Backlog as a fixed contract.
+
+### How do you set WIP limits, and what should happen when one is reached? {#setting-wip-limits}
+
+**Level:** Senior
+
+**Model answer:**
+**Setting them:**
+- **Start from current reality.** Count what's in progress per column today, then set limits a little below that. A limit nobody ever reaches changes nothing, and a limit far below reality is ignored.
+- **Common starting points**: per column, roughly the number of people who work in it, or slightly fewer. For the whole team, fewer items than people encourages pairing and swarming.
+- **Limit waiting states too** ("Ready for review", "Waiting for QA"). Queues are where most cycle time goes.
+- **Adjust from data.** If items age while people are idle, the limit is too low somewhere. If cycle times keep growing, it's too high.
+
+**When a limit is reached, the important part:**
+- **Don't start new work.** Look **downstream** (to the right) for something to help finish: review, test, unblock, or pair.
+- If the bottleneck is someone else (another team, an approver), **escalate the wait** and make it visible, instead of starting something new to stay busy.
+- Treat repeated breaches as a **conversation in the retrospective**: is the limit wrong, is there a bottleneck skill, or is work too large?
+
+**Why it works:** Little's Law. With throughput roughly fixed by capacity, less work in progress means shorter cycle times, less context-switching and faster feedback. The limit also makes bottlenecks visible, because work piles up in front of them.
+
+**Expect discomfort.** People will sometimes be "idle" for coding while helping others finish. Explain that the goal is finishing work, not keeping everyone busy.
+
+**What the interviewer is looking for:**
+Setting limits from current WIP, limiting queues, the stop-starting response, escalating external waits, and adjusting from data.
+
+**Follow-ups:**
+- One person is the only one who can do reviews for a part of the codebase. What do you do?
+- How do WIP limits apply to expedite items?
+
+**Red flags:**
+- Limits set once and never revisited.
+- Starting new work whenever a column is full.
+
+### How do you run a Sprint Review that stakeholders find worth attending? {#sprint-review}
+
+**Level:** Senior
+
+**Model answer:**
+The Scrum Guide describes the Sprint Review as a **working session** with stakeholders to inspect the outcome of the sprint and **decide what to do next**. It isn't a demo to applause, or a status report.
+
+**Before:**
+- Invite the **right people**: users or their representatives, the people who decide priorities, and partner teams.
+- Prepare a short agenda: the Sprint Goal and whether it was met, what changed in the product, and the **decisions you need** from them.
+
+**During:**
+- **Show working software** in a realistic environment, ideally with stakeholders using it themselves. No slides of tickets.
+- **Show evidence**: usage data, conversion, error rates or support tickets from what shipped previously. Did earlier work achieve what was expected?
+- **Discuss what's next**: changes in the market, budget or deadlines, and how the Product Backlog should change in response. The Product Owner leaves with updated priorities.
+- Be honest about what didn't work or wasn't finished. Hiding it destroys trust faster than missing a goal.
+
+**After:**
+- Update the Product Backlog with what was learned, and share a short written summary with those who couldn't attend.
+
+**Signs it isn't working:** stakeholders stop coming, nothing in the backlog ever changes as a result, or the team spends a day preparing a presentation. Fix it by asking stakeholders what they'd need from the session, shortening it, and making decisions the visible output.
+
+**What the interviewer is looking for:**
+Review as a decision-making working session, real software and evidence, honest reporting, and backlog changes as the outcome.
+
+**Follow-ups:**
+- Key stakeholders never attend. What do you do?
+- How do you run a review for work with no user interface, such as a platform team?
+
+**Red flags:**
+- A slide deck listing completed tickets.
+- No change to the backlog after the review.
+
+### How do you make agile practices work for a team spread across time zones? {#distributed-agile}
+
+**Level:** Architect
+
+**Model answer:**
+Distance and time zones mostly hurt **feedback speed and shared understanding**, the two things agile depends on. Design for them deliberately.
+
+**Use the overlap well:**
+- Find the **overlapping hours** and protect them for what needs live interaction: planning, refinement of hard items, design discussions, pairing, and retrospectives.
+- Keep meetings short, and move status updates **out of meetings**: written stand-ups in a channel, with the live session for blockers and coordination.
+
+**Make written collaboration first-class:**
+- Decisions recorded in writing (ADRs, design docs, ticket comments) so people in other zones aren't excluded from them.
+- **Small, well-described pull requests** and clear acceptance criteria, so work can be handed over without a conversation.
+- Recorded demos and reviews with written summaries.
+
+**Shape the work to fit:**
+- Give each location **ownership of whole pieces** (a service, a feature), rather than splitting one feature across zones so every question waits a day.
+- **Follow-the-sun handovers** work for operations, with written handover notes. They work poorly for development work that needs shared design context.
+- If the overlap is under two hours, consider whether it's really one team, or two teams with a clear interface between them.
+
+**Keep it human:**
+- Rotate meeting times so the same people aren't always on calls at night.
+- Meet in person periodically, especially when a team forms or starts major new work.
+- Watch for the quieter or remote members being left out, in discussions and in career opportunities.
+
+**Measure** cycle time, time waiting for answers or reviews, and team health surveys by location.
+
+**What the interviewer is looking for:**
+Protecting overlap time, written-first collaboration, team and work boundaries aligned with time zones, fairness, and measuring waiting time.
+
+**Follow-ups:**
+- Reviews from another time zone add a day to every pull request. What changes?
+- When would you split a distributed team into two?
+
+**Red flags:**
+- Every ceremony live, regardless of time zones.
+- One feature split across three time zones with daily handovers.
+
+### How would you move an organisation from annual project funding to funding persistent product teams? {#product-funding}
+
+**Level:** Architect
+
+**Model answer:**
+**The problem with project funding:** a fixed scope, budget and date are approved a year ahead, teams form and disband around projects, and success is measured by delivering the plan rather than by outcomes. Learning mid-year can't change much without a new business case.
+
+**The target model:**
+- **Fund stable teams aligned to products or value streams**, with a budget for their capacity (mostly people) over a period, such as a year reviewed quarterly.
+- **Steer with outcomes**: each product area has goals and measures (OKRs, revenue, adoption, cost to serve). Leadership reallocates capacity between areas at **quarterly portfolio reviews**, based on results and strategy.
+- **Guardrails instead of business cases for every item**: spending limits, investment themes (growth, retention, platform, compliance) with target percentages, and lightweight approval for large new bets.
+
+**How to move there:**
+1. **Start with one or two product areas** as a pilot, with a finance partner involved from the beginning.
+2. **Agree how to account for it**: work with finance on cost allocation, and how capitalisation of software development works for persistent teams. Accounting rules shouldn't silently force the old model back.
+3. **Define outcomes and the review rhythm** before the money moves, so leadership has the visibility that used to come from project plans.
+4. **Keep big bets visible**: large initiatives still get a lightweight case and checkpoints, but run within team capacity rather than as separate projects.
+5. **Expand** area by area, adjusting governance with what's learned.
+
+**Risks:** loss of visibility for executives (replace it with outcome reporting, not status reports), teams becoming comfortable without clear goals, and old project management habits continuing under new names.
+
+**What the interviewer is looking for:**
+Why project funding conflicts with agile delivery, capacity funding with outcome steering and guardrails, finance partnership including accounting, and an incremental transition.
+
+**Follow-ups:**
+- The CFO asks how they'll know the money isn't wasted. What do you show them?
+- How do you fund a cross-cutting initiative that needs several teams?
+
+**Red flags:**
+- Changing the funding model without involving finance.
+- Persistent teams with no outcomes to answer for.
+
 ## Cheat Sheet
 
 ### Foundations
@@ -519,6 +731,16 @@ Outcome-based, multi-dimensional measurement used for learning, with awareness o
 - **Walk the board** — stand-ups right to left on work items, not round-robin status.
 - **SAFe** — Agile Release Trains and PI Planning; alignment at scale, risk of heaviness.
 - **Reduce dependencies first** — team design and architecture before coordination frameworks.
+
+### Revisit
+
+- **Little's Law in practice** — WIP ÷ throughput predicts average cycle time. 24 items at 6 a week means about 4 weeks, whatever the team's history.
+- **Work item age** — the leading signal. Items older than the 85th-percentile cycle time get swarmed now.
+- **WIP limit reached** — stop starting, help downstream, and escalate external waits instead of picking up new work.
+- **Sprint Goal** — the sprint's single objective and the Developers' commitment. Scope can change while the goal holds.
+- **Sprint Review** — a working session with real software and evidence that changes the backlog. Not a ticket demo.
+- **Distributed teams** — protect overlap for live collaboration, write decisions down, and align ownership with time zones.
+- **Product funding** — fund persistent teams, steer by outcomes in quarterly reviews, use guardrails, and bring finance in early.
 
 ## Further Reading
 
