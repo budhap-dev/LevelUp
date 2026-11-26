@@ -7055,5 +7055,206 @@
       "data-engineering-basics",
       "data-modelling"
     ]
+  },
+  {
+    "id": "optimistic-concurrency",
+    "term": "Optimistic concurrency control",
+    "aka": [
+      "optimistic locking",
+      "version column"
+    ],
+    "group": "data",
+    "definition": "Detecting conflicting updates by checking, at write time, that the data still has the version the writer read, instead of locking it while the user works.",
+    "details": [
+      "Implemented as UPDATE ... WHERE id = ? AND version = ?, where zero rows means a conflict.",
+      "Over HTTP it maps to ETag and If-Match, with 412 Precondition Failed."
+    ],
+    "useCases": [
+      "Two support agents editing the same order."
+    ],
+    "related": [
+      "data-modelling",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "time-zone-database",
+    "term": "Time-zone database (tzdata)",
+    "aka": [
+      "IANA time zone",
+      "Olson database"
+    ],
+    "group": "data",
+    "definition": "The maintained database of the world's time-zone rules and their history, identified by names such as Europe/London, used to convert between local times and UTC instants.",
+    "details": [
+      "Rules change several times a year, sometimes at short notice, so keep it updated everywhere.",
+      "Store future local events as a local time plus a zone name, not a fixed offset."
+    ],
+    "useCases": [
+      "Appointments and recurring schedules in users' local time."
+    ],
+    "related": [
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "double-entry-ledger",
+    "term": "Double-entry ledger",
+    "aka": [
+      "ledger"
+    ],
+    "group": "data",
+    "definition": "A record of money movements in which every transaction consists of balanced entries (total debits equal total credits) and entries are never changed, so balances can always be explained.",
+    "details": [
+      "Corrections are reversing transactions, not edits.",
+      "Balances are derived from entries, or maintained in the same database transaction."
+    ],
+    "useCases": [
+      "Wallets, marketplaces and payment platforms."
+    ],
+    "related": [
+      "data-modelling",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "polymorphic-association",
+    "term": "Polymorphic association",
+    "aka": [],
+    "group": "data",
+    "definition": "A relationship in which an entity can belong to one of several parent types, such as a comment on a post, photo or video.",
+    "details": [
+      "The type + id column pattern can't have a foreign key.",
+      "Alternatives: a nullable FK per parent with an exactly-one check, or a shared supertype table."
+    ],
+    "useCases": [
+      "Comments, reactions or tags that apply to many kinds of content."
+    ],
+    "related": [
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "query-plan",
+    "term": "Query plan",
+    "aka": [
+      "execution plan",
+      "EXPLAIN"
+    ],
+    "group": "data",
+    "definition": "The steps a database chooses to execute a query: which indexes and scans to use, the join order and the join algorithms, based on estimated costs from table statistics.",
+    "details": [
+      "EXPLAIN shows estimates, and EXPLAIN ANALYZE runs the query and shows actual rows and times.",
+      "Large gaps between estimated and actual rows point to stale statistics."
+    ],
+    "useCases": [
+      "Finding why a query that took 20 ms now takes 4 s."
+    ],
+    "related": [
+      "databases-sql-nosql",
+      "performance-load-testing"
+    ]
+  },
+  {
+    "id": "mvcc",
+    "term": "MVCC",
+    "aka": [
+      "multi-version concurrency control"
+    ],
+    "group": "data",
+    "definition": "A concurrency method in which writes create new row versions and each transaction reads the versions visible at its snapshot, so readers and writers don't block each other.",
+    "details": [
+      "In PostgreSQL, VACUUM removes old versions once no transaction needs them.",
+      "Long-running or idle-in-transaction sessions block that clean-up and cause bloat."
+    ],
+    "useCases": [
+      "Running a long report while orders keep being written."
+    ],
+    "related": [
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "point-in-time-recovery",
+    "term": "Point-in-time recovery (PITR)",
+    "aka": [
+      "PITR",
+      "WAL archiving"
+    ],
+    "group": "data",
+    "definition": "Restoring a database to any chosen moment by restoring a base backup and replaying the archived transaction log up to that moment.",
+    "details": [
+      "The RPO is limited by how far behind the log archive is.",
+      "Replicas aren't backups: they copy mistakes too."
+    ],
+    "useCases": [
+      "Recovering from a table dropped 40 minutes ago."
+    ],
+    "related": [
+      "databases-sql-nosql",
+      "cloud-fundamentals"
+    ]
+  },
+  {
+    "id": "keyset-pagination",
+    "term": "Keyset pagination",
+    "aka": [
+      "cursor pagination",
+      "seek method",
+      "search_after"
+    ],
+    "group": "data",
+    "definition": "Paginating by remembering the sort values of the last item returned and asking for items after them, instead of skipping a number of rows.",
+    "details": [
+      "Stays fast at any depth because an index finds the starting point directly.",
+      "Needs a unique tiebreaker in the sort for stable ordering."
+    ],
+    "useCases": [
+      "Infinite scroll and APIs over large result sets."
+    ],
+    "related": [
+      "databases-sql-nosql",
+      "search-systems",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "learning-to-rank",
+    "term": "Learning to rank (LTR)",
+    "aka": [
+      "LTR"
+    ],
+    "group": "data",
+    "definition": "Using a machine-learning model trained on relevance judgements or behaviour data to order search results, usually by re-ranking the top candidates from a fast first stage.",
+    "details": [
+      "Gradient-boosted trees such as LambdaMART are a common choice.",
+      "Click data must be corrected for position bias."
+    ],
+    "useCases": [
+      "E-commerce search blending text relevance with popularity, stock and conversion signals."
+    ],
+    "related": [
+      "search-systems"
+    ]
+  },
+  {
+    "id": "hnsw",
+    "term": "HNSW",
+    "aka": [
+      "hierarchical navigable small world"
+    ],
+    "group": "data",
+    "definition": "A graph-based approximate nearest-neighbour index, widely used for vector search, that finds similar vectors by navigating layered proximity graphs.",
+    "details": [
+      "M and ef_construction shape the graph, and ef_search trades recall against latency.",
+      "It works best in memory, so quantisation is often used to cut memory."
+    ],
+    "useCases": [
+      "Semantic search and RAG retrieval over millions of embeddings."
+    ],
+    "related": [
+      "search-systems",
+      "llms-rag-agents"
+    ]
   }
 ]

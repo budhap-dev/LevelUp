@@ -6,7 +6,7 @@ tags: [databases, modelling]
 level: Senior
 estimatedMinutes: 60
 related: [databases-sql-nosql, domain-driven-design]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -38,7 +38,7 @@ status: complete
 
 - **Surrogate keys** (UUID/ULID/bigint identity) — stable, meaningless, never change; default for most tables.
 - **Natural keys** (email, ISBN, country code) — meaningful but can change or be reused; enforce with **unique constraints** in addition to the surrogate key.
-- **UUIDv7/ULID** give time-ordered IDs (better index locality than random UUIDv4) and can be generated anywhere.
+- **UUIDv7/ULID** give time-ordered IDs (better index locality than random UUIDv4) and can be generated anywhere. PostgreSQL 18 (2025) generates UUIDv7 natively with `uuidv7()`; the example below uses `gen_random_uuid()` (v4), which works on older versions.
 - Public identifiers: consider prefixed, opaque IDs (`ord_01J…`) for APIs; never expose sequential IDs that leak volumes or allow enumeration without authorisation checks.
 
 ### Normal forms (briefly)
@@ -73,6 +73,22 @@ CREATE INDEX orders_tenant_customer_placed ON orders (tenant_id, customer_id, pl
 - **Snapshots:** copy data that must not change with the source (address and prices on an order).
 - **Enums:** check constraints or reference tables; plan how values evolve.
 
+### Worked example: a future appointment and a time-zone rule change
+
+In September 2022 a clinic in Mexico City books a follow-up for **09:00 on 15 April 2023**, local time. Under the rules at the time, Mexico observed daylight saving time from the first Sunday of April, so 15 April 2023 would be UTC−5.
+
+| Stored as | What was saved | What happened in October 2022 | What the clinic shows in April 2023 |
+|---|---|---|---|
+| **Instant (UTC)** | `2023-04-15T14:00Z`, converted at booking with the old rules | Mexico abolished daylight saving time. The time-zone database update made 15 April UTC−6 | 14:00Z is now **08:00** local. The patient is told the wrong time |
+| **Local time + zone** | `2023-04-15 09:00`, `America/Mexico_City` | Same rule change | Converted when needed with current rules: 09:00 local = 15:00Z. **Correct** |
+
+The rule that follows:
+- **Past events and exact moments** (a payment captured, a message sent): store the **instant** in UTC (`timestamptz`). What happened can't be changed by later rule changes.
+- **Future events defined in people's local time** (appointments, store opening hours, a daily 09:00 report): store the **local date-time plus an IANA zone id**, not an offset such as `-05:00`. Compute the instant at the last responsible moment, such as when scheduling the reminder.
+- Keep the time-zone database (tzdata) up to date in every runtime and database. Rule changes happen several times a year somewhere, sometimes with only weeks' notice.
+
+Recurring events need the same care. "Every Monday at 09:00 London time" is a rule plus a zone. It isn't a list of instants computed once, because the offset changes twice a year.
+
 ### History and temporal data
 
 - **Audit tables / change data capture:** who changed what and when.
@@ -105,6 +121,38 @@ flowchart LR
   F --> G["Operate: monitor queries, evolve with expand-contract"]
   G -->|"new requirements"| C
 ```
+
+### Two people editing the same order
+
+```mermaid
+sequenceDiagram
+  participant A as Agent Asha
+  participant B as Agent Ben
+  participant S as Orders service
+  participant DB as Database
+  %% step: Asha opens order 981 in the support tool.
+  %% step: The service returns it with its version number, 7. The client keeps the version with the data it shows.
+  %% step: A moment later, Ben opens the same order.
+  %% step: He also gets version 7.
+  %% step: Asha saves a new delivery address. The request says which version she edited: 7.
+  %% step: The service runs UPDATE ... SET address = ..., version = 8 WHERE id = 981 AND version = 7. One row matches, so her change is saved and the version becomes 8.
+  %% step: Ben saves a new delivery date, also based on version 7.
+  %% step: The same conditional UPDATE now matches no rows, because the version is 8. Nothing is overwritten.
+  %% step: The service returns 409 Conflict with the latest version, instead of silently losing Asha's address change.
+  %% step: Ben's tool reloads version 8 and reapplies his change, or shows him what changed. Without the version check, the last save would have won and erased Asha's edit.
+  A->>S: GET order 981
+  S-->>A: Order, version 7
+  B->>S: GET order 981
+  S-->>B: Order, version 7
+  A->>S: Save address, based on version 7
+  S->>DB: UPDATE where version = 7, 1 row
+  B->>S: Save date, based on version 7
+  S->>DB: UPDATE where version = 7, 0 rows
+  S-->>B: 409 Conflict, now version 8
+  Note over B: Reload, reapply or merge
+```
+
+Over HTTP, the same idea uses `ETag` and `If-Match` headers, with `412 Precondition Failed` on a mismatch.
 
 ## When to Use / Trade-offs
 
@@ -507,6 +555,174 @@ Minimisation, classification, separation, retention automation, erasure across s
 - Production data copied to test environments.
 - No inventory of where personal data lives.
 
+### Why enforce rules with database constraints rather than only in application code? {#database-constraints}
+
+**Level:** Foundation
+
+**Model answer:**
+Constraints state facts that must always be true about the data, and the database checks them on **every write, from every writer**:
+- `NOT NULL`: the value must exist.
+- `UNIQUE`: no two rows share the value, such as one account per email per tenant.
+- `FOREIGN KEY`: the referenced row exists, so there are no orders for missing customers.
+- `CHECK`: a condition on the row, such as `total_minor >= 0` or a status from an allowed list.
+- **Exclusion constraints** (PostgreSQL): no two rows overlap, such as two bookings of the same room at the same time.
+
+Why application checks aren't enough:
+- **Concurrency**: "check that the email is free, then insert" fails when two requests run at once. Both checks pass. A unique constraint makes the second insert fail, atomically.
+- **More than one writer**: scripts, migrations, admin tools, a second service or a future rewrite all bypass application code.
+- **Bugs**: validation gets missed in one code path. The constraint catches it at write time instead of in a report months later.
+
+Keep validation in the application too, for friendly error messages, and treat a constraint violation as a normal, handled outcome (such as mapping a unique violation to `409 Conflict`).
+
+Costs to know: foreign keys need indexes on the referencing column to stay fast, and adding a constraint to a large existing table needs care. In PostgreSQL, add it as `NOT VALID` and then `VALIDATE` it separately to avoid a long lock.
+
+**What the interviewer is looking for:**
+The constraint types, the concurrency argument, multiple writers, and handling violations gracefully.
+
+**Follow-ups:**
+- How would you prevent double-booking a meeting room?
+- How do you add a foreign key to a 500-million-row table without downtime?
+
+**Red flags:**
+- "We validate in the app, so constraints aren't needed."
+- Check-then-insert for uniqueness.
+
+### How do you model an entity's status lifecycle so invalid transitions can't happen? {#modelling-state-machines}
+
+**Level:** Senior
+
+**Model answer:**
+Entities such as orders, payments and claims move through **states** (draft, placed, paid, shipped, cancelled) by **transitions** (place, pay, ship, cancel). Bugs come from transitions that shouldn't be possible: shipping a cancelled order, or paying twice.
+
+**In the schema:**
+- A `status` column restricted by a `CHECK` constraint or a reference table, so only known states exist.
+- **Timestamps per milestone** (`placed_at`, `paid_at`, `shipped_at`) with constraints tying them to the status, such as "status `paid` requires `paid_at`". These double as useful history.
+- A **transitions table** (`from_status`, `to_status`) as the single definition of allowed moves, which the code and a trigger can both use if needed.
+
+**In the code:**
+- Make each transition a **conditional update**: `UPDATE orders SET status = 'shipped', shipped_at = now() WHERE id = $1 AND status = 'paid'`. If no row matches, the transition wasn't allowed or someone else got there first. That's atomic, without locks held across requests.
+- Keep the state machine in **one place** in the domain code, rather than spread across handlers.
+- **Record each transition** as an event or history row (who, when, from, to, why), for audit and debugging.
+
+**Design choices:**
+- Avoid a single status for things that are really **independent dimensions**. Payment status and fulfilment status often progress separately, and combining them makes the number of states explode.
+- Decide which states are **terminal**, and whether "undo" is a reverse transition or a new state (refunded, not unpaid).
+- For long-running, multi-step processes, consider a workflow engine or saga instead of a hand-built status column.
+
+**What the interviewer is looking for:**
+Constrained states, conditional updates as atomic transitions, one definition of allowed moves, a transition history, and separating independent dimensions.
+
+**Follow-ups:**
+- How do you add a new state to a busy production table?
+- How would you report how long orders spend in each state?
+
+**Red flags:**
+- Free-text status values.
+- Read-check-write transitions without a condition on the current state.
+
+### How do you model "comments can belong to posts, photos or videos"? {#polymorphic-associations}
+
+**Level:** Senior
+
+**Model answer:**
+This is a **polymorphic association**: one entity relates to one of several parent types. Common designs:
+
+| Design | Shape | Pros | Cons |
+|---|---|---|---|
+| **Type + id columns** (Rails-style `commentable_type`, `commentable_id`) | One `comments` table | Simple, popular in ORMs | **No foreign key** is possible, so orphans and wrong types can creep in |
+| **One nullable FK per parent** | `post_id`, `photo_id`, `video_id`, with a `CHECK` that exactly one is set | Real foreign keys and cascades | A new column for each new parent type |
+| **Separate tables** | `post_comments`, `photo_comments` | Clean constraints per type | Duplicated logic. "All comments by a user" needs a `UNION` |
+| **Shared supertype** | A `commentable` table that posts, photos and videos each reference with a 1:1 key, and comments reference `commentable` | Real foreign keys, one comments table, extensible | One more table and join, and parents are created in two steps |
+
+**Choosing:**
+- A **small, stable set** of parent types → one nullable foreign key per parent with an exactly-one check. Integrity is enforced and it's easy to query.
+- **Many or growing types**, such as comments, reactions and tags on anything → the shared supertype. It keeps integrity, and new types just reference it.
+- The **type + id pattern** is acceptable when integrity is enforced in code and you accept orphan clean-up jobs. It's the common default in ORMs mainly because it's convenient.
+
+Also consider whether the parents really share behaviour. If "comments" mean different things for different types (moderation rules, notifications), separate tables can be clearer.
+
+**What the interviewer is looking for:**
+The options, the loss of referential integrity in the type + id pattern, and a choice tied to the number of types and integrity needs.
+
+**Follow-ups:**
+- How would you find all comments by one user across all types efficiently?
+- What happens to comments when a photo is deleted in each design?
+
+**Red flags:**
+- Not noticing that the type + id pattern can't have a foreign key.
+- An entity-attribute-value table as the answer.
+
+### Design the schema for a product catalogue whose attributes vary widely by category. {#variable-attributes}
+
+**Level:** Architect
+
+**Model answer:**
+A television has screen size and refresh rate, a shirt has size and fabric, and new categories arrive monthly. Options:
+
+| Approach | How | Fits | Breaks down |
+|---|---|---|---|
+| **Columns for common fields + JSONB for the rest** | `products(id, name, brand, price, category_id, attributes jsonb)` with GIN or expression indexes | Most catalogues | Weak typing inside the JSON unless validated |
+| **Table per category** | `tvs`, `shirts`, each with typed columns | Few, stable categories with heavy category-specific logic | Many categories, or cross-category queries |
+| **Entity–attribute–value** | `product_attributes(product_id, attribute, value)` | Rarely. Highly sparse, user-defined attributes | Every query becomes a self-join. Types and constraints are lost |
+| **Document store** | One document per product | Catalogue owned by one service with document-shaped reads | Cross-product reporting, transactions with other data |
+
+**A design that usually works:**
+- **Typed columns** for what every product has and what you filter, join or report on: id, SKU, name, brand, price, currency, category, status.
+- **JSONB** for category-specific attributes, **validated against a schema per category**. Store attribute definitions (name, type, unit, allowed values, whether it's filterable) in an `attribute_definitions` table, and validate with JSON Schema in the service, or check constraints for critical fields.
+- **Normalise units and values** on write ("55 inch", "55in" and `55` become `{ "screen_size_in": 55 }`), so filtering works.
+- **Index what's filtered**: expression indexes on the few attributes used in database queries, and leave faceted search to a **search index** built from the catalogue, which handles dynamic facets far better than SQL.
+- **Version attribute definitions**, so changes migrate deliberately rather than leaving old products in a different shape.
+
+Ownership matters as much as structure: merchandisers define attributes through a managed process, rather than free-text fields that diverge.
+
+**What the interviewer is looking for:**
+The options and their failure modes, typed core plus validated JSONB, attribute definitions as data, unit normalisation, and search for faceting.
+
+**Follow-ups:**
+- How do you migrate when an attribute's type changes from text to number?
+- Where do translations of attribute values live?
+
+**Red flags:**
+- EAV as the default.
+- Unvalidated JSON with every team inventing keys.
+
+### Design the data model for a double-entry ledger that a payments product relies on. {#ledger-model}
+
+**Level:** Architect
+
+**Model answer:**
+**Principles:** every movement of money is recorded as a **balanced set of entries** (debits equal credits), entries are **immutable**, and balances are **derived** from entries, so the history explains every number.
+
+**Core tables:**
+- `accounts(id, owner_id, type, currency, normal_balance)`: customer wallets, merchant payables, fees revenue, the bank clearing account. One currency per account.
+- `transactions(id, type, idempotency_key UNIQUE, created_at, effective_at, metadata)`: one business event, such as "card payment captured".
+- `entries(id, transaction_id, account_id, amount_minor, direction)`: two or more per transaction. **For each transaction and currency, debits must equal credits.** Amounts are integers in minor units.
+
+**Enforcing the invariants:**
+- Write a transaction and all its entries **in one database transaction**, through one service. Check the balance in the same transaction, for example with a deferred constraint trigger that sums the entries at commit.
+- The **idempotency key** makes retries safe: a repeated request returns the original transaction.
+- **No updates or deletes** on entries. Corrections are **reversing transactions** plus new correct ones, so the audit trail stays intact. Enforce it with permissions or triggers.
+
+**Balances at scale:**
+- Summing all entries per request doesn't scale. Keep a **balance table** updated in the same transaction as the entries, with a version or row lock per account to serialise concurrent postings, or periodic **balance snapshots** plus entries since the snapshot.
+- Distinguish **pending** (authorised) from **posted** (settled) amounts, so the available balance and the ledger balance can both be shown.
+- **Hot accounts** (a platform fees account touched by every payment) become a bottleneck. Split them into sub-accounts and aggregate when reporting.
+
+**Time and reconciliation:**
+- Keep `created_at` (when recorded) separate from `effective_at` (when it counts for accounting), for back-dated adjustments.
+- Reconcile daily against external statements (bank, card processor) and alert on differences.
+
+**What the interviewer is looking for:**
+Balanced, immutable entries, idempotency, reversals instead of edits, scalable balances with concurrency control, pending versus posted, hot accounts and reconciliation.
+
+**Follow-ups:**
+- How would you handle a transfer between accounts in different currencies?
+- How do you answer "what was this wallet's balance at midnight on 31 March?"
+
+**Red flags:**
+- A single mutable `balance` column with no entries behind it.
+- Floating-point amounts or editable history.
+
 ## Cheat Sheet
 
 ### Foundations
@@ -530,6 +746,16 @@ Minimisation, classification, separation, retention automation, erasure across s
 - **Event sourcing** — append-only events as truth; projections for reads; crypto-shredding for erasure.
 - **Data ownership** — one system of record per datum; others hold event-fed copies.
 - **Data contracts** — owned, versioned schemas with semantics and SLAs for consumers.
+
+### Revisit
+
+- **Future local events** — store local date-time plus an IANA zone, not a UTC instant or a fixed offset. Time-zone rules change, sometimes at short notice.
+- **Optimistic concurrency** — `UPDATE ... WHERE id = ? AND version = ?`. Zero rows means someone changed it first, so return 409 (or 412 with `If-Match`).
+- **Constraints** — the only checks that cover every writer and every race. Add them to large tables with `NOT VALID`, then `VALIDATE`.
+- **State machines** — constrained status values, conditional updates as transitions, a transition history, and separate columns for independent dimensions.
+- **Polymorphic associations** — type + id columns lose foreign keys. Prefer one nullable FK per parent with an exactly-one check, or a shared supertype.
+- **Variable attributes** — typed core columns plus validated JSONB, with attribute definitions as data. Leave facets to a search index.
+- **Ledger** — balanced, immutable entries, an idempotency key, reversals instead of edits, and balances maintained in the same transaction.
 
 ## Further Reading
 

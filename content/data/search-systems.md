@@ -6,7 +6,7 @@ tags: [search, elasticsearch, opensearch, relevance]
 level: Senior
 estimatedMinutes: 75
 related: [databases-sql-nosql, llms-rag-agents, data-engineering-basics, caching]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -139,6 +139,33 @@ The index is a **projection**. Never treat it as the source of truth.
 - **Online**: click-through rate, **zero-result rate**, reformulation rate (users rephrasing), time to first click, add-to-cart and conversion from search, and A/B or interleaving tests.
 - **Query analytics**: top queries, failing queries and zero-result queries drive synonym lists and content fixes.
 
+### Worked example: scoring a ranking change with NDCG
+
+For the query "waterproof hiking jacket", merchandisers graded the candidate products: 3 = perfect, 2 = good, 1 = marginal, 0 = irrelevant. Here are the top five results before and after a ranking change:
+
+| Position | Discount (log₂(position + 1)) | Before: grade | After: grade |
+|---|---|---|---|
+| 1 | 1.00 | 1 | 3 |
+| 2 | 1.58 | 3 | 1 |
+| 3 | 2.00 | 0 | 2 |
+| 4 | 2.32 | 2 | 0 |
+| 5 | 2.58 | 0 | 0 |
+
+**DCG@5** adds each result's gain (2^grade − 1) divided by its position's discount, so good results near the top count most:
+- Before: 1/1.00 + 7/1.58 + 0 + 3/2.32 + 0 ≈ **6.71**
+- After: 7/1.00 + 1/1.58 + 3/2.00 + 0 + 0 ≈ **9.13**
+
+**NDCG** divides by the DCG of the ideal order (grades 3, 2, 1, 0, 0): 7 + 3/1.58 + 1/2.00 ≈ 9.39.
+- Before: 6.71 ÷ 9.39 ≈ **0.71**
+- After: 9.13 ÷ 9.39 ≈ **0.97**
+
+The perfect jacket moved from position 2 to position 1, and that one move accounts for most of the gain.
+
+To use it well:
+- **Average over many queries.** A judged set of a few hundred queries, weighted towards real traffic and including failing queries, is a useful baseline. One query proves nothing.
+- **Watch unjudged results.** A change that surfaces products nobody graded can't be scored honestly. Grade the new results, or report how much of the top 10 is unjudged.
+- **Confirm online.** Offline gains are a gate, not the verdict. Follow up with an A/B or interleaving test on click-through and conversion.
+
 ## How It Works
 
 ### Indexing and query paths
@@ -168,6 +195,13 @@ sequenceDiagram
   participant New as products_v8
   participant Old as products_v7 (alias products)
   participant CDC as Change stream
+
+  %% step: Before touching anything, the job records the change stream's current position, P. Changes from here on will be replayed later, so nothing is missed.
+  %% step: It creates products_v8 with the new mappings and analysers, then bulk-loads a snapshot from the source database, with refresh turned off for speed.
+  %% step: It replays every change since position P into the new index, until it's caught up with live traffic and keeping pace.
+  %% step: It validates the new index: document counts against the source, sample queries, and the judged relevance set, so a mapping mistake is caught before users see it.
+  %% step: One atomic alias update moves products from products_v7 to products_v8. Queries switch with no downtime and no client changes.
+  %% step: products_v7 is kept for a while, so rolling back is just moving the alias again. Then it's deleted to free resources.
   Job->>CDC: Record current stream position P
   Job->>New: Create with new mappings, bulk load snapshot from source
   Job->>New: Replay changes from position P until caught up
@@ -648,6 +682,172 @@ Correct field types, filter context, the multi-select facet technique, and perfo
 - Facets on `text` fields.
 - Selected filters that make their own facet show only one value.
 
+### Why is Elasticsearch or OpenSearch search "near real-time", and what does that mean for applications? {#near-real-time}
+
+**Level:** Foundation
+
+**Model answer:**
+When a document is indexed, it's first written to an in-memory buffer and to the **translog** (a write-ahead log for durability). It becomes **searchable** only after a **refresh**, which writes the buffer into a new immutable **segment** that searches can see. By default, refresh runs about **every second** for indexes that are being searched. An index that's had no searches for a while skips refreshes until the next search arrives.
+
+So there's a short window, usually up to a second, when a successful index request isn't yet visible in search results. A **get by id** is real-time, because it can read the translog. A search isn't.
+
+What it means for applications:
+- **Read-your-writes**: a user saves a product and immediately searches for it. Options: show the saved item from the write response instead of searching again, use `refresh=wait_for` on that specific write (it returns once the change is visible, at the cost of latency), or accept the brief delay with clear UI.
+- **Don't force refreshes** on every write (`refresh=true`). Many tiny segments hurt indexing and search performance.
+- **Bulk loads**: turn refresh off (`refresh_interval: -1`) during a large reindex, then restore it and refresh once.
+- **Tuning**: a longer refresh interval (such as 30 seconds) increases indexing throughput for log-style data where a few seconds' delay doesn't matter.
+
+**What the interviewer is looking for:**
+Refresh, segments and the translog, why get is real-time but search isn't, and how applications handle the delay.
+
+**Follow-ups:**
+- What is a flush, and how does it differ from a refresh?
+- How would you test code that indexes and then searches?
+
+**Red flags:**
+- `refresh=true` on every write in production.
+- Assuming a successful index response means the document is searchable.
+
+### How do you build search for content in several languages? {#multilingual-search}
+
+**Level:** Senior
+
+**Model answer:**
+Analysis is language-specific: English stemming mangles German compound words, and Chinese and Japanese have no spaces between words. One analyser can't serve every language well.
+
+**Index design options:**
+- **A field per language** (`title.en`, `title.de`, `title.ja`), each with its own analyser. The query targets the user's language, possibly with a fallback. This works well when documents have translations.
+- **An index per language**: simpler mappings and independent tuning, but more indexes to manage and no single cross-language query.
+- **Detect the language at index time** for user-generated content with no declared language, and route each document to the right field or index.
+
+**Language-specific analysis:**
+- Stemmers or lemmatisers per language, and **decompounding** for German, Dutch and Scandinavian languages ("Wanderjacke" should match "Jacke").
+- **Segmentation** for Chinese, Japanese and Korean (ICU, kuromoji, nori or smartcn analysers), or n-grams as a fallback.
+- `asciifolding` or ICU normalisation for accents, applied carefully. In some languages accents change the meaning.
+- **Synonyms and stop words per language**, built from each market's query logs.
+
+**Querying:**
+- Use the user's locale, not the browser's guess alone, and let users switch.
+- **Multilingual embedding models** let semantic search match across languages ("chaqueta impermeable" finding English documents). Combine with keyword search per language in a hybrid setup.
+- Evaluate **each language separately** with its own judged queries. An improvement in English can hide a regression in Polish.
+
+**What the interviewer is looking for:**
+Per-language analysis, field-per-language versus index-per-language, segmentation and decompounding, per-market synonyms, multilingual embeddings and per-language evaluation.
+
+**Follow-ups:**
+- A product has no German translation. What should German users see?
+- How do you handle queries that mix languages, such as English product names in a Japanese query?
+
+**Red flags:**
+- One English analyser for every language.
+- Measuring relevance only in English.
+
+### How do you paginate deep into search results correctly? {#deep-pagination}
+
+**Level:** Senior
+
+**Model answer:**
+**Why `from` and `size` break down:** to return results 10,000 to 10,020, every shard must find and sort its top 10,020 hits, and the coordinating node merges them all, only to discard most. Cost grows with depth. Elasticsearch and OpenSearch cap `from + size` at 10,000 by default (`index.max_result_window`) for that reason.
+
+**Use the right tool per need:**
+
+| Need | Approach |
+|---|---|
+| Users browsing the first few pages | `from`/`size` is fine. Few people go past page 5, so consider capping pages in the UI |
+| "Next page" through deep results, infinite scroll, APIs | **`search_after`**: pass the sort values of the last hit, with a unique **tiebreaker** field so ordering is stable |
+| A consistent view while the index changes | Add a **point in time (PIT)**, so all pages see the same snapshot of the index |
+| Exporting or processing everything | PIT with `search_after` over the full result set, or a dedicated export from the source database rather than the search index |
+
+**API design:**
+- Return an **opaque cursor** that encodes the sort values (and the PIT id), instead of page numbers.
+- Without a PIT, results can shift between pages as documents are added or re-scored, causing duplicates or gaps. Tell clients whether ordering is stable.
+- Expire PITs promptly, because each holds resources on the cluster.
+
+The same reasoning applies to SQL: `OFFSET 100000` reads and discards 100,000 rows, while **keyset pagination** (`WHERE (created_at, id) < ($1, $2) ORDER BY created_at DESC, id DESC LIMIT 20`) uses an index and stays fast at any depth.
+
+**What the interviewer is looking for:**
+Why offset pagination is expensive, `search_after` with a tiebreaker, PIT for consistency, opaque cursors, and the SQL keyset equivalent.
+
+**Follow-ups:**
+- How do you show "page 37 of 120" with cursor-based pagination?
+- Why does the tiebreaker field matter?
+
+**Red flags:**
+- Raising `max_result_window` to a million.
+- Cursors without a stable sort.
+
+### How would you introduce learning to rank into product search? {#learning-to-rank}
+
+**Level:** Architect
+
+**Model answer:**
+**Learning to rank (LTR)** trains a model to order results using many signals, instead of hand-tuned boosts. It usually **re-ranks the top 100–500** candidates from a fast first stage (BM25, filters and possibly vector retrieval).
+
+**Prerequisites:**
+- A solid first stage and an **evaluation set** with an offline metric such as NDCG, so improvements can be measured.
+- **Judgements** at scale. Human grades are accurate but expensive. **Click and conversion logs** are plentiful but biased: users click what's at the top (**position bias**), and never see what wasn't shown. Correct for this with click models, randomised exploration of a small share of traffic, or interleaving data.
+
+**Features:**
+- **Query–document**: BM25 scores per field, phrase matches, vector similarity.
+- **Document**: popularity, conversion rate, price, rating, stock, freshness, margin.
+- **Query**: length, category intent, whether it's a brand query.
+- **Context** where appropriate: device, locale, and segment-level personalisation.
+
+Log feature values **at query time** to build training data, so training uses exactly what the model saw.
+
+**Model and serving:**
+- Gradient-boosted trees (LambdaMART with XGBoost or LightGBM) are the common choice: fast, strong with tabular features, and explainable enough.
+- Serve inside the engine (Elasticsearch's LTR, the OpenSearch LTR plugin) as a **rescore** on the top N, or in a re-ranking service. Cross-encoder models can be a later stage for text-heavy relevance.
+
+**Rollout and governance:**
+- Gate on offline NDCG, then run **A/B or interleaving tests** on conversion and search revenue, and also watch zero-result rate and diversity.
+- **Business rules stay explicit**: legal requirements, sponsored placements and out-of-stock handling shouldn't be learned implicitly.
+- Retrain regularly, and monitor for drift and feedback loops where the model keeps promoting what it already shows.
+
+**What the interviewer is looking for:**
+Two-stage ranking, judgement sources and position bias, feature logging, LambdaMART-style models, rescoring, staged evaluation and explicit business rules.
+
+**Follow-ups:**
+- How would you avoid the model only ever promoting already-popular products?
+- What would you do if offline NDCG improves but conversion drops?
+
+**Red flags:**
+- Training directly on raw clicks without bias correction.
+- LTR before there's any way to measure relevance.
+
+### How do you tune a vector index for recall, latency, memory and cost? {#vector-index-tuning}
+
+**Level:** Architect
+
+**Model answer:**
+**Measure recall first.** Approximate nearest-neighbour (ANN) search trades accuracy for speed, so build a test set of queries, compute the **exact** top-k neighbours by brute force, and measure **recall@k**: the share of true neighbours the index returns. Tune against latency at your traffic.
+
+**HNSW parameters** (the most common ANN index):
+- **M**: links per node. Higher means better recall and more memory.
+- **ef_construction**: search breadth while building. Higher gives a better graph and slower indexing.
+- **ef_search** (or `num_candidates`): breadth at query time, the main dial for **recall against latency**. It can vary per query.
+
+**Memory is usually the cost driver.** 10 million vectors of 768 dimensions in float32 take about 10M × 768 × 4 bytes ≈ **31 GB**, plus the graph. HNSW wants it all in RAM. Options:
+- **Scalar quantisation** (int8) cuts that by about 4 times with small recall loss.
+- **Binary quantisation** cuts it by about 32 times, usually with **rescoring** of the top candidates using full-precision vectors.
+- **Fewer dimensions**: models trained to be truncated (Matryoshka-style) can drop to 256 or 512 dimensions with little loss.
+- **Disk-based indexes** (DiskANN-style) for very large collections.
+
+**Filtering is the hidden trap.** With restrictive filters (one tenant, in stock, a category), **post-filtering** the ANN results can leave too few hits, and naive **pre-filtering** breaks graph traversal. Use the engine's filtered-HNSW support, partition by tenant, or fall back to exact search when the filter leaves few documents.
+
+**Model and pipeline choices matter as much as the index:** the embedding model's quality on *your* domain, chunking, and hybrid retrieval with keyword search for exact terms. Re-embedding a corpus when you change model is expensive, so version embeddings and plan migrations.
+
+**What the interviewer is looking for:**
+Recall measured against exact search, HNSW dials, memory arithmetic and quantisation, the filtering problem, and model choice and versioning.
+
+**Follow-ups:**
+- Recall is 0.98 in testing but users complain about missing results for one tenant. What's likely?
+- How would you migrate 50 million vectors to a new embedding model?
+
+**Red flags:**
+- Never measuring recall.
+- Post-filtering results for highly selective filters.
+
 ## Cheat Sheet
 
 ### Fundamentals
@@ -673,6 +873,16 @@ Correct field types, filter context, the multi-select facet technique, and perfo
 - **HNSW** — a graph-based approximate nearest-neighbour index used for vector search.
 - **NDCG / MRR** — offline relevance metrics for graded results and for the first relevant hit.
 - **Zero-result rate** — the share of queries returning nothing. Drive it down with synonyms, analysis fixes and content.
+
+### Revisit
+
+- **NDCG** — gain 2^grade − 1, discounted by log₂(position + 1), divided by the ideal order. Average it over a judged set, and confirm online.
+- **Zero-downtime reindex** — record the stream position, bulk-load the new index, replay changes, validate, swap the alias, keep the old index for rollback.
+- **Near real-time** — documents are searchable after a refresh (about 1 s), while get by id is real-time. Use `refresh=wait_for` only where needed.
+- **Multilingual search** — analysers per language, decompounding and segmentation, synonyms per market, and evaluation per language.
+- **Deep pagination** — `search_after` with a tiebreaker, plus a point in time for a stable view. Keyset pagination in SQL.
+- **Learning to rank** — re-rank the top candidates with a model on logged features. Correct click data for position bias, and keep business rules explicit.
+- **Vector index tuning** — measure recall@k against exact search, tune `ef_search`, quantise to cut memory, and handle selective filters deliberately.
 
 ## Further Reading
 

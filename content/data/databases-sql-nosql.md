@@ -6,7 +6,7 @@ tags: [databases, sql, nosql]
 level: Senior
 estimatedMinutes: 75
 related: [data-modelling, caching, system-design]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -45,6 +45,56 @@ UPDATE inventory SET stock = stock - 1
 WHERE sku = 'ABC-1' AND stock > 0
 RETURNING stock;   -- zero rows returned => out of stock
 ```
+
+### Worked example: reading a slow query's plan
+
+A support screen lists a tenant's 20 newest open orders. The `orders` table has 50 million rows. One large tenant has 400,000 orders, of which about 2,000 are open, and the query takes 400 ms for them:
+
+```sql
+SELECT id, total_minor, created_at
+FROM orders
+WHERE tenant_id = $1 AND status = 'open'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+`EXPLAIN (ANALYZE, BUFFERS)` shows where the time goes (trimmed):
+
+```text
+Limit  (actual time=412.3..412.3 rows=20)
+  ->  Sort  (Sort Key: created_at DESC)  Sort Method: top-N heapsort
+        ->  Bitmap Heap Scan on orders  (actual rows=2013)
+              Filter: (status = 'open')
+              Rows Removed by Filter: 398104
+              Buffers: shared read=61240
+              ->  Bitmap Index Scan on orders_tenant_idx  (actual rows=400117)
+```
+
+Read it from the inside out:
+1. The only usable index is on `tenant_id`, so the database finds **all 400,117** of the tenant's orders.
+2. It reads about 61,000 table pages to fetch them, then **throws away 398,104** that aren't open. That's the time.
+3. It sorts the 2,013 survivors and keeps 20.
+
+**The fix:** an index that matches the query's shape. **Equality columns first**, then the **sort column**:
+
+```sql
+CREATE INDEX CONCURRENTLY orders_tenant_status_created
+  ON orders (tenant_id, status, created_at DESC);
+```
+
+```text
+Limit  (actual time=0.09..0.15 rows=20)
+  ->  Index Scan using orders_tenant_status_created on orders  (actual rows=20)
+        Index Cond: ((tenant_id = $1) AND (status = 'open'))
+```
+
+The index delivers rows already filtered and in order, so the database reads exactly 20 rows and doesn't sort. That's about 0.15 ms instead of 412 ms.
+
+Two refinements:
+- If only open orders are ever queried this way, a **partial index** (`... WHERE status = 'open'`) is much smaller and cheaper to maintain.
+- Check the whole workload before adding indexes. Every index slows writes and uses memory, and an existing index on `(tenant_id, created_at)` might already serve several queries if extended.
+
+Signs to look for in any plan: large "Rows Removed by Filter", estimated rows far from actual rows (stale statistics, so run `ANALYZE`), sorts or hashes spilling to disk, and nested loops over many rows.
 
 ### NoSQL families
 
@@ -96,6 +146,35 @@ flowchart TD
   G -->|"deep relationship traversals"| K["Graph"]
   G -->|"text relevance, faceting, log search"| L["Search engine fed from the system of record"]
   G -->|"metrics and events over time"| M["Time-series"]
+```
+
+### Two checkouts, one item in stock
+
+```mermaid
+sequenceDiagram
+  participant A as Checkout A
+  participant B as Checkout B
+  participant DB as PostgreSQL
+  %% step: Read-then-write first. Checkout A reads the stock for the item: 1.
+  %% step: Checkout B reads it at the same moment, also 1. At read committed, nothing stops this.
+  %% step: A writes stock = 0, computed in the application, and commits.
+  %% step: B also writes stock = 0, from its own stale read, and commits. Neither write failed.
+  %% step: Two customers bought the one item. This is a lost update, and it's the classic oversell.
+  %% step: Now the atomic version. A runs UPDATE inventory SET stock = stock - 1 WHERE sku = ... AND stock > 0, which locks the row.
+  %% step: B runs the same statement. It waits for A's row lock.
+  %% step: A commits. The stock is 0.
+  %% step: PostgreSQL re-checks B's condition against the newly committed row. stock > 0 is now false, so B's update affects 0 rows.
+  %% step: B's code sees zero rows updated and tells the customer the item is out of stock. No explicit lock or serializable isolation was needed.
+  A->>DB: SELECT stock, returns 1
+  B->>DB: SELECT stock, returns 1
+  A->>DB: UPDATE stock = 0, commit
+  B->>DB: UPDATE stock = 0, commit
+  Note over DB: Two sales of one item
+  A->>DB: UPDATE stock = stock - 1 WHERE stock > 0
+  B->>DB: Same UPDATE, waits for the row lock
+  A->>DB: COMMIT, stock now 0
+  DB-->>B: Condition re-checked, 0 rows updated
+  Note over B: Out of stock, no oversell
 ```
 
 ## When to Use / Trade-offs
@@ -520,6 +599,179 @@ A curated managed portfolio, self-service with secure defaults, restore testing,
 - Every team picking and operating their own engines.
 - Backups that are never restore-tested.
 
+### What is a query plan, and how do you read one? {#explain-plans}
+
+**Level:** Foundation
+
+**Model answer:**
+A **query plan** is the database's chosen way of executing a SQL statement: which indexes to use, in what order to join tables, and with which algorithms. The **planner** chooses it by estimating costs from **table statistics**: row counts and value distributions.
+
+- `EXPLAIN` shows the plan and the **estimated** costs and row counts.
+- `EXPLAIN ANALYZE` actually runs the query and adds the **actual** times and row counts. Add `BUFFERS` in PostgreSQL to see how many pages were read from memory or disk. Be careful with `ANALYZE` on writes: it really performs them, so wrap them in a transaction you roll back.
+
+How to read it:
+- Plans are trees. Read from the **innermost** node outwards. Each node feeds rows to its parent.
+- **Scan types**: sequential scan (whole table), index scan, index-only scan (answered from the index alone), bitmap scan (many matching rows gathered via an index).
+- **Join types**: nested loop (good for few rows), hash join (large unsorted inputs), merge join (sorted inputs).
+- **Warning signs**:
+  - Large "rows removed by filter": the index didn't match the query.
+  - **Estimated rows far from actual**: stale or missing statistics, or correlated columns the planner can't see.
+  - Sorts or hashes **spilling to disk**: not enough working memory, or too many rows reaching that step.
+  - A nested loop running thousands of times.
+
+A sequential scan isn't automatically bad. For a small table, or a query returning most of the rows, it's the fastest option.
+
+**What the interviewer is looking for:**
+Estimated versus actual plans, reading the tree, scan and join types, and the common warning signs.
+
+**Follow-ups:**
+- Why might the planner ignore an index you just created?
+- How would you find the slowest queries in production in the first place?
+
+**Red flags:**
+- Adding indexes without looking at plans.
+- Believing every sequential scan is a problem.
+
+### How does MVCC work in PostgreSQL, and why does vacuuming matter? {#mvcc-vacuum}
+
+**Level:** Senior
+
+**Model answer:**
+**Multi-version concurrency control** lets readers and writers work without blocking each other. In PostgreSQL:
+- An `UPDATE` doesn't overwrite a row. It writes a **new row version** and marks the old one as ended by that transaction. A `DELETE` just marks the row as ended.
+- Each transaction sees the versions that were committed at its **snapshot**, so a long report sees a consistent view while writes continue.
+- Old versions become **dead tuples** once no running transaction can still see them.
+
+**VACUUM** (usually autovacuum) removes dead tuples so their space can be reused, updates the **visibility map** (which makes index-only scans possible), and **freezes** old rows.
+
+Why it matters operationally:
+- **Bloat**: on heavily updated tables, if vacuum can't keep up, tables and indexes grow with dead space, and queries read more pages. Tune autovacuum per table, for example lower scale factors on large hot tables.
+- **Long-running transactions block clean-up.** Dead tuples can't be removed while any old snapshot might need them. Common culprits: an analyst's open session, a connection left **idle in transaction**, an abandoned **replication slot**, or `hot_standby_feedback` from a replica running long queries. Monitor the oldest transaction age and set `idle_in_transaction_session_timeout`.
+- **Transaction ID wraparound**: PostgreSQL's transaction ids are 32-bit, so old rows must be frozen before the counter wraps. If vacuum falls far behind, the database eventually refuses writes to protect data. Alert on the age of the oldest unfrozen transaction long before that.
+- **HOT updates** (heap-only tuples) avoid index updates when no indexed column changes and there's room on the page. Leaving free space with `fillfactor` on hot tables helps.
+
+MySQL's InnoDB uses undo logs instead, with a background purge. Long transactions there grow the history list and slow everything in a similar way.
+
+**What the interviewer is looking for:**
+Row versions and snapshots, what vacuum does, bloat, long transactions blocking clean-up, wraparound, and the monitoring that goes with it.
+
+**Follow-ups:**
+- A table's size doubled in a week without more rows. What do you check?
+- Why can a replica's queries cause bloat on the primary?
+
+**Red flags:**
+- Disabling autovacuum to "improve performance".
+- Not knowing that idle-in-transaction sessions are harmful.
+
+### When is PostgreSQL enough instead of adding a specialised data store? {#postgres-for-everything}
+
+**Level:** Senior
+
+**Model answer:**
+Every extra data store brings syncing, operations, security, backups and skills. PostgreSQL covers a surprising range of needs well enough for many products:
+
+| Need | In PostgreSQL | Consider a specialised store when |
+|---|---|---|
+| Documents | `jsonb` with GIN and expression indexes | Huge document volumes with document-shaped access only, or multi-region writes |
+| Full-text search | `tsvector`, `ts_rank`, `pg_trgm` for fuzzy matching | Advanced relevance, faceting at scale, many languages, high query volume |
+| Vectors | `pgvector` with HNSW indexes | Hundreds of millions of vectors, or tight recall and latency targets |
+| Job queues | A jobs table with `SELECT ... FOR UPDATE SKIP LOCKED` | Very high throughput, fan-out to many consumers, or replay (use a broker) |
+| Time series | Native partitioning, BRIN indexes, or the TimescaleDB extension | Massive ingest with downsampling and long retention |
+| Geospatial | PostGIS, which is among the best available | Rarely |
+| Caching and counters | Unlogged tables, materialised views | Sub-millisecond, very high-rate access (Redis) |
+| Scheduling | `pg_cron` | Complex workflows (a workflow engine) |
+
+**Benefits of staying in one database:** transactions across your data, such as writing an order and its outbox event or job atomically. One backup and security model. No sync lag. Fewer moving parts.
+
+**Watch for the limits:**
+- **Load interference**: search or analytics queries competing with transactional traffic. Read replicas help.
+- **Scale**: one primary's write capacity and storage.
+- **Features you'd rebuild badly**: relevance tuning, stream replay, global distribution.
+
+A good rule: start in PostgreSQL, measure, and move a capability out when a **measured** limit or a feature need justifies the second system.
+
+**What the interviewer is looking for:**
+Concrete capabilities with their limits, the value of transactional consistency and fewer systems, and data-driven triggers to specialise.
+
+**Follow-ups:**
+- How would you build a reliable job queue on PostgreSQL?
+- What would make you move search out to OpenSearch?
+
+**Red flags:**
+- A new database per feature by default.
+- Running heavy analytics on the primary because "Postgres can do it".
+
+### How do you choose a shard key for a multi-tenant system, and what do you do when one tenant outgrows its shard? {#shard-key-design}
+
+**Level:** Architect
+
+**Model answer:**
+**What a good shard key does:**
+- Keeps the data for most queries **on one shard**, so queries and transactions don't span shards.
+- **Spreads load** evenly, with no hot shard.
+- Lets data **move** later.
+
+For B2B SaaS, **`tenant_id`** is usually right: nearly every query is within one tenant, transactions stay local, and isolation is easier to reason about.
+
+**How tenants map to shards:**
+- **Hashing** the tenant id spreads tenants evenly, but moving one tenant means changing the function or using many virtual buckets.
+- A **directory** (a lookup table from tenant to shard) is the most flexible: any tenant can be placed and moved individually. The directory must be highly available and cached.
+- Distributed PostgreSQL (Citus, or elastic clusters on Azure) and Vitess for MySQL implement distribution by key, with rebalancing tools.
+
+**Large tenants:**
+- **Tenant sizes follow a power law.** A few tenants are orders of magnitude bigger. Plan placement by measured load, not tenant count.
+- **Move a big tenant** to its own shard or dedicated database: copy its data, catch up with CDC or logical replication, briefly pause writes or use a short read-only window, switch the directory entry, then verify and clean up. Rehearse it.
+- **When one tenant outgrows any single shard**, shard *within* the tenant by a second key (such as region, project or account), which means that tenant's queries must be designed for it.
+
+**Cross-tenant needs:** platform-wide reporting and search go to a warehouse or search index fed by CDC, not scatter-gather queries across shards. Global reference data is replicated to every shard.
+
+**What the interviewer is looking for:**
+Locality and balance as criteria, tenant id as the usual key, directory versus hash mapping, moving tenants with CDC, power-law tenant sizes and cross-tenant workloads.
+
+**Follow-ups:**
+- How do you keep the tenant directory from becoming a single point of failure?
+- How would you enforce that no query forgets the tenant filter?
+
+**Red flags:**
+- Sharding by a timestamp or auto-increment id.
+- No plan for moving a tenant.
+
+### Design backup and restore for a 4 TB production PostgreSQL database with an RPO of 5 minutes and an RTO of 2 hours. {#backup-restore-strategy}
+
+**Level:** Architect
+
+**Model answer:**
+**Replicas aren't backups.** A replica faithfully copies a mistaken `DELETE`, a bad migration or ransomware encryption. Backups protect against those, and replicas against hardware and zone loss. You need both.
+
+**Meeting the 5-minute RPO: continuous archiving and point-in-time recovery (PITR).**
+- **Physical base backups** (for example weekly full and daily incremental with pgBackRest, or the managed service's automated backups), plus **continuous WAL archiving** to object storage. Any moment can be restored by replaying the log to a timestamp just before the incident.
+- Watch **archive lag**: the RPO is how far behind the archive is, so alert if WAL shipping falls behind by more than a couple of minutes.
+
+**Meeting the 2-hour RTO: measure it.**
+- Restoring 4 TB plus replaying a day of WAL can take longer than people expect, so **time real restores**. If it's too slow, use parallel restore, more frequent base backups (less WAL to replay), storage snapshots, or a **delayed replica** (replaying an hour behind) that can be promoted after stopping just before the bad change.
+- Include everything else in the RTO: provisioning, DNS or connection string changes, application restarts and verification.
+
+**Protect the backups themselves:**
+- Copies in **another region and another account**, with **immutable retention** (S3 Object Lock or equivalent), so an attacker or a mistake in the main account can't delete them.
+- Encryption, with keys that survive the loss of the primary account.
+- Retention to match recovery and compliance needs, such as 35 days of PITR plus monthly copies for a year.
+
+**Prove it:**
+- **Automated restore tests**: restore to a scratch environment on a schedule, run integrity and row-count checks, and record the time taken.
+- A runbook for partial recovery: often you restore to the side and copy back only the damaged table, rather than rolling the whole database back.
+- Game days for the full scenario, including who decides to restore.
+
+**What the interviewer is looking for:**
+Replicas versus backups, WAL-based PITR for RPO, measured restore times for RTO, delayed replicas, isolated immutable copies, and tested restores.
+
+**Follow-ups:**
+- Someone dropped a table 40 minutes ago. Walk through the recovery.
+- How do you restore just one tenant's data?
+
+**Red flags:**
+- "We have a replica, so we're covered."
+- Backups never test-restored.
+
 ## Cheat Sheet
 
 ### Relational
@@ -540,6 +792,16 @@ A curated managed portfolio, self-service with secure defaults, restore testing,
 - **Sharding by tenant** — natural for B2B SaaS; cross-shard queries and big tenants are the hard parts.
 - **Distributed SQL** — Spanner/CockroachDB-style horizontal SQL; pays latency for global consistency.
 - **System of record** — one owner per datum; caches, search and warehouses are derived via CDC.
+
+### Revisit
+
+- **Composite index order** — equality columns first, then the sort or range column. A matching index returns rows filtered and sorted, with no sort step.
+- **Plan warning signs** — many rows removed by filter, estimates far from actuals, sorts spilling to disk, nested loops over many rows.
+- **Lost update** — read-then-write at read committed oversells. A conditional `UPDATE ... WHERE stock > 0` is re-checked after the lock and affects 0 rows.
+- **MVCC and vacuum** — updates create new versions. Long or idle-in-transaction sessions block clean-up. Watch bloat and transaction id wraparound.
+- **PostgreSQL first** — jsonb, full-text search, pgvector, SKIP LOCKED queues and PostGIS cover a lot. Specialise on a measured limit.
+- **Shard keys** — locality plus even load. Tenant id with a directory, move big tenants with CDC, and use a warehouse for cross-tenant queries.
+- **Backups** — WAL archiving for point-in-time recovery, measured restore times, delayed replicas, immutable cross-account copies, and automated restore tests.
 
 ## Further Reading
 
