@@ -6,7 +6,7 @@ tags: [frontend, architecture]
 level: Architect
 estimatedMinutes: 60
 related: [architecture-patterns, reactjs, domain-driven-design]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -57,6 +57,30 @@ new ModuleFederationPlugin({
 const CheckoutApp = React.lazy(() => import('checkout/App'));
 ```
 
+### Worked example: the cost of not sharing dependencies
+
+A shell and four micro-frontends each bundle their own copy of the same libraries. Sizes are illustrative, gzipped:
+
+| Library | Per copy |
+|---|---|
+| React and React DOM | ~55 KB |
+| Design-system components | ~40 KB |
+| Date and formatting library | ~20 KB |
+| **Total** | **~115 KB** |
+
+**Without sharing:** the checkout page loads the shell plus two micro-frontends, so 3 × 115 KB = **345 KB** of library code, of which 230 KB is duplicated. Visiting all five apps in a session downloads 575 KB.
+
+That isn't just bytes. On a mid-range phone, **parsing, compiling and executing** JavaScript costs far more than downloading it, and it all happens on the main thread, hurting load time and responsiveness. There's a correctness problem too: **two copies of React on one page** means two separate React instances. Hooks and context don't work across them, and some libraries break.
+
+**With shared singletons** (Module Federation's `shared`, or an import map pointing everyone at one URL): **115 KB once**, cached across every app.
+
+What makes sharing work:
+- The **platform team owns the versions** of shared libraries, with agreed ranges such as `react ^19.0.0`. A micro-frontend needing an incompatible major version is a planned upgrade, not a surprise.
+- **Upgrade in waves**: the shell supports old and new ranges during a transition, then teams move.
+- **Measure in CI**: bundle-size budgets per micro-frontend, and a report of duplicated packages across remotes.
+
+Share only what's large and widely used. Sharing every small utility creates version coupling between teams for little gain.
+
 ### Integration contracts
 
 - **Routing:** the shell owns top-level routes; each micro-frontend owns its sub-routes.
@@ -84,6 +108,35 @@ flowchart TB
 ```
 
 Each team deploys its bundle and updates the manifest; the shell picks up new versions without redeploying. Rollback means pointing the manifest back to the previous version.
+
+### Loading and updating a remote at runtime
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant S as Shell
+  participant M as Manifest
+  participant C as Checkout remote
+  participant H as Header (in the shell)
+  %% step: The browser loads the shell: layout, top-level routing, authentication and the shared React and design-system singletons.
+  %% step: The shell fetches the manifest, which says that checkout's current version is v42 and where its remote entry lives on the CDN.
+  %% step: The user navigates to /checkout.
+  %% step: Only now does the shell load checkout's remote entry, so pages the user never visits cost nothing.
+  %% step: Shared dependencies are negotiated. Checkout's React and design-system ranges are compatible, so it reuses the shell's copies instead of downloading its own.
+  %% step: The shell mounts checkout into its route outlet, inside an error boundary, so a crash in checkout can't blank the whole page.
+  %% step: When the basket changes, checkout emits a basket:updated event, and the header in the shell updates its badge. No shared mutable state.
+  %% step: Later, the checkout team deploys v43: they upload the new bundle, then update the manifest. The shell isn't redeployed.
+  %% step: If v43 misbehaves, rollback is pointing the manifest back to v42. New page loads pick it up within the manifest's cache time.
+  B->>S: Load shell and shared singletons
+  S->>M: Fetch manifest
+  B->>S: Navigate to /checkout
+  S->>C: Load checkout remote entry v42
+  Note over S,C: Shared React negotiated, shell copy reused
+  S->>C: Mount in route outlet, inside error boundary
+  C-->>H: Event basket:updated
+  Note over M: Team deploys v43 and updates the manifest
+  Note over M: Rollback means pointing back to v42
+```
 
 ## When to Use / Trade-offs
 
@@ -480,6 +533,179 @@ Practical alternatives addressing the same pains with less complexity.
 **Red flags:**
 - Unaware of alternatives.
 
+### What are import maps, and how can they help compose micro-frontends? {#import-maps}
+
+**Level:** Foundation
+
+**Model answer:**
+An **import map** is a JSON block in the page that tells the browser where to load **bare module specifiers** from, so native ES modules can write `import { createRoot } from 'react-dom/client'` without a bundler rewriting the path:
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://cdn.example.com/react@19.1.0/index.js",
+    "react-dom/client": "https://cdn.example.com/react-dom@19.1.0/client.js",
+    "@acme/checkout": "https://cdn.example.com/checkout/v42/index.js"
+  }
+}
+</script>
+<script type="module">import('@acme/checkout').then((m) => m.mount(document.querySelector('#app')));</script>
+```
+
+They're supported natively in all major browsers.
+
+How they help micro-frontends:
+- **One copy of shared libraries**: every micro-frontend imports `react`, and the map points them all at the same URL, so the browser loads and caches it once.
+- **Independent deployment**: changing which version of `@acme/checkout` the page uses is a change to the map, not a rebuild of the shell. A server can render a different map per request for canaries or per-team testing.
+- **No bundler lock-in**: works with any build tool that outputs ES modules, and it's the approach single-spa recommends.
+
+Limits: the map must be in place before modules load. Sharing still needs version agreements (the map can point to only one `react` per scope), and you need your own tooling to generate and publish the map. Module Federation adds richer version negotiation and build integration, at the cost of tying you to supporting bundlers.
+
+**What the interviewer is looking for:**
+What import maps do, how they enable shared dependencies and deploy-by-map-change, and how they compare with Module Federation.
+
+**Follow-ups:**
+- How would you canary a new micro-frontend version for 5% of users with import maps?
+- What happens if two micro-frontends need different major versions of a library?
+
+**Red flags:**
+- Each micro-frontend loading its own React from its own URL.
+- Not knowing native module resolution needs a map for bare specifiers.
+
+### How do you stop micro-frontends' styles from conflicting with each other? {#css-isolation}
+
+**Level:** Senior
+
+**Model answer:**
+Every stylesheet on a page shares one global namespace, so one team's `.button { … }` or `h2 { … }` can restyle another team's UI, and the order stylesheets load in decides who wins.
+
+**Techniques, from simplest:**
+- **Scoped class names at build time**: CSS Modules, CSS-in-JS or utility classes generate unique names, so styles only apply to the component that imports them. This removes most conflicts.
+- **Prefixes by convention**: each micro-frontend namespaces its classes (`.chk-…`), backed by a lint rule.
+- **No global element selectors in micro-frontends.** Resets, typography and base element styles belong to the **shell**, applied once.
+- **Cascade layers (`@layer`)** set a clear order: shell base, then design system, then micro-frontends, so later layers win predictably regardless of load order.
+- **The `@scope` rule**, in browsers that support it, limits selectors to a subtree, such as a micro-frontend's root.
+- **Shadow DOM** (with Web Components) gives real encapsulation: outside styles don't leak in, and inside styles don't leak out. The trade-off is that shared design-system styles must be passed in deliberately (CSS custom properties pass through, as do constructable stylesheets).
+
+**Consistency without coupling:**
+- **Design tokens as CSS custom properties**, defined once by the shell or design system, and used by every micro-frontend. Theming and dark mode then work everywhere.
+- Shared, versioned **design-system components** instead of each team restyling basics.
+
+**Clean-up matters too:** micro-frontends that inject styles on mount should remove them on unmount, or styles from a previous route will linger in a client-side app.
+
+**What the interviewer is looking for:**
+Why conflicts happen, scoping techniques, shell ownership of global styles, cascade layers, Shadow DOM trade-offs, and tokens for consistency.
+
+**Follow-ups:**
+- How would you theme a Shadow DOM component from outside?
+- A legacy micro-frontend ships global Bootstrap CSS. How do you contain it?
+
+**Red flags:**
+- Micro-frontends styling `body`, `h1` or `button` globally.
+- Relying on load order to win specificity battles.
+
+### How should authentication and sessions work across micro-frontends? {#mfe-auth}
+
+**Level:** Senior
+
+**Model answer:**
+**One login, owned by the shell.** Users must sign in once, and micro-frontends shouldn't each implement authentication.
+
+**Recommended approach:**
+- The shell (or its **backend-for-frontend**) handles sign-in with OpenID Connect, using the authorisation code flow with PKCE.
+- Prefer the **BFF pattern**: the session lives in a secure, **HttpOnly, SameSite cookie**, and tokens stay on the server. Micro-frontends call their own BFF endpoints on the same site, and the cookie authenticates them automatically. No tokens are exposed to JavaScript, which limits the damage from XSS.
+- If micro-frontends must call APIs directly with tokens, the shell exposes a **`getAccessToken(audience)`** function that returns a short-lived token from memory, refreshing it as needed. Never use `localStorage` for tokens.
+
+**Shared session concerns:**
+- **User context** (id, name, roles, tenant) comes from a shell-provided service or event, not each micro-frontend decoding tokens differently.
+- **Authorisation is enforced on the server** by each micro-frontend's backend. Client-side role checks only decide what to show.
+- **Session expiry**: the shell detects it (a 401 from any call) and runs one re-authentication flow, rather than five micro-frontends redirecting at once.
+- **Logout** clears the server session and notifies every tab and micro-frontend (for example via BroadcastChannel).
+
+**Different origins** make all of this harder. Cookies and storage are per origin, so serve micro-frontends from the same site (via paths or a reverse proxy) wherever possible.
+
+**What the interviewer is looking for:**
+Centralised login, the BFF and HttpOnly cookie pattern, a token-getter when needed, server-side authorisation, and coordinated expiry and logout.
+
+**Follow-ups:**
+- One micro-frontend needs a token for a different API audience. How?
+- How do you handle a micro-frontend embedded on a partner's site?
+
+**Red flags:**
+- Each micro-frontend running its own login flow.
+- Tokens in `localStorage` shared through `window`.
+
+### How do you observe and debug a page made of micro-frontends from many teams? {#mfe-observability}
+
+**Level:** Architect
+
+**Model answer:**
+When a page is slow or throws errors, the first question is **which team's code is responsible**. The answer has to come from data, not argument.
+
+**Errors:**
+- Every micro-frontend gets its own **error boundary** and reports errors **tagged with its name and version**, so reports route to the owning team.
+- Upload **source maps per micro-frontend release**, so stack traces resolve, even though bundles are loaded from different URLs.
+- Track **load failures** separately: a remote that fails to load (CDN errors, version mismatch) is a platform-level incident.
+
+**Performance attribution:**
+- **Core Web Vitals in real-user monitoring**, segmented by route and by the micro-frontends present on the page.
+- **Long Animation Frames** (LoAF) data attributes slow frames to the scripts that caused them, by URL, which maps to the owning micro-frontend. That's how you find whose code hurts INP.
+- **User Timing marks** at each micro-frontend's load, mount and first meaningful render.
+- **Bundle-size budgets** per micro-frontend in CI, with trends.
+
+**Tracing:**
+- Propagate **trace context** from browser requests (`traceparent`) to each micro-frontend's BFF and onwards, so a slow interaction can be followed into the back end.
+
+**Release health:**
+- Dashboards per micro-frontend version: error rate, vitals and adoption, so a team can see within minutes whether its new version is worse, and roll the manifest back.
+- The shell team owns platform-level views: composition failures, shared-dependency negotiation problems, and overall page vitals.
+
+**What the interviewer is looking for:**
+Error attribution by micro-frontend and version, source maps per remote, LoAF and timing-based performance attribution, trace propagation, and per-version release health.
+
+**Follow-ups:**
+- INP got worse after five teams released on the same day. How do you find the cause?
+- Who is paged when the shell can't load a remote?
+
+**Red flags:**
+- One global error stream with no ownership tags.
+- Blaming the shell by default because nobody can attribute the problem.
+
+### Design server-side composition for SEO-critical pages built by several teams. {#server-side-composition}
+
+**Level:** Architect
+
+**Model answer:**
+For pages such as product listings and product details, search engines and first-load performance matter most. **Server-side composition** assembles HTML from fragments owned by different teams before it reaches the browser.
+
+**Components:**
+- **Fragment services**: each team serves its part of the page as HTML (its own server-rendered component), plus the CSS and JS it needs, from its own deployable service.
+- **A composition layer**: an edge or server process that receives the page request, fetches the fragments in parallel, and stitches them into a layout. Options include edge-side includes at the CDN, dedicated composition libraries, and framework features (for example server islands or multi-zone setups).
+
+**Making it fast and robust:**
+- **Stream the page**: send the layout and above-the-fold fragments first, and stream slower fragments into placeholders as they arrive. Time to first byte isn't held back by the slowest team.
+- **Timeouts and fallbacks per fragment**: if the recommendations fragment takes more than 150 ms, render an empty slot or a cached version, and let the client fill it later. One team's outage mustn't break the page.
+- **Cache per fragment** with its own TTL: the product description for hours, price and stock briefly or not at all. Personalised fragments bypass shared caches.
+- **Hydrate selectively**: fragments become interactive as independent islands, loading only their own JavaScript, when visible or interacted with.
+
+**Shared concerns:**
+- A **layout and design-system CSS** owned by the platform, with fragment CSS scoped to avoid clashes.
+- **Asset deduplication**: the composer collects each fragment's declared CSS and JS, and includes shared assets once.
+- **Contracts per fragment**: inputs (product id, locale, user segment), outputs (HTML, assets, cache headers), versioned and tested.
+- **Observability**: per-fragment latency, error and timeout metrics, and tracing through the composer.
+
+**What the interviewer is looking for:**
+Fragment services and a composer, streaming with per-fragment timeouts and fallbacks, fragment-level caching, island hydration, asset deduplication, and contracts.
+
+**Follow-ups:**
+- How do you handle a fragment that needs data another fragment already fetched?
+- How would you A/B test one fragment's design?
+
+**Red flags:**
+- Sequential fragment fetching.
+- A page that fails entirely when one fragment errors.
+
 ## Cheat Sheet
 
 - **Micro-frontends** — independently deployable frontend parts owned by different teams.
@@ -496,6 +722,16 @@ Practical alternatives addressing the same pains with less complexity.
 - **Performance budgets** — per micro-frontend, with RUM attribution.
 - **When not to** — few teams, unclear boundaries, no platform capacity.
 - **Alternatives** — modular monolith, fast monorepo CI, continuous deployment.
+
+### Revisit
+
+- **Shared dependencies** — without sharing, every micro-frontend ships its own React (~55 KB gzipped plus parse and execution cost), and two React instances break hooks and context. Share large libraries as versioned singletons.
+- **Runtime loading** — the shell reads a manifest, loads remotes on navigation, mounts them in error boundaries, and rolls back by editing the manifest.
+- **Import maps** — map bare specifiers to URLs natively. Share one library URL, and switch versions by changing the map.
+- **CSS isolation** — scoped class names, shell-owned globals, `@layer` for order, Shadow DOM for real encapsulation, and tokens as custom properties.
+- **Auth across micro-frontends** — shell-owned login, a BFF with an HttpOnly cookie, a token getter if needed, and server-side authorisation.
+- **Observability** — errors tagged with micro-frontend and version, source maps per remote, LoAF attribution for INP, per-version release health.
+- **Server-side composition** — fragment services, streamed with per-fragment timeouts and caching, island hydration and deduplicated assets.
 
 ## Further Reading
 
