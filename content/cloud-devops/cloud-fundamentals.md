@@ -6,7 +6,7 @@ tags: [cloud, iaas, paas]
 level: Foundation
 estimatedMinutes: 45
 related: [azure, finops]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -60,7 +60,7 @@ The higher up the stack, the less you manage — but **identity, data and config
 ### Networking basics
 
 - **Virtual network (VPC/VNet)** with subnets (public/private), route tables, NAT gateways for outbound internet from private subnets.
-- **Security groups / NSGs:** stateful allow rules per resource or subnet; default deny inbound.
+- **Security groups / NSGs:** stateful rules per resource or subnet, with inbound denied by default. AWS security groups are allow-only; Azure NSGs also support deny rules.
 - **Private endpoints / PrivateLink:** reach managed services (databases, storage) over private IPs instead of the public internet.
 - **Load balancers:** L4 (TCP) and L7 (HTTP with path routing, TLS termination, WAF).
 - **Hybrid connectivity:** site-to-site VPN or dedicated links (ExpressRoute, Direct Connect).
@@ -75,7 +75,33 @@ The higher up the stack, the less you manage — but **identity, data and config
 
 ### Well-Architected pillars
 
-AWS, Azure and Google publish similar frameworks: **operational excellence, security, reliability, performance efficiency, cost optimisation** (AWS adds **sustainability**). Use them as review checklists for workloads.
+AWS, Azure and Google publish similar frameworks: **operational excellence, security, reliability, performance efficiency, cost optimisation** (AWS and Google also have a **sustainability** pillar). Use them as review checklists for workloads.
+
+### Worked example: what does the SLA chain add up to?
+
+A checkout runs in one region. Each component's provider SLA (illustrative, but typical) is:
+
+| Component | SLA | Allowed downtime per month |
+|---|---|---|
+| CDN | 99.99% | 4.4 min |
+| Regional load balancer | 99.99% | 4.4 min |
+| App tier (multi-AZ) | 99.95% | 21.9 min |
+| Managed database (multi-AZ) | 99.99% | 4.4 min |
+| Managed cache | 99.9% | 43.8 min |
+| Third-party payment API | 99.9% | 43.8 min |
+
+If a request needs **every** component (a serial chain), the availabilities multiply:
+
+0.9999 × 0.9999 × 0.9995 × 0.9999 × 0.999 × 0.999 ≈ **99.72%**, or about **2 hours of downtime a month**. That's worse than any single component.
+
+Two design moves change the answer:
+1. **Take components off the critical path.** If the cache is optional (fall back to the database, which is sized for it) and the payment is taken asynchronously (accept the order, charge it from a queue), the chain is CDN, load balancer, app and database: ≈ **99.92%**, about 35 minutes a month.
+2. **Add redundancy in parallel.** Two independent regions, each with load balancer, app and database (≈ 99.93% each), fail together only if both fail: 1 − (0.0007)² ≈ 99.99995%. But the CDN or global DNS in front is still one serial component, so the total is capped near **99.99%**. The global entry point becomes the limit.
+
+What this doesn't tell you:
+- **An SLA isn't a prediction.** It's a promise backed by service credits, usually a fraction of that service's bill, and it says nothing about your business's losses. Real availability is often better, sometimes worse.
+- **Failures aren't independent.** A bad deploy, an expired certificate or a shared identity provider takes out "redundant" copies together. Most outages come from your own changes, which no provider SLA covers.
+- **Parallel redundancy only counts if failover works.** It has to be automatic, or at least tested, and the surviving side needs the capacity to take the full load.
 
 ## How It Works
 
@@ -112,6 +138,35 @@ flowchart TB
 ```
 
 An AZ outage removes a third of app capacity (autoscaling replaces it) and, if the primary was there, the database fails over to the standby in another AZ — typically within a minute or two for managed databases.
+
+### What happens when an availability zone fails
+
+```mermaid
+sequenceDiagram
+  participant LB as Load balancer
+  participant A1 as App in AZ 1
+  participant A23 as App in AZ 2 and 3
+  participant AS as Autoscaling
+  participant DB as Managed database
+  %% step: AZ 1 loses power. The load balancer's health checks to the instances there start failing.
+  %% step: After a few failed checks, the load balancer marks them unhealthy and sends all traffic to AZ 2 and 3.
+  %% step: The remaining instances are now running hot: they carry the whole load. This is why each AZ needs headroom.
+  %% step: Autoscaling sees the lost capacity and the higher CPU, and launches replacements in the healthy zones.
+  %% step: The database primary was in AZ 1. The managed service detects it's gone and promotes the synchronous standby in AZ 2, typically within a minute or two.
+  %% step: The database's DNS name now points to the new primary. Connections that were open to the old one fail.
+  %% step: The app's connection pool retries with backoff, resolves the name again and reconnects. Requests that failed during the switch were retried or returned an error to the user.
+  %% step: New instances pass their health checks and join the pool. Capacity is back to normal while AZ 1 is still down.
+  LB->>A1: Health checks fail
+  LB->>A23: Route all traffic here
+  Note over A23: Running hot on two zones
+  AS->>A23: Launch replacement instances
+  Note over DB: Standby in AZ 2 promoted
+  DB-->>A23: Old connections dropped
+  A23->>DB: Reconnect with backoff
+  A23-->>LB: New instances healthy
+```
+
+Nothing in this sequence needs a person, but every step is a setting someone chose: health check intervals, spare capacity per zone, automatic failover, connection retry behaviour and DNS caching. Test it by simulating the loss of a zone, for example with AWS Fault Injection Service or Azure Chaos Studio, before a real one does.
 
 ## When to Use / Trade-offs
 
@@ -306,7 +361,7 @@ Knowledge of models, an ordered optimisation approach (rightsize before committi
 **Model answer:**
 - **Virtual network (VPC/VNet):** your private IP space in a region, split into **subnets** (public for load balancers/gateways, private for apps and data). Plan CIDR ranges to avoid overlaps with on-premises and other networks.
 - **Routing:** route tables; **NAT gateways** for outbound internet from private subnets; internet gateway for public subnets.
-- **Security:** security groups/NSGs (stateful allow rules, default deny inbound), network ACLs, firewalls in a hub; **WAF** on internet-facing L7 endpoints.
+- **Security:** security groups/NSGs (stateful rules, inbound denied by default; AWS security groups are allow-only, Azure NSGs also allow deny rules), network ACLs, firewalls in a hub; **WAF** on internet-facing L7 endpoints.
 - **Private access to services:** private endpoints/PrivateLink so databases, storage and other PaaS are reachable only from inside your network; disable public endpoints.
 - **Connectivity:** peering between VNets/VPCs, **hub-and-spoke** or transit gateways for many networks; VPN or dedicated circuits (ExpressRoute, Direct Connect) to on-premises.
 - **DNS:** private DNS zones for internal names and private endpoints.
@@ -545,6 +600,175 @@ Lock-in as a managed trade-off, classification, cheap portability measures, seam
 - Refusing all managed services.
 - No awareness of exit costs.
 
+### What is the difference between scalability and elasticity, and how does autoscaling work? {#elasticity-autoscaling}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Scalability** is a system's ability to handle more load by adding resources. **Vertical** scaling uses a bigger machine, which is simple but has a ceiling and often needs a restart. **Horizontal** scaling adds more instances, which needs a stateless or partitioned design.
+- **Elasticity** is doing that automatically and in both directions: adding capacity as load rises and **removing it** as load falls, so you pay for what you use.
+
+Autoscaling works as a control loop:
+1. **Measure a signal**: CPU, request rate per instance, queue depth, or a custom metric such as concurrent sessions. The best signal is close to the real bottleneck. Queue depth beats CPU for workers.
+2. **Compare it with a target**, such as 60% CPU or 100 messages per worker (target tracking), or use step and scheduled rules.
+3. **Add or remove instances**, within minimum and maximum limits.
+
+Practical points:
+- **Scale-out takes time.** Booting, pulling images and warming caches can take minutes, so keep headroom, scale on leading signals, or use scheduled scaling ahead of known peaks.
+- **Scale in carefully.** Use cooldowns to avoid flapping, and drain connections before terminating.
+- **Set a maximum.** It caps the bill during a bug or an attack, and protects downstream dependencies that can't scale.
+- Elasticity only works for parts that are **stateless**. Databases usually scale differently: replicas, bigger instances, or serverless tiers.
+
+**What the interviewer is looking for:**
+Clear definitions, vertical versus horizontal, the control loop, good scaling signals and the practical limits.
+
+**Follow-ups:**
+- Why might CPU be a poor scaling signal for a queue consumer?
+- How do you handle a traffic spike that arrives faster than instances can start?
+
+**Red flags:**
+- No maximum limit.
+- Assuming the database scales like the stateless tier.
+
+### What does a cloud SLA actually promise, and how do you reason about a system's availability from its components' SLAs? {#cloud-slas}
+
+**Level:** Senior
+
+**Model answer:**
+A provider's **SLA** is a contract: if the monthly uptime of a service falls below the stated percentage, you can claim **service credits**, typically 10–30% of that service's bill for the month, rising to 100% only for severe outages. It doesn't compensate your losses, it often requires you to claim, and it usually only applies to specific configurations. A database's higher SLA may need a multi-AZ deployment, for example.
+
+To reason about the whole system:
+- **Serial dependencies multiply.** If a request needs five components each at 99.9%, the best case is 0.999⁵ ≈ 99.5%. Every hard dependency lowers the ceiling.
+- **Parallel redundancy combines as** 1 − (product of the failure probabilities), but only if the copies fail independently and failover works.
+- **Your target is an SLO**, set from user needs, and it can't exceed what the serial chain allows unless you remove dependencies from the critical path or add redundancy.
+
+Ways to improve the result:
+- Make non-essential dependencies **optional**, with timeouts, fallbacks and asynchronous processing.
+- Use **zone-redundant** configurations that come with higher SLAs.
+- Add **regional redundancy** only for the parts that need it.
+- Remember that the **biggest risks are often not in any SLA**: your deployments, configuration changes, certificates and capacity.
+
+Translate percentages into minutes: 99.9% allows about 43 minutes of downtime a month, 99.95% about 22, and 99.99% about 4. At 99.99%, a single slow manual failover uses the whole month's budget.
+
+**What the interviewer is looking for:**
+SLAs as credit-backed contracts, serial and parallel composition, the independence caveat, and the difference between a provider's SLA and your SLO.
+
+**Follow-ups:**
+- Your product promises customers 99.95%, but one critical dependency only offers 99.9%. What do you do?
+- Why is the SLA of a service you can't fail over from effectively your ceiling?
+
+**Red flags:**
+- Treating an SLA as a measurement of real availability.
+- Adding up downtime instead of multiplying availabilities.
+
+### How do you approach encryption and key management in the cloud? {#cloud-encryption}
+
+**Level:** Senior
+
+**Model answer:**
+**In transit:** TLS everywhere, including inside the network: between services, to databases and to caches. Use managed certificates with automatic renewal, set a minimum of TLS 1.2, and use mutual TLS where services need to authenticate each other.
+
+**At rest:** major providers encrypt storage and managed databases by default with **provider-managed keys**. The choice is who controls the key:
+
+| Option | Who controls the key | Use when |
+|---|---|---|
+| Provider-managed keys | The provider, invisibly | The default for most data |
+| **Customer-managed keys** (KMS, Key Vault) | You: rotation, key policy, disabling or deleting it | Regulatory requirements, separation of duties, the ability to revoke access ("crypto-shredding") |
+| Customer-provided or external keys (BYOK, HYOK, external key stores) | You, partly outside the provider | Strict sovereignty requirements, at a real cost in availability and complexity |
+
+**How it works underneath:** **envelope encryption**. Data is encrypted with a data key, and the data key is encrypted with a key-encryption key that never leaves the KMS or HSM. That's why encrypting terabytes doesn't mean sending them to the KMS, and why disabling one key makes everything under it unreadable.
+
+**Key management practices:**
+- Keys in KMS or Key Vault, never in code or configuration. Automatic rotation where supported.
+- **Separate key administrators from data users.** The people who manage keys shouldn't be able to read the data, and the reverse.
+- Audit every key use (CloudTrail, Key Vault logs), and alert on disable, delete and policy changes.
+- Protect against loss: deletion waiting periods, purge protection and backups for keys you hold. A deleted customer-managed key means data loss.
+
+Encryption at rest mainly protects against physical theft and some provider-side access. Most breaches come through valid credentials, so **identity and access control** still matter most.
+
+**What the interviewer is looking for:**
+Defaults versus customer-managed keys, envelope encryption, separation of duties, key-loss risk, and realism about what encryption at rest protects.
+
+**Follow-ups:**
+- What happens to a database if its customer-managed key is disabled?
+- How would you use per-tenant keys in a SaaS product?
+
+**Red flags:**
+- "It's encrypted, so it's secure."
+- Customer-managed keys everywhere without a plan for key loss or rotation.
+
+### A CFO asks whether you should move workloads from the cloud back on-premises. How do you evaluate repatriation? {#cloud-repatriation}
+
+**Level:** Architect
+
+**Model answer:**
+Repatriation can be right for some workloads, but the decision needs an honest comparison, not a headline bill.
+
+**Where it can pay off:**
+- **Large, steady, predictable workloads**, where elasticity adds little: big storage estates, constant compute, high-volume egress such as video delivery.
+- Workloads using commodity infrastructure (VMs, block storage) rather than managed services.
+- Specific regulatory or sovereignty needs, or hardware the cloud prices poorly (some GPU or high-bandwidth workloads).
+
+**Build a fair total cost of ownership:**
+- **Cloud side:** use the *optimised* cost after rightsizing, commitments and architecture fixes. Many repatriation cases compare an unoptimised cloud bill with an idealised data centre.
+- **On-premises side:** hardware with a 4–5 year refresh, data-centre space or colocation, power, network and transit, spares, support contracts, software licences, and the **people**: operations, security, procurement and on-call. Include the capacity you must buy for peaks, and the time to procure it.
+- **Migration costs:** egress to move the data out, dual running during the move, and re-engineering away from managed services you'd lose.
+- **Opportunity cost:** what the teams would build instead, and the slower provisioning that follows.
+
+**Decide workload by workload**, not "cloud versus on-premises" for everything. A common outcome is hybrid: steady storage-heavy or compute-heavy platforms move to colocation, while customer-facing, variable and managed-service-heavy systems stay in the cloud.
+
+**Before deciding, try the cheaper fixes:** negotiate pricing, commit for the baseline, re-architect egress-heavy paths with a CDN, and move to cheaper storage tiers. Often these close most of the gap.
+
+Record the analysis, its assumptions and the review date in an ADR, and revisit it, because both prices and the business change.
+
+**What the interviewer is looking for:**
+Workload-level analysis, a fair TCO including people and migration, optimised cloud baselines, and openness to a hybrid outcome.
+
+**Follow-ups:**
+- Which three numbers would you need first?
+- How would you de-risk moving a 2 PB storage platform out?
+
+**Red flags:**
+- Comparing list-price cloud bills with server purchase prices.
+- Ignoring the staff and capacity-planning costs of running hardware.
+
+### A launch needs 300 GPUs and 2,000 vCPUs in one region next month. How do you make sure the capacity will be there? {#cloud-capacity-planning}
+
+**Level:** Architect
+
+**Model answer:**
+"Infinite capacity" is a simplification. Every region has finite hardware per instance type, every account has **quotas**, and scarce types such as recent GPUs are often constrained.
+
+**Quotas first:**
+- Check the **service quotas** that apply: vCPU limits per instance family, GPU quotas, IP addresses, load balancers, and managed-service limits. Request increases weeks ahead with a business justification, because large or GPU requests can take time or be partly granted.
+- Check **per-account rate limits** that a big scale-out could hit: API throttling for launches, container image pulls and DNS.
+
+**Then secure the capacity itself:**
+- **Capacity reservations** (On-Demand Capacity Reservations on AWS, capacity reservations on Azure, reservations on Google Cloud) guarantee instances in a specific zone, billed whether used or not. Pair them with savings plans or committed-use discounts for the price.
+- For GPUs, use the provider's **scheduled or block capacity** options (for example, capacity blocks for ML on AWS), or negotiate directly through your account team.
+- **Spread** the request across zones and, if the workload allows, regions and instance types, so one constrained pool doesn't block the launch.
+
+**Design for flexibility:**
+- Make workloads run on **several instance families and sizes**, and on Arm where possible. Autoscaling groups with mixed instance policies, or Kubernetes node pools that use several types, turn "no capacity" into "slightly different capacity".
+- Know your **fallback order**: other types, then another zone, then another region, then a degraded mode.
+- For batch and training, **queue the work** instead of needing everything at once.
+
+**Validate and operate:**
+- Load-test at the target scale in production-like conditions, which also surfaces the quotas you missed.
+- Pre-scale before the launch, and alert on failures to launch instances with "insufficient capacity".
+- Release reservations after the peak, because they cost money every hour.
+
+**What the interviewer is looking for:**
+Quotas versus physical capacity, reservations and their cost, flexibility across types and zones, and validation at scale.
+
+**Follow-ups:**
+- A capacity reservation is 40% unused after launch. What do you do?
+- How would you handle an inference service if GPUs run out during a spike?
+
+**Red flags:**
+- Assuming autoscaling will find capacity on the day.
+- Discovering quota limits during the launch.
+
 ## Cheat Sheet
 
 ### Models and responsibility
@@ -567,6 +791,16 @@ Lock-in as a managed trade-off, classification, cheap portability measures, seam
 - **DR strategies** — backup & restore, pilot light, warm standby, active-active.
 - **Multi-cloud** — justified by specific needs, not abstract lock-in fears.
 - **Well-Architected pillars** — operational excellence, security, reliability, performance, cost (and sustainability).
+
+### Revisit
+
+- **Composite availability** — serial dependencies multiply (six components give about 99.72%). Parallel copies combine as 1 − the product of their failure probabilities, if they fail independently.
+- **Downtime budgets** — 99.9% ≈ 43 min a month, 99.95% ≈ 22 min, 99.99% ≈ 4 min.
+- **SLA vs SLO** — an SLA is a credit-backed contract for one service. Your SLO comes from user needs and is capped by your serial chain.
+- **Elasticity** — scaling out *and in* automatically on a signal close to the bottleneck, within minimum and maximum limits.
+- **Envelope encryption** — data keys encrypt data, a key-encryption key in KMS encrypts the data keys. Disabling the key makes everything under it unreadable.
+- **Repatriation** — compare against the optimised cloud cost and a full on-premises cost including people. Decide per workload.
+- **Capacity** — quotas and physical capacity are separate. Reserve scarce types, stay flexible across families and zones, and release reservations after the peak.
 
 ## Further Reading
 

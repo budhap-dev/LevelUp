@@ -6484,5 +6484,263 @@
       "ci-cd-pipelines",
       "devsecops"
     ]
+  },
+  {
+    "id": "composite-availability",
+    "term": "Composite availability",
+    "aka": [
+      "composite SLA"
+    ],
+    "group": "cloud-devops",
+    "definition": "The availability of a system calculated from its components: serial dependencies multiply, and independent parallel copies combine as one minus the product of their failure probabilities.",
+    "details": [
+      "Six serial components at 99.9–99.99% give only about 99.7%.",
+      "Parallel redundancy only helps if failures are independent and failover works."
+    ],
+    "useCases": [
+      "Checking whether an SLO is achievable with the planned dependencies."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "elasticity",
+    "term": "Elasticity",
+    "aka": [
+      "autoscaling"
+    ],
+    "group": "cloud-devops",
+    "definition": "Automatically adding capacity as load rises and removing it as load falls, so cost follows demand.",
+    "details": [
+      "Scalability is the ability to grow. Elasticity is doing it automatically in both directions.",
+      "Scale on a signal close to the bottleneck, with minimum and maximum limits."
+    ],
+    "useCases": [
+      "Web tiers that follow daily traffic.",
+      "Queue workers scaled on queue depth."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "envelope-encryption",
+    "term": "Envelope encryption",
+    "aka": [
+      "data key",
+      "key-encryption key"
+    ],
+    "group": "quality-security",
+    "definition": "Encrypting data with a data key, then encrypting that data key with a key-encryption key held in a KMS or HSM that never leaves it.",
+    "details": [
+      "Large data never goes to the KMS, only small data keys.",
+      "Disabling or deleting the key-encryption key makes everything under it unreadable."
+    ],
+    "useCases": [
+      "Customer-managed keys for databases and storage.",
+      "Per-tenant keys and crypto-shredding."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "capacity-reservation",
+    "term": "Capacity reservation",
+    "aka": [
+      "on-demand capacity reservation"
+    ],
+    "group": "cloud-devops",
+    "definition": "A guarantee from a cloud provider that a number of instances of a given type will be available in a specific zone, billed whether or not they're used.",
+    "details": [
+      "Separate from quotas, which only permit usage, and from savings plans, which only discount it.",
+      "Release reservations after the peak, because they cost money every hour."
+    ],
+    "useCases": [
+      "Securing GPUs or large fleets for a launch."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "finops"
+    ]
+  },
+  {
+    "id": "cloud-repatriation",
+    "term": "Cloud repatriation",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "Moving workloads from public cloud back to on-premises or colocation, usually to cut the cost of large, steady workloads.",
+    "details": [
+      "Compare against the optimised cloud cost, and include people, refresh cycles and migration in the on-premises side.",
+      "Usually decided per workload, often ending in a hybrid estate."
+    ],
+    "useCases": [
+      "Evaluating a storage-heavy platform with constant load."
+    ],
+    "related": [
+      "cloud-fundamentals",
+      "finops"
+    ]
+  },
+  {
+    "id": "gateway-api",
+    "term": "Gateway API",
+    "aka": [
+      "Kubernetes Gateway API"
+    ],
+    "group": "cloud-devops",
+    "definition": "The Kubernetes API for routing traffic into and within clusters, split by role into GatewayClass, Gateway and Route resources, with portable features such as weighted backends and header matching.",
+    "details": [
+      "The successor to Ingress, which is frozen. The Ingress NGINX controller was retired in March 2026.",
+      "Implementations are tested against a shared conformance suite."
+    ],
+    "useCases": [
+      "Shared gateways with routes owned by application teams.",
+      "Canary traffic splitting without controller annotations."
+    ],
+    "related": [
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "network-policy",
+    "term": "NetworkPolicy",
+    "aka": [
+      "Kubernetes network policy"
+    ],
+    "group": "cloud-devops",
+    "definition": "A Kubernetes resource that selects pods by label and lists the ingress and egress traffic allowed for them. Once a pod is selected, anything not allowed is denied.",
+    "details": [
+      "Enforced by the CNI plugin. Without support, policies are silently ignored.",
+      "Default-deny egress must still allow DNS."
+    ],
+    "useCases": [
+      "Namespace isolation in a multi-tenant cluster.",
+      "Restricting a payment service's egress."
+    ],
+    "related": [
+      "docker-kubernetes",
+      "devsecops"
+    ]
+  },
+  {
+    "id": "dynamic-resource-allocation",
+    "term": "Dynamic Resource Allocation (DRA)",
+    "aka": [
+      "DRA"
+    ],
+    "group": "cloud-devops",
+    "definition": "The Kubernetes API, GA since version 1.34, that lets pods request devices such as GPUs by their attributes, with the scheduler allocating them from drivers' published device information.",
+    "details": [
+      "More expressive than device-plugin counts such as nvidia.com/gpu: 1.",
+      "Supports sharing and partitioned devices."
+    ],
+    "useCases": [
+      "Requesting a GPU with at least 40 GB of memory for an inference pod."
+    ],
+    "related": [
+      "docker-kubernetes"
+    ]
+  },
+  {
+    "id": "multi-arch-image",
+    "term": "Multi-architecture image",
+    "aka": [
+      "image index",
+      "manifest list"
+    ],
+    "group": "cloud-devops",
+    "definition": "A container image reference that points to variants for several CPU architectures, such as amd64 and arm64, so each node pulls the one matching its platform.",
+    "details": [
+      "Built with docker buildx, ideally on native runners for each architecture.",
+      "Native dependencies and DaemonSets are the usual blockers."
+    ],
+    "useCases": [
+      "Moving services to Arm nodes gradually."
+    ],
+    "related": [
+      "docker-kubernetes",
+      "finops"
+    ]
+  },
+  {
+    "id": "effective-savings-rate",
+    "term": "Effective savings rate (ESR)",
+    "aka": [
+      "ESR"
+    ],
+    "group": "cloud-devops",
+    "definition": "The percentage by which actual spend is below the on-demand-equivalent cost of the same usage, including the waste from unused commitments.",
+    "details": [
+      "Falls when you commit too little or too much, so it peaks at the right level.",
+      "Report it by scope, such as compute or databases."
+    ],
+    "useCases": [
+      "Judging a commitment portfolio's real value."
+    ],
+    "related": [
+      "finops"
+    ]
+  },
+  {
+    "id": "amortised-cost",
+    "term": "Amortised cost",
+    "aka": [
+      "amortized cost"
+    ],
+    "group": "cloud-devops",
+    "definition": "A view of cloud spend that spreads upfront and recurring commitment fees across the hours they cover, instead of showing them when they're billed.",
+    "details": [
+      "Use it for showback and unit economics.",
+      "Billed (actual or unblended) cost shows an upfront purchase as a one-month spike."
+    ],
+    "useCases": [
+      "Team cost dashboards that stay stable when reservations are bought."
+    ],
+    "related": [
+      "finops"
+    ]
+  },
+  {
+    "id": "unit-economics",
+    "term": "Unit economics",
+    "aka": [
+      "unit cost"
+    ],
+    "group": "cloud-devops",
+    "definition": "Technology cost expressed per unit of business value, such as cost per order, per active customer or per thousand API calls.",
+    "details": [
+      "Shows whether growth is efficient, which total spend can't.",
+      "Good unit metrics are meaningful to the business, allocatable and actionable."
+    ],
+    "useCases": [
+      "Showing that cost per order fell while total spend rose with volume."
+    ],
+    "related": [
+      "finops"
+    ]
+  },
+  {
+    "id": "focus-specification",
+    "term": "FOCUS",
+    "aka": [
+      "FinOps Open Cost and Usage Specification"
+    ],
+    "group": "cloud-devops",
+    "definition": "An open specification for billing data, so cost and usage from different clouds and SaaS vendors can be analysed with the same columns and definitions.",
+    "details": [
+      "Major cloud providers offer FOCUS-format exports.",
+      "Coverage is expanding beyond public cloud to SaaS and other scopes."
+    ],
+    "useCases": [
+      "One cost model across several clouds and vendors."
+    ],
+    "related": [
+      "finops"
+    ]
   }
 ]

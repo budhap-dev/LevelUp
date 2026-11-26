@@ -6,7 +6,7 @@ tags: [cost, cloud]
 level: Architect
 estimatedMinutes: 45
 related: [cloud-fundamentals, azure]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -78,6 +78,37 @@ Unit costs make conversations concrete ("cost per order fell from £0.42 to £0.
 - Observability cost: sampling, retention tiers.
 - Architecture: managed/serverless where it lowers total cost, caching, efficient queries, batch vs real-time.
 
+### Worked example: how much to commit
+
+A compute fleet's hourly usage, priced at on-demand rates, follows a daily pattern over a 730-hour month:
+
+| Hours of the month | On-demand-equivalent usage |
+|---|---|
+| 40% (nights) | $70 an hour |
+| 40% (daytime) | $100 an hour |
+| 20% (peaks) | $140 an hour |
+
+That averages $96 an hour, or **$70,080 a month** at on-demand prices. A savings plan gives a 28% discount (illustrative): you commit to a fixed amount of discounted spend *every hour*, so $72 of commitment covers $100 of on-demand usage. Unused commitment in an hour is lost.
+
+| Commit to cover | Commitment per hour | Utilisation | Coverage | Monthly cost | Effective savings rate |
+|---|---|---|---|---|---|
+| $60 | $43.20 | 100% | 62.5% | $57,816 | 17.5% |
+| **$70** | **$50.40** | **100%** | **72.9%** | **$55,772** | **20.4%** |
+| $80 | $57.60 | 95% | 79.2% | $56,648 | 19.2% |
+| $100 | $72.00 | 88% | 91.7% | $58,400 | 16.7% |
+| $140 | $100.80 | 69% | 100% | $73,584 | −5.0% |
+
+The best result is to commit to **the level used in almost every hour**: $70, the night-time floor.
+
+The rule behind it: each extra dollar of on-demand coverage costs $0.72 *every* hour, and saves a dollar only in the hours it's used. So it pays off only if that slice of usage occurs in more than 72% of hours (one minus the discount). Usage above $70 occurs in only 60% of hours, so committing to it loses money. Covering the peaks (100% coverage) costs more than paying on-demand.
+
+What changes the answer:
+- **A deeper discount** (a 3-year term, or a specific instance family) lowers the break-even, so committing higher pays off.
+- **Flattening the curve** (moving batch work to nights, or scaling down daytime waste) raises the floor and lets you commit more.
+- **Growth or planned changes.** Commit in tranches over time rather than once, and check engineering roadmaps first: a migration to Arm or serverless changes what's eligible.
+
+Track **coverage**, **utilisation** and above all the **effective savings rate**. A high coverage figure can hide waste, and only the savings rate says what the commitments actually saved.
+
 ## How It Works
 
 ```mermaid
@@ -105,6 +136,35 @@ flowchart LR
 ```
 
 Roles: a central FinOps team (finance + engineering skills) runs data, rates, tooling and cadence; engineering teams own usage decisions; finance owns budgeting and forecasting; product/business owns value and trade-offs; leadership sets targets and incentives.
+
+### A cost anomaly caught early
+
+```mermaid
+sequenceDiagram
+  participant W as Data pipeline
+  participant D as Cost monitoring
+  participant T as Owning team
+  participant B as Billing data
+  participant F as FinOps team
+  %% step: A Friday deploy changes a scheduled job's filter, so it rescans the whole data lake every hour. Cost monitoring watches a usage metric that tracks spend closely, bytes scanned per hour, which arrives within minutes, unlike billing data.
+  %% step: Bytes scanned are six times above the forecast band for a Friday evening. That's far outside normal variation.
+  %% step: The alert is routed by the job's service tag straight to the owning team's channel, with the metric, the delta and an estimated cost per hour.
+  %% step: The on-call engineer pauses the schedule within 30 minutes. Containment comes before diagnosis, as in any incident.
+  %% step: Billing data arrives the next day and confirms the cost: about $1,900 for three hours, against roughly $15,000 a day if it had run until someone noticed the invoice.
+  %% step: The team writes a short review covering cause, cost, time to detect and what would have prevented it.
+  %% step: The fix is a guardrail, not a reminder: a per-query limit on bytes scanned, set in the job template.
+  %% step: The FinOps team adds the limit to the shared pipeline template, so every team's jobs get it by default.
+  W->>D: Bytes scanned per hour
+  Note over D: Six times the forecast band
+  D->>T: Alert routed by service tag
+  T->>W: Pause the schedule
+  B->>D: Next-day billing data confirms cost
+  T->>F: Short review of the anomaly
+  Note over F: Guardrail, not a reminder
+  F-->>T: Scan limit in the shared template
+```
+
+The pattern generalises: alert on **fast usage signals** close to the cost (requests, tokens, bytes scanned, instance counts), route by **ownership**, contain first, and turn every anomaly into a **default guardrail**.
 
 ## When to Use / Trade-offs
 
@@ -528,6 +588,176 @@ Calm, data-driven diagnosis, separating temporary from structural costs, quick w
 - Defensive vagueness.
 - Slashing reliability-critical resources to hit a number.
 
+### What's in a cloud bill, and which views of cost should you use for what? {#cloud-bill-anatomy}
+
+**Level:** Foundation
+
+**Model answer:**
+A cloud bill is millions of line items, each a **service**, a **usage type** (instance hours, GB stored, GB transferred, requests), a **quantity**, a **rate** and often a **resource id and tags**. The detailed export (AWS Cost and Usage Report or Data Exports, Azure cost exports, the Google Cloud billing export to BigQuery, or the provider's FOCUS-format export) is the source of truth. Invoices and console summaries are views of it.
+
+The same spend can be shown several ways, and mixing them up causes most arguments:
+- **List or on-demand cost**: what the usage would cost at public prices. Use it to measure the savings from discounts.
+- **Billed or actual cost** (AWS "unblended"): what was charged when. An upfront reservation appears as one big charge in the month it was bought.
+- **Amortised cost**: upfront and recurring commitment fees spread over the hours they cover, plus a share of unused commitment. Use it for **showback and unit economics**, so a team's costs don't jump in the month someone bought a reservation.
+- **Net cost**: after credits, refunds and negotiated discounts.
+
+Line items people often miss:
+- **Data transfer**, split by direction and destination: internet egress, cross-region, cross-AZ, and NAT or endpoint processing.
+- **Support plans**, often a percentage of total spend.
+- **Marketplace and SaaS** purchases billed through the cloud account.
+- **Taxes**, and credits that expire.
+
+Also remember the **latency**: billing data typically arrives hours to a day after usage, and the month's invoice is final only after it closes.
+
+**What the interviewer is looking for:**
+The structure of line items, the difference between actual and amortised cost, the hidden categories, and billing latency.
+
+**Follow-ups:**
+- Why might a team's showback cost differ from the invoice for their account?
+- Which usage types would you look at first for a sudden network cost increase?
+
+**Red flags:**
+- Using billed cost for team showback when commitments are bought upfront.
+- Treating the console's summary as the source of truth.
+
+### What is the effective savings rate, and why is it a better commitment metric than coverage? {#effective-savings-rate}
+
+**Level:** Senior
+
+**Model answer:**
+**Effective savings rate (ESR)** = (on-demand-equivalent cost − actual cost) ÷ on-demand-equivalent cost, over the eligible usage.
+
+It answers the question finance actually cares about: **how much less did we pay than list price?** It includes everything:
+- The discounts commitments gave on the usage they covered.
+- **The waste from unused commitment**, which lowers it.
+- Usage that stayed at on-demand prices.
+
+Why the other metrics aren't enough on their own:
+- **Coverage** (the share of eligible usage covered) rewards over-buying. 100% coverage usually means paying for commitment in quiet hours.
+- **Utilisation** (the share of commitment used) rewards under-buying. 100% utilisation at 30% coverage leaves most of the savings on the table.
+- ESR balances them. It falls when you buy too little *or* too much, so it peaks at the right commitment level.
+
+Using it well:
+- Report ESR **by scope**: compute savings plans, database reservations, and other services separately. A single blended number hides a bad database reservation.
+- Compare against **benchmarks for your mix**. Steady workloads with long commitments can reach higher rates than spiky ones.
+- Pair it with **unit costs**. A high ESR on a wasteful architecture is still waste, because rate optimisation can't fix usage.
+
+**What the interviewer is looking for:**
+The formula, why coverage and utilisation each mislead in one direction, and ESR's limits.
+
+**Follow-ups:**
+- Your ESR dropped from 24% to 18% in a quarter. What could explain it?
+- How do negotiated enterprise discounts fit into the calculation?
+
+**Red flags:**
+- Targeting 100% coverage.
+- Reporting "savings" as list price minus actual price without counting unused commitment.
+
+### Non-production environments cost 45% of the cloud bill. How do you bring that down? {#non-prod-costs}
+
+**Level:** Senior
+
+**Model answer:**
+**Find out what non-production actually is.** Break the spend down by environment tag and account: shared dev and staging, per-team test environments, preview environments per pull request, load-test rigs, data copies and forgotten experiments. Each has a different fix.
+
+**Turn things off when nobody's using them:**
+- **Schedule** shared dev and test to stop outside working hours. Nights and weekends are about two-thirds of the week, so compute that's stopped then saves most of its cost. Provide a one-click override for people working late.
+- **Scale to zero** where the platform supports it (serverless containers, KEDA, serverless databases).
+- **Expire ephemeral environments**: preview environments are deleted when the PR closes, and sandboxes get a time-to-live and an owner.
+
+**Make them smaller:**
+- Smaller instance sizes and single-AZ, non-redundant configurations where production-like resilience isn't being tested.
+- **Shared** databases, clusters and caches with logical separation (schemas, namespaces) instead of one copy per team.
+- **Smaller data**: subsets of production-shaped data rather than full copies, which also helps privacy.
+
+**Watch the quieter costs:** logs and metrics retained as long as production's, NAT gateways and load balancers per environment, snapshots and old images.
+
+**Keep what non-production is for:** staging should still match production where it matters for the tests run there (versions, topology, configuration), and full-scale load tests should spin up on demand and down afterwards.
+
+**Make it stick:** cost per environment in team dashboards, budgets with alerts per non-production account, policies that block expensive SKUs outside production, and templates where schedules and TTLs are the default.
+
+**What the interviewer is looking for:**
+Breaking the spend down first, scheduling and TTLs, right-sizing and sharing, data subsets, and defaults that prevent regrowth.
+
+**Follow-ups:**
+- Developers say schedules slow them down. How do you respond?
+- How would you handle a staging environment that must be identical to production?
+
+**Red flags:**
+- Production-sized, multi-AZ copies for every team by default.
+- Deleting environments without owners or warning.
+
+### How do you extend a FinOps practice beyond public cloud, to SaaS, licences and AI? {#finops-beyond-cloud}
+
+**Level:** Architect
+
+**Model answer:**
+The FinOps Foundation's framework now defines **scopes** (Public Cloud, SaaS, Data Center, Licensing, AI and custom groupings), because the same questions apply to any variable technology spend: who's spending, on what, for what value, and can it be cheaper?
+
+**What changes per scope:**
+| Scope | Data | Main levers |
+|---|---|---|
+| **SaaS** | Contracts, seat counts and usage from each vendor's admin data, often in inconsistent formats. FOCUS increasingly covers SaaS too | Remove unused seats, right-size tiers, consolidate overlapping tools, time renewals, negotiate |
+| **Licensing** | Entitlements against deployments (databases, operating systems, commercial software) | Bring-your-own-licence benefits, licence-optimised instance sizes, moving to open-source engines, avoiding audit exposure |
+| **AI** | Tokens, model and GPU hours, often across several providers and teams | Model choice per task, caching and batching, prompt and context size, routing through a gateway for attribution and limits |
+| **Data center** | Depreciation, power, space, support | Utilisation, consolidation, refresh timing |
+
+**How to extend the practice:**
+1. **Start where spend and waste are largest.** Often that's SaaS sprawl or a fast-growing AI line, not another round of cloud tuning.
+2. **Bring the data together** in one model, using FOCUS where vendors support it, so showback and unit costs include every scope. "Cost per customer" that ignores SaaS and AI is incomplete.
+3. **Bring in the right people.** Procurement and vendor management own contracts and renewals, IT asset management owns licences, and platform teams own AI gateways. FinOps provides the method and data.
+4. **Keep the same principles**: allocation to owners, unit economics, anomaly detection, and cost in design decisions, including "buy another SaaS tool" decisions.
+
+**Watch for:** different billing cycles (annual contracts versus hourly usage), commitments with no utilisation data, and shadow IT bought on credit cards.
+
+**What the interviewer is looking for:**
+Awareness of FinOps scopes, how data and levers differ per scope, and organising the right owners around a shared method.
+
+**Follow-ups:**
+- How would you attribute LLM API spend to products when everyone shares one key?
+- A SaaS renewal is in 60 days with 40% unused seats. What do you do?
+
+**Red flags:**
+- Treating FinOps as only cloud infrastructure.
+- Optimising cloud by 5% while SaaS spend doubles unseen.
+
+### A team proposes running its own Kafka and PostgreSQL on Kubernetes to save money over the managed services. How do you evaluate it? {#managed-vs-self-hosted-tco}
+
+**Level:** Architect
+
+**Model answer:**
+Compare **total cost of ownership over three years**, not monthly infrastructure line items.
+
+**Self-hosted costs that proposals usually leave out:**
+- **People**: design, upgrades, patching, backups and restore testing, performance tuning, capacity planning, and **24/7 on-call** for a stateful system. One engineer's fully loaded cost often exceeds the whole managed-service bill for small or medium deployments.
+- **Redundancy**: replicas across zones, spare capacity for failover and rebalancing, and storage with backups and snapshots.
+- **Network**: cross-AZ replication traffic, which managed services sometimes include or discount.
+- **Tooling**: operators, monitoring, backup software and support subscriptions.
+- **Risk**: the expected cost of incidents and data loss, which depends on the team's experience with that technology.
+
+**Managed-service costs to check honestly:**
+- Price premiums at high, steady scale, where they can be substantial.
+- Feature or version lag, limits on configuration, and lock-in to the provider's API.
+- Data transfer and per-request pricing that grows with use.
+
+**Then decide by the situation:**
+- **Small to medium scale, or few specialists**: managed almost always wins once people and risk are counted.
+- **Very large, steady scale with an existing expert team**: self-hosting can be cheaper, especially for Kafka-like throughput where managed prices scale with partitions or traffic.
+- **Middle ground**: managed services with commitments, or managed alternatives with different pricing (for example serverless or tiered-storage options), often close most of the gap.
+
+Write it up as an ADR with the assumptions, numbers and a review date. Include the **exit cost** in both directions, because moving off a self-hosted system is as hard as moving off a managed one.
+
+**What the interviewer is looking for:**
+A full TCO including people, on-call and risk, an honest view of managed premiums, a decision tied to scale and skills, and a recorded, revisitable decision.
+
+**Follow-ups:**
+- How would you estimate the on-call and operations cost in hours?
+- What would make you revisit the decision in a year?
+
+**Red flags:**
+- Comparing instance prices only.
+- Self-hosting stateful systems without the people to run them at 3 a.m.
+
 ## Cheat Sheet
 
 ### Practice
@@ -549,6 +779,16 @@ Calm, data-driven diagnosis, separating temporary from structural costs, quick w
 - **Spot** — deep discounts for interruptible, stateless or batch work.
 - **Design is the biggest lever** — compute model, data tiers, network topology, redundancy by criticality.
 - **AI costs** — gateway attribution, model routing, prompt caching, spend limits, value tracking.
+
+### Revisit
+
+- **Commitment sizing** — commit to the level used in almost every hour. A slice of usage pays off only if it runs in more than (1 − discount) of hours.
+- **Effective savings rate** — (on-demand-equivalent − actual) ÷ on-demand-equivalent. It falls if you buy too little or too much.
+- **Coverage vs utilisation** — coverage rewards over-buying and utilisation rewards under-buying. Report both alongside the savings rate.
+- **Amortised vs billed cost** — amortised spreads commitment fees over the hours they cover. Use it for showback and unit costs.
+- **Fast anomaly signals** — alert on usage metrics (bytes scanned, tokens, instance counts), route by owner, contain first, add a default guardrail.
+- **Non-prod savings** — schedules (nights and weekends are about two-thirds of the week), TTLs for ephemeral environments, smaller and shared resources, data subsets.
+- **FinOps scopes** — Public Cloud, SaaS, Data Center, Licensing and AI. The same method with different data, levers and owners.
 
 ## Further Reading
 
