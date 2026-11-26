@@ -6,7 +6,7 @@ tags: [ci, cd, github-actions]
 level: Senior
 estimatedMinutes: 60
 related: [devsecops, dora-metrics, infrastructure-as-code]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -91,6 +91,33 @@ Stages commonly include: checkout → dependency install (cached) → lint/forma
 | Feature flags (dark launch) | Deploy code off; enable per user/segment | Decouples deploy from release; instant kill switch | Flag debt; testing combinations |
 | Shadow / mirroring | Copy traffic to new version without serving responses | Safe performance/behaviour comparison | Side effects must be suppressed |
 
+### Worked example: is the canary big enough to notice?
+
+A checkout service handles 2,000 requests per second, with a baseline error rate of 0.5%. The plan is a 5% canary for 10 minutes. Could that canary detect a release that **doubles** the error rate to 1%?
+
+Treat the canary's error count as roughly Poisson, and ask how many requests it needs before a doubling stands out from normal noise:
+
+| Expected canary errors at baseline | Fail the canary at | False alarms (healthy release fails) | Doublings caught |
+|---|---|---|---|
+| 3 | 7 or more | ~3% | ~39% |
+| 10 | 17 or more | ~3% | ~78% |
+| 20 | 30 or more | ~2% | ~96% |
+
+So the canary needs about **20 expected errors**: 20 ÷ 0.5% = **4,000 requests**.
+
+- **Checkout:** 5% of 2,000 rps is 100 rps, so 4,000 requests take 40 seconds. A 10-minute step is plenty, and it can also catch slower regressions such as rising latency or memory growth.
+- **A low-traffic internal service at 20 rps:** 5% is 1 rps, so the same confidence takes over an hour per step. The canary would pass almost every bad release, because it never sees enough requests to fail.
+
+Options for the low-traffic service:
+- **Use a bigger slice**, such as 25–50% (a smaller blast radius matters less when traffic is low).
+- **Run longer steps**, or bake overnight for risky changes.
+- **Add synthetic traffic** that exercises the critical paths.
+- **Judge on more sensitive signals** than the error rate, such as specific exception counts or latency percentiles.
+
+Two refinements:
+- Compare the canary with a **baseline running at the same time** (the same traffic mix and time of day), not with yesterday's numbers.
+- The table treats the baseline rate as known. A real comparison of two samples, as Argo Rollouts or Kayenta does, needs somewhat more data.
+
 ### Trunk-based development and feature flags
 
 Short-lived branches (hours to a day or two) merged to main behind flags avoid merge hell and keep main releasable. Flags have a lifecycle: create with an owner and expiry, remove after full rollout; differentiate release toggles (temporary) from ops kill switches and permission/entitlement flags (long-lived).
@@ -117,6 +144,39 @@ flowchart LR
   PROD --> VERIFY["Automated analysis: error rate, latency, business KPIs"]
   VERIFY -->|"healthy"| DONE["Full rollout; flag-controlled release"]
   VERIFY -->|"degraded"| RB["Automatic rollback + alert"]
+```
+
+### A canary that catches a bad release
+
+```mermaid
+sequenceDiagram
+  participant C as Argo CD
+  participant R as Rollouts controller
+  participant K as Canary pods
+  participant M as Prometheus
+  participant T as Owning team
+  %% step: A merge to the config repository changes the Rollout's image digest. Argo CD syncs it to the cluster.
+  %% step: The Rollouts controller starts canary pods next to the stable ones and sets the canary's traffic weight to 5%.
+  %% step: An AnalysisRun queries Prometheus every minute, comparing the canary's error rate and p99 latency with the stable pods'.
+  %% step: The canary has 0.4% errors against the stable pods' 0.5%, and p99 latency within 10%. Each measurement passes.
+  %% step: The pause step ends with the analysis successful, so the rollout moves on.
+  %% step: The controller raises the canary's weight to 25%.
+  %% step: Analysis continues at the new weight.
+  %% step: Now the canary shows 1.9% errors against 0.5%. A code path that only some customers hit is failing.
+  %% step: The analysis reaches its failure limit, and the controller aborts the rollout without waiting for a person.
+  %% step: Traffic weight goes back to 0 and the canary pods scale down. Stable pods kept serving the other 75% throughout.
+  %% step: The team gets a notification with the failed measurements. The Rollout stays degraded until they fix forward or revert the commit.
+  C->>R: New image digest
+  R->>K: Start canary, weight 5%
+  R->>M: Analysis, canary vs stable
+  M-->>R: Errors 0.4% vs 0.5%, p99 ok
+  Note over R: Step passed
+  R->>K: Weight 25%
+  R->>M: Analysis continues
+  M-->>R: Errors 1.9% vs 0.5%
+  Note over R: Failure limit reached, abort
+  R->>K: Weight 0, scale down
+  R->>T: Notify with analysis results
 ```
 
 ## When to Use / Trade-offs
@@ -544,6 +604,163 @@ DORA plus pipeline-specific health, developer experience and adoption metrics us
 - Only counting number of builds.
 - Using DORA metrics to rank teams.
 
+### What is the difference between deploying a change and releasing it? {#deploy-vs-release}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Deploying** puts a new version of the code into an environment, such as production. It's a technical event.
+- **Releasing** makes a change's behaviour available to users. It's a product decision.
+
+Traditionally the two happen together: the deploy *is* the release, so every deploy is risky and gets batched up. Separating them changes that:
+- **Feature flags** let code ship to production switched off ("dark"), then be enabled for staff, a beta group, a percentage of users and finally everyone. Turning it off again is instant and needs no deploy.
+- **Canaries and blue-green** limit how many users see a new version while it's being checked.
+- **Dark launches** exercise a new path in production without users seeing the results, for example by calling the new service and discarding its answer.
+
+Benefits: deploys become small, frequent and boring. Releases can be timed for the business (a marketing launch, a customer's training date). A bad feature is turned off in seconds instead of rolled back.
+
+The cost: flags add code paths to test and remove later, and "deployed" no longer means "live", so dashboards and release notes need to say which flags are on.
+
+**What the interviewer is looking for:**
+A clear distinction, the mechanisms that separate the two, and the benefits and costs.
+
+**Follow-ups:**
+- What would you do if a flag is turned on and the database can't cope?
+- How do you know which flags are on for a given customer during an incident?
+
+**Red flags:**
+- Treating deploys as rare, scheduled events because releases are risky.
+- Feature flags with no owner or removal date.
+
+### How do you run CI safely on pull requests from forks and other untrusted code? {#untrusted-pr-workflows}
+
+**Level:** Senior
+
+**Model answer:**
+A pull request contains code the author controls: tests, build scripts, `package.json` lifecycle scripts, even the workflow file. Any CI step that runs it is running the author's code, so it must not have secrets or write access.
+
+**In GitHub Actions:**
+- The `pull_request` event runs fork PRs with a **read-only `GITHUB_TOKEN` and no secrets**. First-time contributors' workflows can be set to need a maintainer's approval. This is the right default.
+- `pull_request_target` runs in the context of the **base** repository, **with secrets and a write token**, so it can label or comment on PRs. If it also checks out and runs the PR's code, the author's code runs with those privileges. This is the "pwn request" pattern behind several real compromises.
+- `workflow_run` can do privileged follow-up work, such as posting results, after an unprivileged run. Treat any artefacts it downloads from that run as untrusted input.
+
+**Other injection paths:**
+- **Script injection**: `run: echo "${{ github.event.pull_request.title }}"` pastes attacker-controlled text into a shell script. Pass such values through environment variables and quote them.
+- **Cache poisoning**: an untrusted run writing to a cache that a privileged run later restores.
+- **Self-hosted runners**: never run public-repository PRs on persistent self-hosted runners. Use ephemeral, isolated runners.
+
+**Baseline controls:**
+- Default `permissions: contents: read` at the workflow level, elevated per job.
+- Third-party actions pinned by commit SHA. The March 2025 `tj-actions/changed-files` compromise repointed its version tags at malicious code that dumped CI secrets into logs.
+- CODEOWNERS review for `.github/workflows`, and OIDC trust policies that never accept pull-request subjects for deployment roles.
+
+**What the interviewer is looking for:**
+Why PR code is untrusted, the `pull_request` versus `pull_request_target` difference, script injection, and least-privilege defaults.
+
+**Follow-ups:**
+- A maintainer wants to run integration tests that need a cloud account on fork PRs. How?
+- How would you audit 300 repositories for dangerous workflow patterns?
+
+**Red flags:**
+- `pull_request_target` with a checkout of the PR head followed by `npm install`.
+- Third-party actions referenced by `@main` or `@v1`.
+
+### When do you roll back, and when do you roll forward? What makes a rollback safe? {#rollback-vs-roll-forward}
+
+**Level:** Senior
+
+**Model answer:**
+**Roll back** (redeploy the previous artefact, or revert the commit) when production is hurting and the previous version is known to be good. It's usually the fastest way to restore service, and the default during an incident: **restore first, diagnose afterwards**.
+
+**Roll forward** (ship a fix) when:
+- Rolling back is unsafe, for example because data has been written in a new format that the old version can't read.
+- The fix is tiny, understood, and your pipeline delivers it faster than a rollback would.
+- The problem is in a dependency or in data, not the deploy, so rolling back wouldn't help.
+
+What makes rollback safe and fast:
+- **Immutable, versioned artefacts.** The previous image is still in the registry, so a rollback is a redeploy, not a rebuild.
+- **Backward-compatible schema changes** (expand–contract). The previous version must still work against the current schema. Never ship a destructive migration in the same release as the code that stops using the old structure.
+- **Compatible data and messages.** New fields that old consumers ignore, and no new event types or formats the old version would choke on.
+- **Configuration and flags versioned with the release**, or independent of it, so a rollback doesn't silently re-enable an old setting.
+- **Automated, rehearsed rollback.** A one-command or automatic action (as in a canary abort) that is exercised regularly, not a runbook nobody has tried.
+
+Things a rollback can't undo: emails sent, payments taken, data corrupted. Those need compensating actions, which is another reason to limit exposure with canaries and flags.
+
+**What the interviewer is looking for:**
+Restore-first thinking, the conditions where rolling back is unsafe, and the engineering that makes rollback a routine action.
+
+**Follow-ups:**
+- A release corrupted some records before it was rolled back. What do you do next?
+- How do you roll back a mobile app?
+
+**Red flags:**
+- Debugging in production for an hour before considering a rollback.
+- Releases whose rollback was never tested.
+
+### Eighty engineers merge to one main branch, and it keeps breaking. How do you keep main green without slowing everyone down? {#keep-main-green}
+
+**Level:** Architect
+
+**Model answer:**
+**Why it breaks even with required checks:** each PR's checks ran against an *old* main. Two PRs can each pass and still conflict once both are merged (a renamed function in one, a new call to the old name in the other). These **semantic conflicts** grow with merge rate. Flaky tests then make a red main look normal, and people stop treating it as an emergency.
+
+**Make every merge tested against the real future main:**
+- A **merge queue** (GitHub merge queue, GitLab merge trains, Bors-style tools) tests each PR combined with the PRs ahead of it, and merges only if that combination passes.
+- **Batching** keeps throughput up: the queue tests several PRs together. If a batch fails, it splits the batch to find the culprit and merges the rest.
+- Keep the queue's checks fast, roughly under 15 minutes. Slow, broad suites run after merge, with automatic bisection to find the culprit.
+
+**Make failures rare and cheap:**
+- **Small PRs** and trunk-based development reduce the overlap between changes.
+- **Flaky tests are quarantined** automatically, with an owner and a deadline. A flaky test in the merge queue blocks everyone.
+- **Affected-only builds** in a monorepo, so the queue doesn't test what didn't change.
+
+**When main does break:**
+- **Revert first, fix later.** A bot or the on-call engineer reverts the culprit within minutes, without debate.
+- Track **time-to-green** and the merge-queue failure rate as platform metrics.
+
+**What the interviewer is looking for:**
+Semantic conflicts as the root cause, merge queues with batching and bisection, flaky-test discipline, and a revert-first culture.
+
+**Follow-ups:**
+- The merge queue adds 20 minutes of waiting to every PR. What do you do?
+- How do you handle a change that must land together across two repositories?
+
+**Red flags:**
+- "Rebase before merging" as the whole answer.
+- Retrying failed checks until they pass.
+
+### A feature needs changes to a database, three services and a mobile app. How do you deliver it safely? {#cross-service-changes}
+
+**Level:** Architect
+
+**Model answer:**
+The goal is that **every intermediate state is deployable and reversible**. No step should require two components to deploy at the same moment, because independent pipelines can't guarantee that.
+
+**Order the work by dependency, compatible at each step:**
+1. **Database: expand.** Add new tables and columns, nullable or with defaults, without removing anything. Old code keeps working.
+2. **Producers next:** services that write data or publish events start writing the new fields as well as the old (dual-write), behind a flag where possible.
+3. **Consumers:** services that read the data accept both old and new shapes. Consumers of events or APIs should be **tolerant readers** that ignore unknown fields.
+4. **APIs:** add new endpoints or optional fields. Never change the meaning of an existing field in place, because old **mobile apps** stay installed for months.
+5. **Backfill** existing records in batches.
+6. **Release:** turn the feature flag on gradually, with each step observable and reversible.
+7. **Contract**, weeks later: once nothing reads the old structure (checked with metrics or logs, not assumptions), remove the old fields, code paths and flags.
+
+**Safety nets:**
+- **Consumer-driven contract tests** (such as Pact) in each pipeline catch a provider change that would break a consumer *before* it deploys. A "can I deploy" check against what's in production gates releases.
+- A **mobile minimum-supported-version** policy, with server-side compatibility for every supported version.
+- One owner for the whole rollout plan, with the sequence written down as a checklist across the teams, and each step's rollback defined.
+
+**What the interviewer is looking for:**
+Independently deployable steps, expand and contract across data, events and APIs, tolerant readers, contract testing, and allowance for old mobile clients.
+
+**Follow-ups:**
+- One team's step is late. Which steps can still go ahead?
+- How do you know when it's safe to contract?
+
+**Red flags:**
+- "Deploy all four together on Tuesday night."
+- Changing a field's meaning in place.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -565,6 +782,16 @@ DORA plus pipeline-specific health, developer experience and adoption metrics us
 - **Fork PRs** — no secrets, isolated ephemeral runners.
 - **Automated compliance** — segregation of duties via branch and environment protection, generated change records.
 - **Pipeline metrics** — duration, queue time, flaky rate, main-branch recovery, DORA.
+
+### Revisit
+
+- **Deploy vs release** — deploying puts code in an environment, releasing exposes behaviour to users. Flags, canaries and dark launches separate the two.
+- **Canary sample size** — aim for about 20 expected errors at the baseline rate. Low-traffic services need bigger slices, longer steps or synthetic traffic.
+- **Automated canary abort** — compare with stable pods running at the same time, set a failure limit, return weight to 0 without waiting for a person.
+- **`pull_request_target`** — runs with secrets and a write token. Never check out and run the PR's code in it.
+- **Script injection** — pass `github.event` values through environment variables, never straight into `run:` scripts.
+- **Rollback safety** — immutable artefacts, expand–contract schemas, compatible messages, and a rehearsed one-command rollback. Restore first, diagnose afterwards.
+- **Merge queue** — tests each PR against the PRs ahead of it, in batches split to find the culprit, so semantic conflicts never reach main.
 
 ## Further Reading
 

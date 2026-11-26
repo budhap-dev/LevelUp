@@ -6,7 +6,7 @@ tags: [azure, cloud]
 level: Senior
 estimatedMinutes: 90
 related: [cloud-fundamentals, infrastructure-as-code]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -72,8 +72,8 @@ await container.getBlockBlobClient('2026/03/inv-981.pdf').uploadData(pdfBuffer);
 - **Storage accounts:** Blob (hot/cool/cold/archive tiers, lifecycle policies), Files (SMB/NFS shares), Queues, Tables; **Data Lake Storage Gen2** (hierarchical namespace) for analytics.
 - **Redundancy:** LRS (3 copies, one data centre), ZRS (across 3 AZs), GRS/RA-GRS (LRS + async copy to the paired region), GZRS/RA-GZRS (ZRS + async geo copy).
 - **Relational:** Azure SQL Database (serverless, Hyperscale), SQL Managed Instance (near-full SQL Server compatibility for migrations), Azure Database for PostgreSQL / MySQL Flexible Server (zone-redundant HA).
-- **Cosmos DB:** multi-model NoSQL with global distribution, multi-region writes, five consistency levels, partition-key-based scaling, RU-based or serverless billing; also offers a PostgreSQL (Citus) option for distributed relational workloads.
-- **Caching:** Azure Managed Redis (the successor to Azure Cache for Redis, whose Enterprise tiers retire on 31 March 2027 and Basic/Standard/Premium tiers on 30 September 2028).
+- **Cosmos DB:** multi-model NoSQL with global distribution, multi-region writes, five consistency levels, partition-key-based scaling, RU-based or serverless billing. (Azure Cosmos DB for PostgreSQL, the Citus-based distributed option, no longer accepts new deployments and retires on 31 March 2029. Distributed PostgreSQL now means **elastic clusters** in Azure Database for PostgreSQL Flexible Server.)
+- **Caching:** Azure Managed Redis (the successor to Azure Cache for Redis, whose Enterprise tiers retire on 31 March 2027 and Basic/Standard/Premium tiers on 30 September 2028). Creating new Azure Cache for Redis instances has been blocked for all customers since October 2026, so new work starts on Azure Managed Redis.
 
 ### Messaging and integration
 
@@ -101,6 +101,32 @@ await container.getBlockBlobClient('2026/03/inv-981.pdf').uploadData(pdfBuffer);
 - **Backup and Site Recovery** for VM/data backup and DR orchestration.
 - **Azure Advisor** for cost, reliability and security recommendations.
 
+### Worked example: tracing a private endpoint's DNS
+
+An Azure SQL logical server, `acme-orders.database.windows.net`, has a private endpoint in a spoke VNet at `10.20.4.5`, and **public network access is disabled**. The private DNS zone `privatelink.database.windows.net` lives in the connectivity subscription, linked to the hub and every spoke. An Azure Policy `deployIfNotExists` assignment adds each private endpoint's A record to it.
+
+**From an app in the spoke VNet**, which uses Azure-provided DNS:
+
+| Step | Query | Answer |
+|---|---|---|
+| 1 | `acme-orders.database.windows.net` | Public DNS returns a CNAME to `acme-orders.privatelink.database.windows.net`. Azure adds this CNAME once the server has a private endpoint |
+| 2 | `acme-orders.privatelink.database.windows.net` | The VNet is linked to the private zone, so Azure DNS answers from it: an A record for `10.20.4.5` |
+| 3 | Connect to `10.20.4.5:1433` | The connection stays inside the VNet and succeeds. TLS still validates, because the client used the server's normal name |
+
+**From a laptop on-premises**, over ExpressRoute, using the corporate DNS servers:
+
+| Step | Query | Answer |
+|---|---|---|
+| 1 | `acme-orders.database.windows.net` | The same CNAME to the `privatelink` name |
+| 2 | `acme-orders.privatelink.database.windows.net` | The corporate DNS can't see the private zone, so it carries on through public DNS and gets the server's **public** IP |
+| 3 | Connect to the public IP | Rejected, because public network access is disabled. The error looks like a firewall or login problem, not DNS |
+
+**The fix** is a conditional forwarder on the corporate DNS servers for the *public* zone `database.windows.net`, pointing at the inbound endpoint of an **Azure DNS Private Resolver** in the hub. Azure then answers with the private IP for servers that have private endpoints, and the normal public answer for everything else.
+
+Two habits prevent most of these incidents:
+- **Debug with `nslookup` from the failing client first.** If the name doesn't resolve to a private address, the problem is DNS, whatever the error message says.
+- **Keep one private zone per service, centrally**, linked to every VNet. Per-team copies of the same zone name each hold only some of the records, and a VNet linked to the wrong copy can't resolve the rest.
+
 ## How It Works
 
 Reference architecture: zone-redundant web application with private PaaS backends.
@@ -127,6 +153,34 @@ flowchart LR
 ```
 
 Deployment flow: Bicep or Terraform in Git → pipeline (GitHub Actions/Azure DevOps) authenticates via workload identity federation → what-if/plan → approval → deploy to subscription created by the landing zone's subscription vending, with policies enforcing private access, tags and diagnostics.
+
+### A pipeline deploying without a secret
+
+```mermaid
+sequenceDiagram
+  participant W as GitHub Actions job
+  participant G as GitHub OIDC provider
+  participant E as Microsoft Entra ID
+  participant A as Azure Resource Manager
+  %% step: The deploy job runs in the production environment, after its required reviewers approved it. With id-token write permission, azure/login asks GitHub for an OIDC token.
+  %% step: GitHub returns a signed JWT. Its subject names the repository and environment, and its audience is api://AzureADTokenExchange.
+  %% step: The job presents the JWT to Entra ID as a client assertion, naming the managed identity's client id. No client secret exists anywhere.
+  %% step: Entra ID checks the signature against GitHub's published keys, then matches issuer, subject and audience exactly against the identity's federated credential.
+  %% step: Everything matches, so Entra ID issues a short-lived access token for the user-assigned managed identity.
+  %% step: The job deploys the Bicep template to Azure Resource Manager with that token.
+  %% step: Azure RBAC checks the identity's role assignment. It's Contributor on the orders resource group only, so the blast radius is one workload.
+  %% step: The deployment succeeds. The token expires soon after, so there's nothing long-lived to leak.
+  W->>G: Request OIDC token
+  G-->>W: Signed JWT for repo and environment
+  W->>E: Exchange JWT for an access token
+  Note over E: Signature, issuer, subject, audience
+  E-->>W: Short-lived access token
+  W->>A: Deploy template with token
+  Note over A: RBAC on one resource group
+  A-->>W: Deployment succeeded
+```
+
+A pull request's token carries a different subject (`repo:acme/orders:pull_request`), so it can't use the production credential even if a workflow is changed to try.
 
 ## When to Use / Trade-offs
 
@@ -534,6 +588,171 @@ Visibility first, quick wins, rightsizing before commitments, Azure-specific lev
 - Buying reservations before rightsizing.
 - Cutting zone redundancy on critical systems to save money.
 
+### What is the difference between Azure RBAC roles and Microsoft Entra roles? {#azure-rbac-vs-entra-roles}
+
+**Level:** Foundation
+
+**Model answer:**
+They're two separate role systems that people often mix up.
+
+| | Microsoft Entra roles | Azure RBAC roles |
+|---|---|---|
+| Control | The directory: users, groups, app registrations, Conditional Access, tenant settings | Azure resources: subscriptions, resource groups, VMs, storage, databases |
+| Examples | Global Administrator, User Administrator, Application Administrator, Security Reader | Owner, Contributor, Reader, Storage Blob Data Reader, Key Vault Secrets User |
+| Scope | The tenant, or an administrative unit | Management group, subscription, resource group or a single resource, inherited downwards |
+
+Points that matter in practice:
+- **Neither implies the other.** A Global Administrator has no access to Azure resources by default. They can elevate themselves to User Access Administrator at the root scope, which is a powerful break-glass step that should be audited and alerted on.
+- Azure RBAC separates **control-plane actions** (`Actions`, such as creating a storage account) from **data-plane actions** (`DataActions`, such as reading a blob). Owner on a storage account doesn't let you read its blobs through Entra auth unless you also hold a data role.
+- **Privileged Identity Management** covers both systems, so privileged roles in either can be eligible and activated just in time.
+- Both support **custom roles**, and Azure RBAC role assignments can carry **conditions** (attribute-based access control) for storage.
+
+**What the interviewer is looking for:**
+The directory versus resources distinction, separate scopes, control versus data plane, and the elevation path for Global Administrators.
+
+**Follow-ups:**
+- Who should be able to grant RBAC roles in a subscription?
+- How would you give a team access to read blobs in one container only?
+
+**Red flags:**
+- Assuming Global Administrator means owner of every subscription.
+- Using Owner where a data-plane role is what's needed.
+
+### How does workload identity federation let a pipeline deploy to Azure without a secret? {#workload-identity-federation}
+
+**Level:** Senior
+
+**Model answer:**
+You configure a **federated identity credential** on a user-assigned managed identity or an app registration. It says "trust tokens from this issuer, with this subject and this audience". For GitHub Actions:
+- **Issuer:** `https://token.actions.githubusercontent.com`
+- **Subject:** for example `repo:acme/orders:environment:production`
+- **Audience:** `api://AzureADTokenExchange`
+
+At run time the job (with `id-token: write` permission) asks GitHub for a signed OIDC token. `azure/login` presents it to Entra ID, which checks the signature and matches the claims **exactly** against the credential, then returns a short-lived Entra access token. The same mechanism works for AKS pods (Microsoft Entra Workload ID), Terraform Cloud, other clouds' workloads and any OIDC issuer.
+
+Why it's better than a client secret:
+- There's no secret to store, rotate, or leak in logs or forks.
+- The trust is tied to a specific repository *and* environment or branch, not to whoever has the secret.
+- Tokens live for minutes to an hour, not months.
+
+Designing it well:
+- **One identity per environment**, each with least-privilege RBAC at the narrowest scope (often one resource group).
+- Use **GitHub environments** as the subject, so production tokens are only issued to jobs that passed the environment's protection rules (required reviewers, branch restrictions).
+- Subjects are matched exactly, so plan the naming. An identity supports up to 20 federated credentials.
+- Keep the trust configuration in IaC, and alert on changes to federated credentials. Adding one is how an attacker would backdoor the identity.
+
+**What the interviewer is looking for:**
+The issuer, subject and audience triple, the token exchange, scoping by environment, and least-privilege RBAC behind it.
+
+**Follow-ups:**
+- How would you stop a pull request workflow from using the production identity?
+- How does this compare with AWS's `AssumeRoleWithWebIdentity`?
+
+**Red flags:**
+- A service principal secret with Contributor on the subscription, stored as a repository secret.
+- One identity shared by every environment.
+
+### How do you design Key Vault usage for a large estate? {#key-vault-design}
+
+**Level:** Senior
+
+**Model answer:**
+**What goes in it:** secrets (third-party API keys, connection strings that can't yet use Entra auth), keys (customer-managed encryption keys, signing keys, HSM-backed in the Premium tier) and certificates (with auto-renewal from integrated CAs). Managed HSM gives single-tenant HSM pools for stricter compliance needs.
+
+**Structure:**
+- **One vault per application, per environment, per region.** That limits the blast radius, keeps RBAC simple, and spreads the per-vault throttling limits. A shared "company vault" becomes a bottleneck and a single point of compromise.
+- **Azure RBAC** as the permission model rather than legacy access policies, with data roles such as Key Vault Secrets User granted to the app's managed identity on that vault only.
+
+**Protection:**
+- **Soft delete** is always on, with 7 to 90 days' retention. Enable **purge protection** for vaults holding encryption keys, so a deleted key can't be purged before the retention period ends. It can't be turned off once enabled.
+- **Private endpoint** and public network access disabled, with Private DNS as for any PaaS service.
+- **Diagnostic logs** to Log Analytics, with alerts on unusual access patterns and denied requests.
+
+**Consumption:**
+- App Service and Functions use **Key Vault references** in app settings, AKS uses the **Secrets Store CSI driver**, and code uses the SDK with `DefaultAzureCredential`. Cache secrets in the app instead of fetching per request.
+- **Rotation**: Key Vault publishes Event Grid events such as `SecretNearExpiry`, which can trigger a Function that rotates the secret with the provider.
+
+**The best secret is none**: move each dependency to managed identity and Entra auth where it's supported, and keep Key Vault for what's left.
+
+**What the interviewer is looking for:**
+Vault granularity, RBAC, soft delete and purge protection, private access, consumption patterns, rotation and eliminating secrets.
+
+**Follow-ups:**
+- A vault is throttling requests during a traffic spike. What's happening and what do you change?
+- How do you rotate a database password with no downtime?
+
+**Red flags:**
+- One vault for the whole company.
+- Granting Key Vault Administrator to applications.
+
+### Hub-and-spoke or Virtual WAN for a network spanning four regions and 60 branch offices? {#hub-spoke-vs-virtual-wan}
+
+**Level:** Architect
+
+**Model answer:**
+**Customer-managed hub-and-spoke:** you build a hub VNet per region with Azure Firewall or third-party appliances, VPN and ExpressRoute gateways, and the DNS Private Resolver. Spokes peer to their hub.
+- VNet peering **isn't transitive**, so spoke-to-spoke and hub-to-hub traffic needs user-defined routes through the firewall, or Azure Virtual Network Manager connectivity groups for direct paths.
+- Full control over what lives in the hub and how traffic is routed, but every route table, peering and cross-region path is yours to design and maintain.
+
+**Virtual WAN:** Microsoft runs the hubs. Each virtual hub has a managed router.
+- **Any-to-any transit** between VNets, branches (site-to-site VPN and SD-WAN partner integrations), remote users and ExpressRoute, across hubs in different regions, without hand-built routing.
+- A **secured virtual hub** adds Azure Firewall, and **routing intent** sends private and internet traffic through it with a single setting.
+- Constraints: you can't deploy your own resources inside a virtual hub, so shared services such as the DNS resolver go in a spoke. You also get less fine-grained routing control, and pricing per hub and per GB processed.
+
+**For four regions and 60 branches**, Virtual WAN usually wins. Branch connectivity and global transit are exactly what it automates, and hand-building that mesh is where hub-and-spoke designs accumulate fragile routing. Hub-and-spoke stays the better fit for one or two regions, few branches, or a need for appliances and routing that Virtual WAN doesn't support.
+
+**Either way:**
+- An **IP address plan** with no overlaps, managed in Virtual Network Manager's IPAM or an external tool.
+- Centralised **private DNS** with conditional forwarding from on-premises.
+- **Network Manager security admin rules** for organisation-wide rules that teams can't override.
+- Network changes deployed through IaC with the landing zone.
+
+**What the interviewer is looking for:**
+Non-transitive peering, what Virtual WAN automates and what it constrains, a decision tied to the scale of regions and branches, and the shared foundations.
+
+**Follow-ups:**
+- How do you inspect traffic between two spokes in Virtual WAN?
+- How would you migrate an existing hub-and-spoke network to Virtual WAN?
+
+**Red flags:**
+- Assuming peering is transitive.
+- Choosing by habit without counting regions and branches.
+
+### Design an API platform on Azure API Management for 30 teams publishing internal and partner APIs. {#api-management-design}
+
+**Level:** Architect
+
+**Model answer:**
+**Topology:**
+- **Front Door with WAF** for partner traffic, to API Management in a VNet (internal mode, or with a private endpoint), and backends reached privately (Container Apps, App Service, AKS ingress).
+- Internal consumers reach the same gateway privately. Keep separate products for internal and partner APIs.
+- The **Premium tier** for availability zones, multi-region gateways and full VNet injection. With multiple regions the management plane stays in the primary region: gateways keep serving during a primary outage, but configuration changes wait.
+- **Self-hosted gateways** for APIs that must run on-premises or in another cloud, managed from the same instance.
+
+**Multi-team operation:**
+- **Workspaces** give each team its own APIs, products and policies on the shared instance, without access to the others'.
+- **APIOps**: each API's OpenAPI definition and policies in the owning team's repository, deployed through a pipeline with linting (for example Spectral rules for naming and security schemes). No portal edits in production.
+- **Versions** for breaking changes, **revisions** for non-breaking ones, and a deprecation policy partners can plan around.
+
+**Security and traffic policies:**
+- `validate-jwt` (or `validate-azure-ad-token`) with Entra ID or the partner's identity provider. Subscription keys identify a consumer for quotas and analytics. They aren't authentication.
+- `rate-limit-by-key` and `quota-by-key` per consumer, and mTLS for partners that need it.
+- Backend **circuit breakers** and load-balanced backend pools for resilience. Response caching where it's safe.
+- Remove internal headers and stack traces in outbound policies.
+
+**Operations:** Application Insights with correlation ids passed to backends, per-API dashboards and alerts on 5xx and latency, and the developer portal for partner onboarding and key self-service. The platform team owns the instance and the policy fragments. API teams own their APIs.
+
+**What the interviewer is looking for:**
+Private topology with an edge WAF, tier and multi-region implications, workspaces and APIOps for many teams, JWT-based security, and clear ownership.
+
+**Follow-ups:**
+- How do you stop one partner's traffic from starving the others?
+- Would you put Azure OpenAI behind the same gateway, and what policies would you add?
+
+**Red flags:**
+- Subscription keys as the only authentication.
+- Every team editing policies in the portal.
+
 ## Cheat Sheet
 
 ### Governance and identity
@@ -556,6 +775,16 @@ Visibility first, quick wins, rightsizing before commitments, Azure-specific lev
 - **Diagnostic settings** — deploy via policy so resource logs reach Log Analytics.
 - **Cost levers** — rightsize, savings plans/reservations, Hybrid Benefit, auto-shutdown, log ingestion control.
 - **Landing zone** — CAF reference architecture with subscription vending and policy guardrails.
+
+### Revisit
+
+- **Private endpoint DNS** — the public name CNAMEs to `privatelink`, and only a linked private zone turns that into the private IP. On-premises clients need a forwarder for the *public* zone to the DNS Private Resolver.
+- **Entra roles vs Azure RBAC** — directory objects at tenant scope versus Azure resources at management group to resource scope. Global Administrator doesn't imply resource access.
+- **Control vs data plane** — `Actions` manage resources, `DataActions` read and write their data. Owner doesn't grant blob reads.
+- **Workload identity federation** — issuer, subject and audience must match exactly. Scope subjects to GitHub environments, use one identity per environment, and allow at most 20 credentials per identity.
+- **Key Vault** — one vault per app, environment and region. Azure RBAC, purge protection for keys, private endpoint, Key Vault references.
+- **Virtual WAN vs hub-and-spoke** — managed any-to-any transit with routing intent versus full control with non-transitive peering and your own routes.
+- **API Management** — Front Door plus WAF in front, workspaces and APIOps for teams, `validate-jwt` for auth, subscription keys only for quotas.
 
 ## Further Reading
 
