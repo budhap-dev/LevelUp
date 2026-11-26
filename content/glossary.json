@@ -7256,5 +7256,124 @@
       "search-systems",
       "llms-rag-agents"
     ]
+  },
+  {
+    "id": "lock-timeout",
+    "term": "Lock timeout",
+    "aka": [
+      "lock_timeout"
+    ],
+    "group": "data",
+    "definition": "A limit on how long a statement may wait to acquire a lock before giving up with an error, used to stop schema changes from blocking all traffic behind them.",
+    "details": [
+      "A waiting ALTER TABLE makes every later query on the table queue behind it.",
+      "Pair a short timeout with retries using backoff and jitter."
+    ],
+    "useCases": [
+      "Running ALTER TABLE on a busy production table."
+    ],
+    "related": [
+      "zero-downtime-migrations",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "logical-replication",
+    "term": "Logical replication",
+    "aka": [
+      "publication and subscription"
+    ],
+    "group": "data",
+    "definition": "Replicating row-level changes (inserts, updates, deletes) from one database to another by decoding the transaction log, rather than copying physical data files.",
+    "details": [
+      "Works across major versions, so it enables near-zero-downtime upgrades.",
+      "Sequences, DDL and large objects aren't replicated in PostgreSQL, and tables need a replica identity."
+    ],
+    "useCases": [
+      "Upgrading PostgreSQL across major versions.",
+      "Feeding CDC tools such as Debezium."
+    ],
+    "related": [
+      "zero-downtime-migrations",
+      "databases-sql-nosql"
+    ]
+  },
+  {
+    "id": "wip-limit",
+    "term": "WIP limit",
+    "aka": [
+      "work-in-progress limit"
+    ],
+    "group": "delivery",
+    "definition": "An explicit cap on how many items can be in progress in a workflow stage or for a team, so that work is finished before new work is started.",
+    "details": [
+      "When a limit is reached, help downstream instead of starting something new.",
+      "Little's Law explains why lower WIP shortens cycle time."
+    ],
+    "useCases": [
+      "A Kanban board where review is a bottleneck."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "work-item-age",
+    "term": "Work item age",
+    "aka": [
+      "ageing WIP"
+    ],
+    "group": "delivery",
+    "definition": "How long an in-progress item has been open since it started. It's the leading indicator of delivery problems, because cycle time is only known once an item finishes.",
+    "details": [
+      "Compare it with historical cycle-time percentiles.",
+      "Items older than the 85th percentile are candidates for swarming."
+    ],
+    "useCases": [
+      "Daily stand-ups focused on flow rather than status."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe",
+      "estimation"
+    ]
+  },
+  {
+    "id": "sprint-goal",
+    "term": "Sprint Goal",
+    "aka": [],
+    "group": "delivery",
+    "definition": "The single objective for a Scrum sprint, agreed at Sprint Planning, which gives the sprint its purpose and is the Developers' commitment for the Sprint Backlog.",
+    "details": [
+      "Scope can change during the sprint while the goal holds.",
+      "It should be outcome-oriented and connected to the Product Goal."
+    ],
+    "useCases": [
+      "Deciding whether to take on an unexpected request mid-sprint."
+    ],
+    "related": [
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "design-doc",
+    "term": "Design doc",
+    "aka": [
+      "RFC",
+      "technical design document"
+    ],
+    "group": "architecture-design",
+    "definition": "A short written proposal for a significant technical change that covers the problem, options considered, the chosen approach, risks and the rollout plan, reviewed before implementation.",
+    "details": [
+      "Keep it proportionate. A page is often enough.",
+      "Record the outcome as an ADR so code reviews can refer to it."
+    ],
+    "useCases": [
+      "A new service, data store or cross-team API."
+    ],
+    "related": [
+      "code-review",
+      "adrs-nfrs"
+    ]
   }
 ]

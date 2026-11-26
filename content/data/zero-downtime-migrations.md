@@ -6,7 +6,7 @@ tags: [migrations, schema, postgres, cdc]
 level: Senior
 estimatedMinutes: 75
 related: [databases-sql-nosql, data-modelling, ci-cd-pipelines, architecture-patterns]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -71,6 +71,33 @@ ALTER TABLE orders ADD COLUMN currency_code text;
 ```
 
 Wrap DDL in a retry loop with jitter, and alert on long-running and idle-in-transaction sessions (`pg_stat_activity`).
+
+### Worked example: the lock queue in numbers
+
+An `orders` table takes **3,000 queries a second**. Twenty application instances each have a pool of 100 connections, so 2,000 in total. A deploy runs `ALTER TABLE orders ADD COLUMN currency_code text`, a metadata-only change that holds its lock for milliseconds. At that moment, an analyst's 10-minute report is reading the table.
+
+**Without a lock timeout:**
+
+| Time | What happens |
+|---|---|
+| 0.0 s | The `ALTER` requests an `ACCESS EXCLUSIVE` lock. The report holds an `ACCESS SHARE` lock, so the `ALTER` waits |
+| 0.0 s onward | Every new query on `orders`, even a plain `SELECT`, queues *behind the waiting `ALTER`*, because lock requests are granted in order |
+| ~0.7 s | 2,000 queued queries have taken every connection in every pool (2,000 ÷ 3,000 a second) |
+| ~1 s onward | Requests fail with pool timeouts. Health checks that touch the database fail, and instances are restarted, which makes it worse |
+| up to 10 min | Everything waits until the report finishes, or someone finds and kills a session |
+
+A change that should take milliseconds causes an outage, and the deploy log shows nothing wrong. It's just "running".
+
+**With `SET lock_timeout = '3s'` and retries:**
+
+| Time | What happens |
+|---|---|
+| 0–3 s | The same queue builds up, but only for 3 seconds. Some requests see up to 3 s of extra latency |
+| 3 s | The `ALTER` gives up with a lock timeout error, and the queued queries proceed at once |
+| 3–33 s | The migration tool retries with backoff and jitter. Each attempt can cause at most a 3-second stall |
+| Later | An attempt finds a moment with no long transaction holding a lock, and succeeds in milliseconds |
+
+The worst case becomes a short latency spike instead of an outage. Choose the timeout from what the system can absorb. At 3,000 queries a second with 2,000 connections, even 3 seconds is too long, so use about 500 ms with more retries. Then remove the root cause too: alert on long-running and idle-in-transaction sessions, and keep analytics off the primary.
 
 ### Safe patterns in SQL
 
@@ -188,6 +215,16 @@ sequenceDiagram
   participant CDC as CDC (Debezium)
   participant New as Orders service DB
   participant Cmp as Comparator
+
+  %% step: The monolith keeps writing to its own database, which stays the source of truth throughout the first phase.
+  %% step: Debezium reads every committed change from the write-ahead log, so the monolith's code doesn't change and no writes are missed.
+  %% step: Changes are applied to the new service's database in commit order. Applying them is idempotent, so replays after a restart are harmless.
+  %% step: A request reads order 42 from the old database, and that answer is what the user gets.
+  %% step: In parallel, the same order is read from the new database. This shadow read doesn't affect the response.
+  %% step: Both results go to the comparator, with the new schema mapped back to the old shape for comparison.
+  %% step: It records the mismatch rate by field and tenant. Each mismatch is a bug in the mapping, the replication or the new model, and gets fixed.
+  %% step: When mismatches stay at zero for a sustained period, reads switch to the new database tenant by tenant, behind a flag that can switch them back. Then writes switch.
+  %% step: After the write switch, CDC is reversed, from new to old, so the old database stays current and rolling back remains possible until the old path is retired.
   App->>Old: Writes (source of truth)
   Old-->>CDC: WAL changes
   CDC->>New: Apply changes in commit order
@@ -653,6 +690,165 @@ Compatibility rules enforced by tooling, parallel versions, usage-driven depreca
 - "We'll just tell consumers to update."
 - Treating only structural changes as breaking.
 
+### What's the difference between a schema migration and a data migration, and why keep them separate? {#schema-vs-data-migrations}
+
+**Level:** Foundation
+
+**Model answer:**
+- A **schema migration** changes structure: tables, columns, indexes, constraints. It's usually quick (or should be made quick with online techniques), and it's versioned and run by the migration tool in order.
+- A **data migration** changes the contents: backfilling a new column, splitting a field, fixing bad records, moving data between tables. It can touch millions of rows and take hours or days.
+
+**Why keep them separate:**
+- **Different risks.** A schema change's risk is locking. A data change's risk is load, replication lag, long transactions and partial failure. They need different handling.
+- **Different runtimes.** A data migration inside the deploy's migration step holds up the deploy, can time out, and fails all-or-nothing. As a separate **batched, resumable job**, it runs in the background, throttles itself and restarts from a checkpoint.
+- **Ordering with code.** Expand and contract usually goes: schema change (add the column), then code writing both, then data migration (backfill), then code reading the new column, then schema change (drop the old one). Mixing steps breaks that sequence.
+- **Reviewability and rollback.** A small schema file is easy to review. A data job deserves its own review, testing on production-like data, and a plan for being stopped halfway.
+
+In practice: keep migration files for structure, and write data migrations as **idempotent jobs** with batching, checkpoints, throttling and progress metrics, run and monitored separately.
+
+**What the interviewer is looking for:**
+The distinction, the different risks and runtimes, ordering within expand and contract, and data migrations as resumable jobs.
+
+**Follow-ups:**
+- When is it acceptable to put a data change inside a migration file?
+- How do you know a backfill has finished correctly?
+
+**Red flags:**
+- A 500-million-row `UPDATE` inside the deploy's migration step.
+- No way to resume a failed data migration.
+
+### How do you test a migration before it reaches production? {#testing-migrations}
+
+**Level:** Senior
+
+**Model answer:**
+**Static checks in CI:**
+- **Lint the DDL** with tools such as squawk, strong_migrations or Atlas: no `CREATE INDEX` without `CONCURRENTLY`, no constraints without `NOT VALID`, no column type changes that rewrite tables, and `lock_timeout` set.
+- **Compatibility check**: run the *previous* application version's test suite against the *new* schema. If old code breaks, the migration isn't backward compatible.
+- Apply the full migration history to an empty database, so the migrations still work from scratch.
+
+**On production-like data:**
+- Run against a **restored copy of production** (masked if it contains personal data), or a realistic subset with production-sized hot tables. Behaviour on 10,000 rows says nothing about 500 million.
+- **Time it** and watch locks: which locks each statement takes and for how long (`pg_locks`), WAL generated, and replication lag.
+- For backfills, measure throughput per batch, so you can estimate the total time and pick a throttle.
+
+**In the pipeline:**
+- Apply to staging with traffic running (load test or replayed traffic), and watch error rates and latency during the migration, not just whether it succeeded.
+- Test the **failure paths**: kill the migration halfway and run it again (it should be idempotent), and check that a failed `CREATE INDEX CONCURRENTLY` leaves an `INVALID` index that the retry handles.
+
+**In production:**
+- Run during low traffic for risky steps, with someone watching dashboards, a lock timeout and a stop plan.
+
+**What the interviewer is looking for:**
+Linting, testing old code against the new schema, production-sized rehearsals with lock and timing analysis, failure-path testing, and careful production execution.
+
+**Follow-ups:**
+- How would you get production-sized data for testing without exposing personal data?
+- What does the old-code-against-new-schema test catch?
+
+**Red flags:**
+- Testing migrations only on an empty developer database.
+- No timing information before running against a billion-row table.
+
+### How do you split one table into two without downtime, for example moving addresses out of `customers`? {#split-table}
+
+**Level:** Senior
+
+**Model answer:**
+The goal: `customers` has address columns, and you want an `addresses` table (one customer, many addresses) without breaking running code.
+
+1. **Expand**: create `addresses` with a foreign key to `customers` (added `NOT VALID`, validated later) and the needed indexes, created concurrently.
+2. **Dual write**: the application writes address changes to **both** places in the same database transaction. Since both tables are in one database, that's atomic, unlike dual writes across systems. If other writers exist that you can't change, a **trigger** on `customers` can keep `addresses` in sync instead.
+3. **Backfill**: copy existing addresses into `addresses` in batches by primary key, idempotently (skip customers already copied), throttled on replication lag.
+4. **Verify**: compare counts and sampled rows, or run a reconciliation query that finds any customer whose `customers` address differs from its primary row in `addresses`.
+5. **Switch reads** to `addresses` behind a flag, and watch errors and performance (the new join or second query).
+6. **Stop writing** the old columns, once every reader, including reports, exports and other services, uses the new table. Check query logs to be sure.
+7. **Contract**: drop the old columns in a later release.
+
+Every step leaves both the previous and next application versions working, so each can be rolled back independently. The new model's extra capability (several addresses) is turned on only after the switch is complete.
+
+**What the interviewer is looking for:**
+Expand and contract applied to a table split, atomic dual writes inside one database or triggers, idempotent backfill, verification, flagged read switch, and checking all readers before contracting.
+
+**Follow-ups:**
+- How do you find every reader of the old columns, including ones outside your code?
+- What changes if the new table lives in a different service's database?
+
+**Red flags:**
+- Moving the columns and changing the code in one release.
+- Dropping the old columns without checking reports and other services.
+
+### How would you upgrade a production PostgreSQL database across major versions with near-zero downtime? {#major-version-upgrade}
+
+**Level:** Architect
+
+**Model answer:**
+**Options, from most downtime to least:**
+
+| Approach | Downtime | Notes |
+|---|---|---|
+| **Dump and restore** | Hours for large databases | Simple. Fine only for small databases |
+| **`pg_upgrade --link`** | Usually minutes, mostly independent of size | Rewrites system catalogues and reuses data files. Needs a stop of the old cluster, and statistics must be rebuilt afterwards |
+| **Logical replication to a new cluster** | Seconds (a switchover) | The new version subscribes to the old one, catches up, and traffic is switched. Managed equivalents include RDS Blue/Green Deployments |
+
+**A logical replication upgrade:**
+1. **Prepare**: check extension compatibility on the new version, find tables without primary keys (logical replication needs a replica identity), and plan for what isn't replicated: **sequences**, **DDL** and large objects.
+2. **Build** the new cluster, copy the schema, and create a publication on the old database and a subscription on the new one. The initial copy runs, then changes stream.
+3. **Test** the application against the new cluster in read-only mode, compare row counts and checksums, and run the query workload to find **plan regressions**. New planner versions sometimes choose worse plans for specific queries.
+4. **Freeze DDL** during the upgrade window.
+5. **Switch over**: briefly stop writes (or put the application in read-only mode), wait for replication lag to reach zero, **set sequences** on the new cluster past the old values, then point the application at the new cluster (a DNS name, proxy or connection pooler change).
+6. **Keep a way back**: reverse replication from new to old for a period, or keep the old cluster intact for a quick rollback before significant new writes.
+7. Afterwards, run `ANALYZE` and watch query latency closely for a few days.
+
+Rehearse the whole thing on a production-sized copy first, and time each step.
+
+**What the interviewer is looking for:**
+The options and their downtime, logical replication's gaps (sequences, DDL, primary keys), testing for plan regressions, a controlled switchover and a rollback path.
+
+**Follow-ups:**
+- Why must sequences be handled separately?
+- How would you find queries whose plans got worse after the upgrade?
+
+**Red flags:**
+- Upgrading in place without a rehearsal.
+- Forgetting sequences, so inserts fail with duplicate keys after the switch.
+
+### How would you reshard a live database from 4 shards to 16 without downtime? {#live-resharding}
+
+**Level:** Architect
+
+**Model answer:**
+Resharding moves a large share of the data while it's being written. The pattern is the same as any live migration: **copy, catch up, verify, switch, keep a way back**, one slice at a time.
+
+**Prepare the routing first:**
+- Route through a **mapping layer** (a directory of key ranges or virtual buckets to shards), not a hard-coded `hash(key) % 4`. Modulo hashing means changing the shard count moves almost every key. With many virtual buckets (say 4,096) assigned to shards, resharding moves whole buckets.
+- Make every query go through that layer. Queries that bypass it break during the move.
+
+**Move bucket by bucket:**
+1. **Copy** the bucket's existing data to its new shard, from a consistent snapshot.
+2. **Catch up** with changes since the snapshot, using CDC or logical replication filtered to that bucket.
+3. **Verify**: row counts and checksums per bucket, and shadow reads comparing old and new.
+4. **Switch**: briefly block or queue writes for that bucket (milliseconds to seconds), wait for zero lag, update the directory, and resume. Only one bucket is paused at a time.
+5. **Clean up** the old copy after a safety period, so moving back stays possible until then.
+
+**Control the impact:**
+- Throttle copying on replication lag and latency, and move buckets in waves, starting with small or internal tenants.
+- Move the **hottest buckets** deliberately, possibly to their own shard, rather than letting them land wherever the arithmetic puts them.
+- Watch cross-shard queries and transactions. Resharding is a good moment to remove any that crept in.
+
+**Use the tooling that exists:** Vitess (MySQL) and distributed PostgreSQL (Citus, or elastic clusters on Azure) provide online resharding or shard rebalancing that implement this pattern. Managed distributed SQL databases split ranges automatically. Building it yourself is a significant project, so check those first.
+
+**What the interviewer is looking for:**
+Virtual buckets and a directory instead of modulo hashing, per-bucket copy, catch-up, verify and switch, short per-bucket write pauses, throttling and hot-bucket placement, and existing tooling.
+
+**Follow-ups:**
+- Why does `hash(key) % N` make resharding so expensive?
+- How would you handle a transaction that touches two buckets during the move?
+
+**Red flags:**
+- Stopping all writes to reshard everything at once.
+- Hard-coded modulo routing scattered through the code.
+
 ## Cheat Sheet
 
 ### Principles
@@ -678,6 +874,16 @@ Compatibility rules enforced by tooling, parallel versions, usage-driven depreca
 - **Shadow reads** — query both stores, compare results, and cut over only after mismatches stay at zero.
 - **Reverse replication** — after the write switch, replicate new to old so rollback remains possible.
 - **gh-ost / pt-online-schema-change** — MySQL tools that copy to a shadow table and swap it in.
+
+### Revisit
+
+- **Lock queue arithmetic** — a waiting `ALTER` makes every later query wait. At 3,000 queries a second, 2,000 connections are gone in under a second. Set a short `lock_timeout` and retry.
+- **CDC extraction** — CDC to the new store, shadow reads compared until mismatches stay at zero, switch reads then writes, then reverse CDC to keep rollback possible.
+- **Schema vs data migrations** — structure in quick, versioned migrations. Contents in batched, idempotent, resumable jobs.
+- **Testing migrations** — lint the DDL, run the old code's tests against the new schema, rehearse on production-sized data, test failure halfway through.
+- **Splitting a table** — new table, atomic dual write or trigger, backfill, verify, flagged read switch, check every reader, then drop.
+- **Major version upgrades** — `pg_upgrade --link` for minutes of downtime, logical replication for seconds. Handle sequences and DDL, and look for plan regressions.
+- **Live resharding** — route through virtual buckets and a directory. Move bucket by bucket: copy, catch up with CDC, verify, pause briefly, switch, and keep the old copy for a while.
 
 ## Further Reading
 
