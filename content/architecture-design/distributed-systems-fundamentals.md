@@ -6,7 +6,7 @@ tags: [distributed-systems, consensus, clocks, replication]
 level: Architect
 estimatedMinutes: 90
 related: [system-design, resilience-patterns, databases-sql-nosql, messaging-event-streaming]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -89,13 +89,59 @@ function compare(a: VClock, b: VClock): Order {
 
 **Hybrid logical clocks (HLC)** combine a physical timestamp with a logical counter. They stay close to wall-clock time, so they are human-readable and work for time-range queries, but they still respect causality. CockroachDB and YugabyteDB use them. **Google Spanner's TrueTime** goes further: GPS receivers and atomic clocks expose an explicit uncertainty interval `[earliest, latest]`, and a commit *waits out* that uncertainty, typically a few milliseconds, before becoming visible. That makes commit order match real-time order (external consistency).
 
+### Worked example: a hybrid logical clock
+
+A hybrid logical clock (HLC) is a timestamp pair `(wall, logical)`. `wall` tracks the largest physical time the node has seen, and `logical` breaks ties when physical time hasn't moved past it. The rules come from Kulkarni et al. (2014):
+
+```ts
+// Hybrid logical clock. Timestamps compare by wall first, then logical.
+type HLC = { wall: number; logical: number };
+
+class HybridClock {
+  private last: HLC = { wall: 0, logical: 0 };
+  constructor(private physicalNow: () => number = Date.now) {}
+
+  /** Local event or send. */
+  now(): HLC {
+    const pt = this.physicalNow();
+    this.last = pt > this.last.wall
+      ? { wall: pt, logical: 0 }                                  // physical time moved on
+      : { wall: this.last.wall, logical: this.last.logical + 1 }; // it hasn't: count
+    return { ...this.last };
+  }
+
+  /** On receiving a message stamped `remote`. Production code also rejects a `remote.wall` too far ahead (the maximum offset). */
+  receive(remote: HLC): HLC {
+    const pt = this.physicalNow();
+    const wall = Math.max(this.last.wall, remote.wall, pt);
+    let logical = 0;                                                // physical time is ahead of everything seen
+    if (wall === this.last.wall && wall === remote.wall) logical = Math.max(this.last.logical, remote.logical) + 1;
+    else if (wall === this.last.wall) logical = this.last.logical + 1;
+    else if (wall === remote.wall) logical = remote.logical + 1;
+    this.last = { wall, logical };
+    return { ...this.last };
+  }
+}
+```
+
+Trace it with node B's clock running 2 ms behind node A's:
+
+| Step | Node | Physical clock | Event | HLC |
+|---|---|---|---|---|
+| 1 | A | 100 | Writes `x`, sends it to B | `(100, 0)` |
+| 2 | B | 98 | Receives A's message | `(100, 1)`: the remote wall time wins, so the counter continues from A's |
+| 3 | B | 99 | Overwrites `x` | `(100, 2)`: physical time is still behind, so only the counter moves |
+| 4 | B | 101 | Writes `y` | `(101, 0)`: physical time has caught up, so the counter resets |
+
+B's overwrite in step 3 correctly orders after A's write. Last-write-wins on raw wall clocks would have compared 99 with 100 and silently kept A's older value. A Lamport clock would also order them correctly, but an HLC stays within the clock offset of real time. That keeps it readable and usable for queries like "writes between 10:00 and 10:05".
+
 ### Consistency models, precisely
 
 | Model | Guarantee | Example |
 |---|---|---|
 | **Linearizability** | Each operation on a *single object* appears to take effect atomically at some point between its start and end. Once a write completes, every later read sees it | etcd reads (default), a ZooKeeper `sync` then read, a single-leader database reading from the leader |
 | **Serializability** | *Transactions* over many objects behave as if run one at a time in *some* order. That order need not match real time | PostgreSQL `SERIALIZABLE` |
-| **Strict serializability** | Serializable, and the order matches real time | Spanner, CockroachDB (for most operations), FoundationDB |
+| **Strict serializability** | Serializable, and the order matches real time | Spanner, FoundationDB. CockroachDB is serializable with linearizable single-key operations, but not strictly serializable across keys |
 | **Causal** | Causally related operations are seen in the same order everywhere. Concurrent ones may differ | Collaboration tools, social feeds with comment threads |
 | **Eventual** | If writes stop, replicas converge | DNS, Dynamo-style stores at low quorum settings |
 
@@ -196,6 +242,34 @@ The key safety rules:
 2. **Randomised election timeouts** (the paper suggests 150–300 ms) make split votes rare.
 3. **Election restriction**: a node votes only for a candidate whose log is at least as up to date as its own. That guarantees the new leader has every committed entry.
 4. **Log matching**: a follower accepts an entry only if its previous entry matches (`prevIndex`, `prevTerm`). Otherwise the leader backs up and overwrites the divergent suffix.
+
+### Linearizable read with ReadIndex
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant L as Leader (term 7)
+  participant F1 as Follower 1
+  participant F2 as Follower 2
+  %% step: A client asks the leader for x. The leader can't simply answer from memory, because a newer leader may already exist on the other side of a partition.
+  %% step: It records its commit index (42) as the read index. It has already committed an entry in term 7 (the no-op every new leader writes), so index 42 covers every acknowledged write.
+  %% step: To prove it is still the leader, it sends a round of heartbeats in term 7.
+  %% step: The same heartbeat goes to the second follower. Nothing is written to disk.
+  %% step: Follower 1 accepts term 7. With the leader that is a majority, so no newer leader can have been elected before this point.
+  %% step: The leader waits until its state machine has applied index 42, then reads x locally.
+  %% step: The reply is linearizable for the cost of one network round trip and no log write. A lease read skips the round trip by trusting bounded clock drift instead.
+  C->>L: GET x
+  Note over L: readIndex = commitIndex = 42
+  par Confirm leadership
+    L->>F1: Heartbeat (term 7)
+    L->>F2: Heartbeat (term 7)
+  end
+  F1-->>L: Ack (term 7)
+  Note over L: Majority confirmed. Wait until applied index ≥ 42
+  L-->>C: x = 5
+```
+
+A follower can serve the same kind of read. It asks the leader for the read index, waits until it has applied that index itself, and answers locally. That spreads read load across the cluster without giving up linearizability.
 
 ### Fencing a paused lock holder
 
@@ -639,6 +713,159 @@ Choosing consistency per operation, a concrete merge semantic that matches busin
 - Last-write-wins on the whole cart, which loses items.
 - Making checkout and inventory eventually consistent without compensation.
 
+### What is a CRDT, and when is it the right tool? {#crdts}
+
+**Level:** Foundation
+
+**Model answer:**
+A **conflict-free replicated data type** is a data structure that replicas can update independently, without coordination, and that is guaranteed to converge once every replica has seen the same updates.
+
+- **State-based CRDTs** ship their whole state and merge it with a function that is commutative, associative and idempotent. Updates can therefore arrive in any order, more than once, through gossip.
+- **Operation-based CRDTs** broadcast operations that commute. They are smaller on the wire but need reliable, causally ordered delivery of every operation.
+
+The simplest is a grow-only counter:
+
+```ts
+// G-Counter: one slot per replica. Merge takes the max per slot; the value is the sum.
+type GCounter = Record<string, number>;
+const increment = (c: GCounter, replica: string): GCounter => ({ ...c, [replica]: (c[replica] ?? 0) + 1 });
+const merge = (a: GCounter, b: GCounter): GCounter => {
+  const out = { ...a };
+  for (const [r, n] of Object.entries(b)) out[r] = Math.max(out[r] ?? 0, n);
+  return out;
+};
+const value = (c: GCounter) => Object.values(c).reduce((s, n) => s + n, 0);
+```
+
+Others build on the same idea: PN-counters (one counter for increments, one for decrements), OR-sets for add and remove, registers, maps, and sequence CRDTs for collaborative text (as in Yjs and Automerge).
+
+Use them for offline-first apps, collaborative editing, and multi-region counters or sets where availability matters more than coordination. Don't use them for invariants such as "balance never below zero" or "usernames are unique". Each replica's update is valid on its own, but the merged result can still break the rule. Costs include metadata and tombstones that need garbage collection, and a merge rule fixed by the data type rather than chosen per conflict.
+
+**What the interviewer is looking for:**
+Convergence without coordination, the merge properties that make it work, and a clear sense of which invariants CRDTs can't protect.
+
+**Follow-ups:**
+- Why can't you implement a bank balance that never goes negative as a CRDT?
+- How does an OR-set decide what happens when an add and a remove are concurrent?
+
+**Red flags:**
+- "CRDTs give you strong consistency without the cost."
+- Thinking last-write-wins on a whole object is a CRDT that preserves everyone's updates.
+
+### How does a Raft cluster serve linearizable reads, and what changes if you read from a follower? {#raft-reads}
+
+**Level:** Senior
+
+**Model answer:**
+A leader answering from its own state isn't enough. A leader cut off in a minority partition may not know it has been replaced, and would return stale data. The options, from safest to fastest:
+
+1. **Read through the log.** Append the read as a log entry and answer once it commits. Correct, but every read costs a disk write and a quorum round trip.
+2. **ReadIndex.** The leader records its commit index (after committing an entry in its current term, which is why new leaders write a no-op). It sends a heartbeat round and waits for a majority to confirm it is still leader. Then it waits until it has applied up to that index and reads locally. That costs one network round trip and no disk write. etcd's default linearizable reads work this way.
+3. **Lease reads.** After a successful heartbeat round, the leader assumes nobody else can be elected within the election timeout, minus a margin for clock drift, and serves reads without a round trip. Fast, but correctness now depends on bounded clock drift and pause times.
+
+**Follower reads** can still be linearizable. The follower asks the leader for the current read index, waits until it has applied that index, and answers locally. That moves the read work off the leader, but adds latency.
+
+A **serializable** or stale read (etcd's `--consistency=s`) serves whatever the replica has locally. It is fast and fine for caches or dashboards, but a client can see time go backwards if it switches replicas.
+
+**What the interviewer is looking for:**
+Why a deposed leader is the danger, ReadIndex versus lease reads, and that a timing assumption in lease reads turns into a correctness assumption.
+
+**Follow-ups:**
+- Why must a new leader commit an entry in its own term before serving ReadIndex reads?
+- Which reads in a Kubernetes control plane can tolerate staleness?
+
+**Red flags:**
+- "Reads always go to the leader, so they're always fresh."
+- Not knowing what a lease read assumes about clocks.
+
+### How does two-phase commit work, and why is it called a blocking protocol? {#two-phase-commit}
+
+**Level:** Senior
+
+**Model answer:**
+A coordinator commits one transaction across several participants (databases, queues or shards):
+
+1. **Prepare.** The coordinator asks every participant to prepare. Each one makes its changes durable, writes a prepare record, keeps its locks, and votes yes (a promise to commit if asked) or no.
+2. **Commit or abort.** If every vote is yes, the coordinator durably logs the commit decision and tells everyone to commit. Any no vote or timeout means abort.
+
+It **blocks** because a participant that voted yes has given up the right to decide alone. If the coordinator crashes after collecting the votes but before announcing the decision, the participants are **in doubt**. They can't commit (someone may have voted no) or abort (the coordinator may have logged a commit), so they hold their locks until the coordinator recovers. Other transactions touching those rows wait too.
+
+Other costs: two round trips plus forced log writes on the critical path, and availability equal to the product of every participant's availability.
+
+How real systems live with it:
+- **Replicate the coordinator and participants with consensus.** Spanner runs 2PC across Paxos groups, so a crashed coordinator is replaced by its group and the decision isn't lost.
+- **Optimise the commit path.** CockroachDB's parallel commits write the intent and the transaction record together to save a round trip.
+- **Avoid it across services.** Between independently owned services, use sagas with compensation and the outbox pattern instead of XA transactions.
+
+Three-phase commit adds a pre-commit phase to avoid blocking, but it assumes bounded network delays and becomes unsafe under partitions, so it is rarely used.
+
+**What the interviewer is looking for:**
+The in-doubt window, why votes are promises, and how consensus-replicated coordinators remove the single point of blocking.
+
+**Follow-ups:**
+- What does a database administrator do with an in-doubt XA transaction?
+- When is 2PC inside one database cluster a good choice?
+
+**Red flags:**
+- "Three-phase commit solves the blocking problem."
+- XA transactions spanning services owned by different teams.
+
+### How would you test that a distributed system stays correct under failures? {#testing-distributed-systems}
+
+**Level:** Architect
+
+**Model answer:**
+Unit tests and happy-path integration tests can't find these bugs, because they hide in rare interleavings of failures. I'd layer the approach:
+
+1. **Write down the invariants first.** For example: at most one leader per term, no acknowledged write is lost, every order is billed exactly once, and the sum of all balances is constant. Every later layer checks these.
+2. **Model-check the protocol** when you design something new. TLA+ or P explore every interleaving of a small model. AWS has used TLA+ on S3, DynamoDB and other services to find design bugs that testing missed.
+3. **Deterministic simulation testing.** Run the real code in one process against a simulated network, disk and clock, driven by a seeded random generator. Inject drops, reorders, crashes and slow disks. Any failure can be replayed exactly from its seed. FoundationDB was built this way, and TigerBeetle and Antithesis apply the same idea. It needs all I/O and time behind interfaces from the start.
+4. **Jepsen-style black-box tests.** Run a real cluster, inject partitions, clock skew, process pauses (`SIGSTOP`) and crashes, record every client operation, and check the history against the consistency model with a checker such as Knossos or Elle.
+5. **Fault injection in shared environments.** Toxiproxy for latency and dropped connections, chaos experiments and game days with a stated hypothesis.
+6. **Verify in production.** Reconciliation jobs that check invariants on real data, and alerts when they break.
+
+I'd match the investment to the blast radius. A consensus store or a ledger deserves simulation and model checking. A CRUD service with idempotent handlers mostly needs fault injection and reconciliation.
+
+**What the interviewer is looking for:**
+Invariants as the starting point, knowledge of simulation and history checking, and a sense of proportion about cost.
+
+**Follow-ups:**
+- What would you change in a codebase to make deterministic simulation possible?
+- How would you check a recorded history for lost writes?
+
+**Red flags:**
+- "Our unit-test coverage is 90%, so we're covered."
+- Chaos experiments with no hypothesis or invariant to check.
+
+### Two of the three nodes in your etcd cluster are gone, and Kubernetes has stopped accepting changes. What do you do? {#etcd-quorum-loss}
+
+**Level:** Architect
+
+**Model answer:**
+**Understand the state first.** One member out of three is not a majority, so etcd refuses writes and linearizable reads. The Kubernetes API server can't persist anything: no deploys, scaling or rescheduling. Running pods keep running, because kubelets and the data plane don't need etcd for work already placed. So it is serious, but there's no need to rush into something destructive.
+
+**Recover in order of least data loss.**
+1. **Bring the lost members back with their data.** Restart the VMs, reattach the disks. If one returns with its data directory intact, quorum is restored and nothing is lost.
+2. **If they are unrecoverable, rebuild from the survivor.** Start it with `--force-new-cluster` so it becomes a one-member cluster with its own data, then add fresh members one at a time. The risk: the survivor may lack entries that the other two had committed, so recent writes can be lost.
+3. **Or restore a snapshot** (`etcdutl snapshot restore`) into a new cluster. You lose everything written since the snapshot. Compare the snapshot's revision with the survivor's to choose between options 2 and 3.
+
+You can't fix this by adding a new member. `member add` is itself a write, so it needs the quorum you no longer have.
+
+**Afterwards.** Restart the API servers so their watch caches don't serve state from the old cluster. Expect controllers to recreate or garbage-collect objects that changed after the restore point. Check workloads deployed in that window.
+
+**Prevent the next one.** Spread members across three failure domains, and use five members if you need to survive two failures. Automate snapshots and test restoring them. Alert on member health and on database size. Or use a managed control plane so the provider runs etcd.
+
+**What the interviewer is looking for:**
+Knowing what still works without quorum, recovery options ranked by data loss, and why you can't add a member to regain quorum.
+
+**Follow-ups:**
+- How would you place five etcd members across two data centres and a cloud region?
+- How do you check that your etcd backups can actually be restored?
+
+**Red flags:**
+- Running `member add` to regain quorum.
+- Deleting data directories before working out which member has the newest revision.
+
 ## Cheat Sheet
 
 ### Foundations
@@ -664,6 +891,16 @@ Choosing consistency per operation, a concrete merge semantic that matches busin
 - **Raft commit** — an entry is committed once a majority stores it in the leader's current term.
 - **Fencing token** — a number that increases with each lock grant, checked by the resource to reject a stale holder's writes.
 - **Effectively-once** — at-least-once delivery plus idempotent or transactional processing.
+
+### Revisit
+
+- **CRDT merge rules** — commutative, associative and idempotent, so replicas converge whatever the order or duplication of updates.
+- **ReadIndex** — the leader confirms it is still leader with a heartbeat round, waits until it has applied its commit index, then reads locally.
+- **Lease read** — skips the heartbeat round by trusting that clock drift is bounded. Faster, but timing becomes a safety assumption.
+- **2PC in doubt** — a participant that voted yes must wait for the coordinator's decision while holding its locks. Replicate the coordinator to avoid blocking.
+- **HLC receive rule** — wall = max(local, remote, physical). The counter breaks ties and resets once physical time moves ahead.
+- **Deterministic simulation** — run the system on a simulated network, disk and clock with a seed, so every failure it finds can be replayed.
+- **etcd quorum loss** — `member add` needs quorum. Recover the lost members' data, or rebuild with `--force-new-cluster` or from a snapshot and accept possible loss.
 
 ## Further Reading
 

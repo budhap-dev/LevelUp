@@ -5415,5 +5415,255 @@
       "diagrams-c4-uml-sequence",
       "adrs-nfrs"
     ]
+  },
+  {
+    "id": "two-phase-commit",
+    "term": "Two-phase commit (2PC)",
+    "aka": [
+      "2PC"
+    ],
+    "group": "architecture-design",
+    "definition": "A protocol that commits one transaction across several participants: a prepare phase in which each participant votes, then a commit or abort decided and announced by a coordinator.",
+    "details": [
+      "A participant that votes yes must wait for the decision while holding its locks, so a coordinator crash leaves it in doubt (blocking).",
+      "Spanner runs 2PC across Paxos-replicated groups so a failed coordinator doesn't block participants."
+    ],
+    "useCases": [
+      "Atomic commits across shards inside one distributed database.",
+      "Explaining why cross-service workflows use sagas instead."
+    ],
+    "related": [
+      "distributed-systems-fundamentals",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "hybrid-logical-clock",
+    "term": "Hybrid logical clock (HLC)",
+    "aka": [
+      "HLC"
+    ],
+    "group": "architecture-design",
+    "definition": "A timestamp made of a physical time component and a logical counter. It respects causality like a Lamport clock while staying close to wall-clock time.",
+    "details": [
+      "On receipt, wall = max(local, remote, physical); the counter breaks ties and resets once physical time moves ahead.",
+      "CockroachDB and YugabyteDB use HLCs with a configured maximum clock offset."
+    ],
+    "useCases": [
+      "Ordering multi-version writes in a distributed database.",
+      "Time-range queries over causally ordered events."
+    ],
+    "related": [
+      "distributed-systems-fundamentals"
+    ]
+  },
+  {
+    "id": "read-index",
+    "term": "ReadIndex",
+    "aka": [
+      "Raft ReadIndex"
+    ],
+    "group": "architecture-design",
+    "definition": "A Raft technique for linearizable reads: the leader records its commit index, confirms it is still leader with a heartbeat round, waits until it has applied that index, then reads locally.",
+    "details": [
+      "Costs one network round trip and no log write.",
+      "Followers can serve linearizable reads by fetching the read index from the leader."
+    ],
+    "useCases": [
+      "etcd's default linearizable reads.",
+      "Spreading read load across a Raft cluster."
+    ],
+    "related": [
+      "distributed-systems-fundamentals"
+    ]
+  },
+  {
+    "id": "deterministic-simulation-testing",
+    "term": "Deterministic simulation testing",
+    "aka": [
+      "DST"
+    ],
+    "group": "architecture-design",
+    "definition": "Running a distributed system's real code in one process against a simulated network, disk and clock driven by a seeded random generator, so any failure found can be replayed exactly.",
+    "details": [
+      "Pioneered by FoundationDB, and used by TigerBeetle and the Antithesis platform.",
+      "Requires all I/O, time and randomness behind interfaces from the start."
+    ],
+    "useCases": [
+      "Finding rare interleavings of crashes and message reordering in consensus or storage code."
+    ],
+    "related": [
+      "distributed-systems-fundamentals",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "event-storming",
+    "term": "Event storming",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A workshop format, created by Alberto Brandolini, in which domain experts and engineers model a business process as a timeline of past-tense domain events on sticky notes.",
+    "details": [
+      "Runs at big-picture, process and design levels.",
+      "Pivotal events, where responsibility hands over, suggest bounded-context boundaries."
+    ],
+    "useCases": [
+      "Discovering bounded contexts in a monolith.",
+      "Building a shared ubiquitous language quickly."
+    ],
+    "related": [
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "value-object",
+    "term": "Value object",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A domain object defined entirely by its attributes, with no identity. It is immutable, compared by value and validates itself on construction.",
+    "details": [
+      "Examples: Money, EmailAddress, DateRange.",
+      "Removes primitive obsession and makes invalid values impossible to construct."
+    ],
+    "useCases": [
+      "Modelling amounts with currency instead of raw numbers."
+    ],
+    "related": [
+      "domain-driven-design",
+      "solid-clean-code"
+    ]
+  },
+  {
+    "id": "domain-event",
+    "term": "Domain event",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A record of something significant that happened in the domain, named in the past tense (OrderPlaced), raised by an aggregate.",
+    "details": [
+      "Internal to a bounded context; translate selected ones into versioned integration events for other contexts.",
+      "Used to update other aggregates with eventual consistency."
+    ],
+    "useCases": [
+      "Triggering loyalty points after an order is placed."
+    ],
+    "related": [
+      "domain-driven-design",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "context-map",
+    "term": "Context map",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A diagram of a system's bounded contexts and the relationship between each pair: partnership, shared kernel, customer–supplier, conformist, anticorruption layer, open host service or separate ways.",
+    "details": [
+      "Draw the current reality first, then the intended relationships.",
+      "The relationships reflect team dynamics as much as technology."
+    ],
+    "useCases": [
+      "Planning integration and team ownership across contexts."
+    ],
+    "related": [
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "ubiquitous-language",
+    "term": "Ubiquitous language",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "The precise vocabulary that domain experts and developers share within one bounded context, used in conversation, tests and code alike.",
+    "details": [
+      "Bounded: the same word may mean different things in different contexts.",
+      "Awkward or ambiguous language signals a modelling problem or a hidden boundary."
+    ],
+    "useCases": [
+      "Naming aggregates, methods and events after business terms."
+    ],
+    "related": [
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "process-manager",
+    "term": "Process manager",
+    "aka": [],
+    "group": "architecture-design",
+    "definition": "A component that reacts to events and sends commands to drive a multi-step process across aggregates or contexts, keeping its own state and running compensations on failure.",
+    "details": [
+      "Holds no business rules of its own; the aggregates enforce them.",
+      "An orchestrated saga is a process manager with compensations."
+    ],
+    "useCases": [
+      "Reserving seats, starting a booking and taking payment as separate transactions."
+    ],
+    "related": [
+      "domain-driven-design",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "deployment-stamp",
+    "term": "Deployment stamp",
+    "aka": [
+      "regional stamp",
+      "scale unit"
+    ],
+    "group": "architecture-design",
+    "definition": "A complete, independent copy of an application's infrastructure, deployed per region or per group of tenants, so capacity and residency scale by adding stamps.",
+    "details": [
+      "A global control plane routes each tenant to its stamp.",
+      "Closely related to cells: both limit blast radius."
+    ],
+    "useCases": [
+      "Keeping EU tenants' data in an EU stamp."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "architecture-patterns"
+    ]
+  },
+  {
+    "id": "usage-metering",
+    "term": "Usage metering",
+    "aka": [
+      "metering"
+    ],
+    "group": "architecture-design",
+    "definition": "Recording what each tenant consumed (API calls, storage, compute) as idempotent usage events that feed rating and invoicing.",
+    "details": [
+      "Deterministic event ids make retries safe to deduplicate.",
+      "Corrections are new adjustment events, never edits to history."
+    ],
+    "useCases": [
+      "Usage-based pricing.",
+      "Showing tenants their consumption before they hit a limit."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "finops"
+    ]
+  },
+  {
+    "id": "just-in-time-access",
+    "term": "Just-in-time access",
+    "aka": [
+      "JIT access"
+    ],
+    "group": "quality-security",
+    "definition": "Granting elevated access only when needed, tied to a reason, approved, scoped and automatically expiring, instead of standing privileges.",
+    "details": [
+      "Every grant and action is audited.",
+      "Break-glass access is a separate, alarmed path for emergencies."
+    ],
+    "useCases": [
+      "Support engineers viewing one tenant's data for a ticket.",
+      "Production database access during an incident."
+    ],
+    "related": [
+      "multi-tenant-saas",
+      "authentication-authorisation"
+    ]
   }
 ]

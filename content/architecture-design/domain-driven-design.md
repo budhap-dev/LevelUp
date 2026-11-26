@@ -6,7 +6,7 @@ tags: [ddd, bounded-context]
 level: Architect
 estimatedMinutes: 75
 related: [architecture-patterns, data-modelling, micro-frontends]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -68,7 +68,7 @@ How bounded contexts and their teams relate:
 - **Aggregate:** a cluster of entities and value objects with one **root**, which enforces invariants. External code references the aggregate only through the root, and **one transaction modifies one aggregate**.
 - **Domain event:** something significant that happened (`OrderPlaced`), named in the past tense. Used to integrate aggregates and contexts.
 - **Repository:** collection-like access to aggregates (load and save whole aggregates by id). Hides persistence.
-- **Domain service:** domain logic that doesn't naturally belong to one entity (for example a transfer between two accounts, coordinated by events).
+- **Domain service:** domain logic that doesn't naturally belong to one entity or value object, such as deciding whether a transfer between two accounts is allowed. The debit and credit still change one aggregate per transaction.
 - **Application service:** orchestrates a use case: loads aggregates, calls domain methods, saves, publishes events. Contains no business rules.
 
 ```ts
@@ -100,13 +100,14 @@ export class Order {
   }
 
   place(now: Date) {
+    if (this.status !== 'draft') throw new DomainError('Only a draft order can be placed');
     if (this.lines.length === 0) throw new DomainError('Cannot place an empty order');
     this.status = 'placed';
     this.events.push({ type: 'OrderPlaced', orderId: this.id, total: this.total(), at: now });
   }
 
   total(): Money {
-    return this.lines.reduce((sum, l) => sum.add(l.subtotal()), Money.of(0n, this.lines[0]?.currency ?? 'GBP'));
+    return this.lines.reduce((sum, l) => sum.add(l.subtotal()), Money.of(0n, this.lines[0]?.unitPrice.currency ?? 'GBP'));
   }
 
   pullEvents() {
@@ -125,6 +126,49 @@ export class Order {
 4. **Use eventual consistency outside the boundary:** domain events update other aggregates in separate transactions.
 
 Example: "An order's total must equal the sum of its lines" is an invariant inside the `Order` aggregate. "Customer loyalty points reflect their orders" can be eventually consistent, updated via `OrderPlaced`.
+
+### Worked example: shrinking an oversized aggregate
+
+A conference-booking system started with one `Conference` aggregate that held the venue details, the agenda and every booking. The invariant it protected was "seats sold never exceed capacity". On a popular conference, hundreds of customers booked at once. Each save bumped the same version number, so most attempts failed with optimistic-locking conflicts. Even an attendee fixing a typo in their name had to load and lock every booking.
+
+The fix was to ask what *really* needs to be consistent in one transaction. Only the seat count does. So it moved into a small aggregate of its own:
+
+```ts
+// The only invariant that must hold immediately: reserved seats ≤ capacity.
+export class SeatAvailability {
+  private constructor(
+    readonly conferenceId: ConferenceId,
+    private capacity: number,
+    private held: Map<BookingId, number>,
+    public version: number, // checked on save (optimistic concurrency)
+  ) {}
+
+  remaining() {
+    return this.capacity - [...this.held.values()].reduce((s, n) => s + n, 0);
+  }
+
+  reserve(bookingId: BookingId, seats: number): SeatsReserved {
+    const existing = this.held.get(bookingId);
+    if (existing !== undefined) return { type: 'SeatsReserved', bookingId, seats: existing }; // retry: idempotent
+    if (seats <= 0) throw new DomainError('Seats must be positive');
+    if (seats > this.remaining()) throw new DomainError('Not enough seats left');
+    this.held.set(bookingId, seats);
+    return { type: 'SeatsReserved', bookingId, seats };
+  }
+
+  release(bookingId: BookingId) {
+    this.held.delete(bookingId);
+  }
+}
+```
+
+The `Booking` aggregate now holds attendee details and payment status, and the agenda became a separate aggregate (or a different context). The results:
+
+- Editing a booking no longer touches the seat count, so those edits never conflict.
+- A booking transaction locks one small row instead of the whole conference.
+- Creating a booking now spans two aggregates. A process manager coordinates them (shown under How It Works), and a failed payment releases the seats.
+
+For an extremely hot event, the seat count itself becomes the contention point. You can split capacity into blocks (one `SeatAvailability` per section) so concurrent bookings spread across several rows.
 
 ## How It Works
 
@@ -165,6 +209,37 @@ flowchart LR
   FU -->|"Anticorruption layer"| LEG
   RE -->|"Customer-supplier"| OR
   OR -->|"Conformist"| IDP
+```
+
+### Booking across two aggregates with a process manager
+
+```mermaid
+sequenceDiagram
+  participant U as Customer
+  participant PM as Booking process manager
+  participant SA as SeatAvailability
+  participant B as Booking
+  participant P as Payments context
+  %% step: The customer asks for two seats. The process manager owns the use case but holds no business rules of its own.
+  %% step: First transaction: reserve the seats in SeatAvailability, saved at the version it was loaded with.
+  %% step: The aggregate checks capacity, accepts, and emits SeatsReserved. Only this small aggregate was locked.
+  %% step: The rule "one transaction changes one aggregate" means the booking is saved separately.
+  %% step: Second transaction: start the Booking in the "awaiting payment" state.
+  %% step: Ask the Payments context to take payment, with the booking id as the idempotency key so a retry can't charge twice.
+  %% step: Payment fails. Both aggregates are already saved, so there is nothing to roll back. The process manager compensates instead.
+  %% step: Release the seats, so other customers can book them.
+  %% step: Mark the booking as failed. Both aggregates are consistent again.
+  %% step: Tell the customer. Brief inconsistency (seats held for a booking that later failed) was acceptable, and the business agreed to it.
+  U->>PM: Book 2 seats
+  PM->>SA: reserve(booking 981, 2 seats)
+  SA-->>PM: SeatsReserved
+  Note over SA,B: Separate transactions, one aggregate each
+  PM->>B: Start booking 981 (awaiting payment)
+  PM->>P: Take payment (idempotency key 981)
+  P-->>PM: PaymentFailed
+  PM->>SA: release(booking 981)
+  PM->>B: Mark booking 981 failed
+  PM-->>U: Payment failed, seats released
 ```
 
 ## When to Use / Trade-offs
@@ -610,6 +685,200 @@ Aggregate-level granularity, domain-owned interfaces, separating reads from aggr
 - A repository per table with generic `findAll`/`update` methods used throughout the domain.
 - Returning ORM entities with lazy-loading proxies into domain logic.
 
+### What is event storming, and how do you run a session? {#event-storming}
+
+**Level:** Foundation
+
+**Model answer:**
+Event storming (Alberto Brandolini) is a workshop in which domain experts and engineers model a business process as a timeline of **domain events**, written in the past tense on sticky notes along a long wall.
+
+There are three common levels:
+- **Big picture:** the whole business, with people from many departments. It finds bounded contexts, hand-offs and the most painful problems.
+- **Process level:** one process in detail, adding commands, policies and read models.
+- **Design level:** enough detail to sketch aggregates and their rules.
+
+A typical big-picture session:
+1. **Invite the people with the questions and the people with the answers:** domain experts, engineers and product.
+2. **Chaotic exploration.** Everyone writes events ("Order placed", "Invoice issued") and sticks them roughly where they happen.
+3. **Enforce the timeline.** Sort the events, remove duplicates, and argue about the order. The arguments are where you learn.
+4. **Find the pivotal events** where responsibility hands over (for example `OrderPlaced` from Sales to Fulfilment). These are candidate boundaries between contexts.
+5. **Mark hotspots** (often on pink or red stickies) for questions, conflicts and pain points.
+6. At process level, add **commands** (what triggered the event), **actors**, **policies** ("whenever X happens, do Y"), **external systems** and **read models** (what someone needs to see to decide).
+
+Colour conventions vary between facilitators. What matters is a shared key on the wall.
+
+The outputs are a shared language, candidate context boundaries, and a prioritised list of hotspots, all produced in a day instead of weeks of interviews.
+
+**What the interviewer is looking for:**
+Events in the past tense on a timeline, the right people in the room, and pivotal events as the source of boundaries.
+
+**Follow-ups:**
+- How would you run event storming remotely?
+- What do you do when two experts describe the same process differently?
+
+**Red flags:**
+- A session with only engineers in the room.
+- Jumping straight to tables and entities.
+
+### Where should validation live: at the API edge, in value objects, in the aggregate or in an application service? {#validation-layers}
+
+**Level:** Senior
+
+**Model answer:**
+In all of them, but each layer checks a different kind of rule:
+
+| Layer | Checks | Example |
+|---|---|---|
+| API edge | Shape and syntax, before anything else runs | Required fields, types, formats, size limits, with a schema validator such as Zod |
+| Value objects | That a value is valid on its own, so an invalid one can't exist | `EmailAddress`, a non-negative `Money`, a `DateRange` whose start is before its end |
+| Aggregate | Invariants that depend on its current state | "No lines can be added after the order is placed", "the credit limit is not exceeded" |
+| Application or domain service | Rules that need other aggregates or external data | "The customer must be verified", "the username is unique" |
+| Database | A last line of defence | Unique, foreign-key and check constraints |
+
+Two details matter:
+- **Checks that span aggregates race.** "Is this username free?" followed by an insert can let two people through. Back the check with a unique constraint or a reservation aggregate.
+- **Validation errors and rule violations are different outcomes.** A malformed request is a 400. A valid request that breaks a business rule ("the order is already shipped") is a domain error, usually mapped to 409 or 422 with a stable error code the client can act on.
+
+Duplicating a check at the edge for a better error message is fine, as long as the domain still enforces it. The domain must not rely on callers to validate.
+
+**What the interviewer is looking for:**
+Different kinds of rules in different layers, invariants owned by the aggregate, and awareness that cross-aggregate checks race.
+
+**Follow-ups:**
+- How would you return several validation errors at once without weakening the aggregate?
+- Where does authorisation belong in this picture?
+
+**Red flags:**
+- All rules in the controller, with an anaemic domain behind it.
+- Relying on the frontend to enforce business rules.
+
+### How do you choose between partnership, shared kernel, customer–supplier and conformist relationships on a context map? {#context-map-patterns}
+
+**Level:** Senior
+
+**Model answer:**
+The choice depends on how aligned the teams are and who holds the power, as much as on the technology. "Upstream" means the team whose changes affect the other one.
+
+- **Partnership.** Two teams whose goals are tightly linked for a while, such as a joint launch, plan and release together. Coordination is expensive, so time-box it.
+- **Shared kernel.** A small part of the model both teams own jointly: identifier types, a `Money` type, a few core events. Changes need agreement and must pass both teams' builds. Keep it tiny, because every line in it couples the two teams.
+- **Customer–supplier.** The upstream team is willing to prioritise the downstream team's needs. Formalise that with consumer-driven contract tests and a say in the upstream roadmap.
+- **Conformist.** The upstream won't change for you, and its model is good enough. A big vendor's well-designed API is a typical case. Adopting it is the cheapest option.
+- **Anticorruption layer.** The upstream won't change, and its model would damage yours (a legacy system, a confusing vendor model). Translate at the boundary.
+- **Open host service with a published language.** One upstream serves many consumers, so it publishes a stable, versioned protocol instead of negotiating with each.
+- **Separate ways.** Integration costs more than duplicating the capability.
+
+Draw the map as it is today first, including any "big ball of mud", and then decide which relationships you want. Relationships change: a customer–supplier relationship turns conformist when the upstream team gets reassigned.
+
+**What the interviewer is looking for:**
+Patterns chosen by team dynamics and model quality, the cost of shared kernels, and mapping reality before the ideal.
+
+**Follow-ups:**
+- What does it mean when one context is conformist to five others?
+- How would you move from a shared kernel to an open host service?
+
+**Red flags:**
+- A shared kernel that grows into a company-wide "common" library.
+- Treating the context map as a purely technical diagram.
+
+### When would you make an aggregate event-sourced, and what does it cost? {#event-sourced-aggregates}
+
+**Level:** Architect
+
+**Model answer:**
+An event-sourced aggregate stores the events that happened to it rather than its current state. To handle a command, you load its events, fold them into the current state, decide which new events the command produces, and append them with the expected version, so concurrent writers are detected.
+
+```ts
+type AccountEvent =
+  | { type: 'Opened'; overdraftMinor: bigint }
+  | { type: 'Deposited'; amountMinor: bigint }
+  | { type: 'Withdrawn'; amountMinor: bigint };
+type Account = { open: boolean; balanceMinor: bigint; overdraftMinor: bigint };
+
+const initial: Account = { open: false, balanceMinor: 0n, overdraftMinor: 0n };
+
+function evolve(s: Account, e: AccountEvent): Account {
+  switch (e.type) {
+    case 'Opened': return { open: true, balanceMinor: 0n, overdraftMinor: e.overdraftMinor };
+    case 'Deposited': return { ...s, balanceMinor: s.balanceMinor + e.amountMinor };
+    case 'Withdrawn': return { ...s, balanceMinor: s.balanceMinor - e.amountMinor };
+  }
+}
+
+function withdraw(s: Account, amountMinor: bigint): AccountEvent[] {
+  if (!s.open) throw new DomainError('Account is not open');
+  if (amountMinor <= 0n) throw new DomainError('Amount must be positive');
+  if (s.balanceMinor - amountMinor < -s.overdraftMinor) throw new DomainError('Overdraft limit exceeded');
+  return [{ type: 'Withdrawn', amountMinor }];
+}
+
+// Load: events.reduce(evolve, initial). Save: append(streamId, newEvents, expectedVersion).
+```
+
+**Worth it when:**
+- The history *is* the domain: ledgers, insurance claims, orders with a long, disputed lifecycle.
+- You need an audit trail you can't fake, or answers to "what did we know on 3 March?"
+- You expect to build new read models from past behaviour.
+
+**Costs:**
+- **Events are forever.** Every schema change needs versioning or *upcasting* (converting old events to the current shape as they load).
+- **Reads need projections.** They are eventually consistent, and they must be rebuilt when they change.
+- **Erasure is hard.** Personal data in immutable events needs crypto-shredding or a separate store.
+- **Long streams** need snapshots, and the team needs skills it may not have.
+
+Use it per aggregate, in the core contexts where the history pays off, not system-wide. Keep internal events separate from the integration events other contexts consume.
+
+**What the interviewer is looking for:**
+The command–event–fold mechanics, optimistic appends, a clear case for when history pays off, and honesty about schema evolution and erasure.
+
+**Follow-ups:**
+- How would you change the meaning of an event that's been stored for three years?
+- How do you rebuild a projection without downtime?
+
+**Red flags:**
+- Using a Kafka topic as the aggregate's event store. It has no per-aggregate "append only if the version is still N" check.
+- Event sourcing the whole system, including reference data and admin screens.
+
+### Walk through the bounded contexts you would design for a food-delivery platform. {#design-contexts-food-delivery}
+
+**Level:** Architect
+
+**Model answer:**
+**Start from the flow, not the nouns.** A quick event storm gives the timeline: `RestaurantOnboarded`, `MenuPublished`, `OrderPlaced`, `PaymentAuthorised`, `OrderAccepted`, `CourierAssigned`, `OrderPickedUp`, `OrderDelivered`, `PaymentCaptured`, `RestaurantPaidOut`, `RefundIssued`. The pivotal events mark the hand-offs.
+
+**Contexts and their classification:**
+
+| Context | Owns | Type |
+|---|---|---|
+| Ordering | Basket, checkout, the order's lifecycle | Core |
+| Pricing and promotions | Delivery fees, surge pricing, vouchers | Core |
+| Dispatch | Matching couriers to jobs, ETAs, routing | Core (the hardest and most differentiating) |
+| Restaurant operations | Kitchen tickets, prep times, menu availability | Supporting |
+| Courier management | Onboarding, shifts, earnings | Supporting |
+| Finance | Ledger, payouts, reconciliation | Supporting |
+| Payments | Card authorisation and capture | Generic, through a provider behind an ACL |
+| Support | Complaints, refunds, goodwill credits | Supporting |
+| Identity | Sign-in for customers, couriers and staff | Generic |
+
+**"Order" means something different in each one.** In Ordering it's lines and a price. In Restaurant operations it's a kitchen ticket with a prep time. In Dispatch it's a delivery job with pickup and drop-off locations and a time window. In Finance it's a set of ledger entries. Forcing one `Order` model on all four would make every change a negotiation.
+
+**Relationships:**
+- Ordering publishes `OrderPlaced` and `OrderCancelled` as a published language. Dispatch, Restaurant operations and Finance build their own models from them.
+- Pricing is an open host service. Checkout gets a quote id that Ordering honours for a few minutes, so prices don't change mid-checkout.
+- Cancellation after a courier is assigned is a process manager across Ordering, Dispatch, Payments and Support.
+
+**Delivery.** Start as a modular monolith with these modules and their own schemas. Extract Dispatch first: it has different scaling (continuous location updates), different latency needs and a dedicated team. Align teams to the core contexts first.
+
+**What the interviewer is looking for:**
+Events before entities, the multiple meanings of "order", core versus generic choices, explicit relationships, and an incremental delivery plan.
+
+**Follow-ups:**
+- Where does the "estimated delivery time" shown at checkout come from, and who owns it?
+- How would you handle a restaurant rejecting an order after payment is authorised?
+
+**Red flags:**
+- An `Order` service, a `Restaurant` service and a `Courier` service as the design.
+- Building your own payment processing.
+
 ## Cheat Sheet
 
 ### Strategic
@@ -630,6 +899,16 @@ Aggregate-level granularity, domain-owned interfaces, separating reads from aggr
 - **Anaemic model** — data-only entities with logic in services; fine for CRUD, harmful in complex domains.
 - **Entity services anti-pattern** — microservices per noun; chatty, coupled, every change touches many.
 - **Event storming** — workshop that discovers events, boundaries and language with domain experts.
+
+### Revisit
+
+- **Pivotal event** — an event where responsibility hands over, such as `OrderPlaced`. It is often a seam between bounded contexts.
+- **Validation layers** — shape at the edge, self-validating value objects, invariants in the aggregate, cross-aggregate rules backed by a constraint.
+- **Shared kernel** — a small model two teams own and change together. Keep it tiny, or it couples everything.
+- **Contention signal** — frequent optimistic-locking conflicts on one aggregate mean its boundary is too wide. Move the true invariant into a smaller aggregate.
+- **Process manager** — reacts to events and sends commands to drive a multi-step process, keeping its own state and running compensations.
+- **Event-sourced aggregate** — state rebuilt by folding its events, with appends checked against the expected version.
+- **Upcasting** — converting old event versions to the current shape as they load, so stored events never change.
 
 ## Further Reading
 
