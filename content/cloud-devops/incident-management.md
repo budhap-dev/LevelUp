@@ -6,7 +6,7 @@ tags: [incidents, on-call, postmortems, sre]
 level: Senior
 estimatedMinutes: 75
 related: [observability-sre, resilience-patterns, dora-metrics, stakeholder-management]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -188,6 +188,20 @@ sequenceDiagram
   participant Ops as Ops lead and SMEs
   participant C as Comms lead
   participant S as Status page and execs
+
+  %% step: The checkout SLO's fast-burn alert fires: errors are consuming the error budget at over 14 times the sustainable rate.
+  %% step: The primary on-call acknowledges within two minutes and opens the impact dashboard: about 35% of EU checkouts are failing.
+  %% step: That's a core journey failing for many customers, so they declare a SEV1 straight away. The incident command opens a channel and pages an incident commander.
+  %% step: The IC assigns an ops lead and asks the first question on the checklist: what changed in the last two hours?
+  %% step: The IC also assigns a comms lead, with the first external update due within 15 minutes.
+  %% step: The status page says checkout errors are being investigated, without guessing at causes.
+  %% step: The ops lead reports that a payments release at 13:40 lines up with the spike.
+  %% step: Rolling back is cheap and reversible, so the IC decides to roll back now and keep investigating in parallel. Waiting for proof would cost more.
+  %% step: The rollback completes and the error rate starts falling.
+  %% step: The comms lead updates the status page: a fix has been applied and recovery is being monitored.
+  %% step: The IC waits until errors have stayed at baseline for 30 minutes, measured by the same signal that raised the alert.
+  %% step: The IC declares the incident resolved, and the comms lead schedules the post-incident review within five working days.
+  %% step: The final status update says it's resolved, with a summary to follow.
   A->>P: Fast burn on checkout SLO
   P->>P: Acknowledge, check impact dashboard
   P->>IC: Declare SEV1, open channel
@@ -202,6 +216,40 @@ sequenceDiagram
   IC->>C: Resolved, schedule the review
   C->>S: Resolved, summary to follow
 ```
+
+### Worked example: from timeline to actions
+
+A post-incident review for a 52-minute SEV2. A certificate expired on the internal API gateway, and the mobile app couldn't log in.
+
+**Timeline (UTC):**
+
+| Time | Event |
+|---|---|
+| 08:00 | The gateway's TLS certificate expires. Mobile logins start failing. Web logins use a different path and keep working |
+| 08:14 | Support sees a rise in "can't log in" tickets and posts in the support channel |
+| 08:21 | Someone in support pages the platform on-call, who declares a SEV2 |
+| 08:30 | Logs show TLS handshake failures. The on-call suspects a recent network change and investigates it |
+| 08:41 | A second responder checks the certificate's expiry date. It's the cause |
+| 08:47 | A new certificate is issued by hand and deployed |
+| 08:52 | Logins recover |
+
+**Contributing factors.** Ask *how did this happen and how did it last 52 minutes*, not *who forgot*:
+1. This one certificate was issued manually three years ago, outside the automated renewal that covers 95% of certificates.
+2. The renewal reminder went to the mailbox of an engineer who had left.
+3. No alert covered certificate expiry, and the login SLO only measured web traffic, so detection relied on customers (14 minutes).
+4. The runbook for TLS errors didn't mention expiry, so the first theory followed the most recent change (11 minutes).
+
+**Candidate actions, ranked by strength:**
+
+| Action | Strength | Decision |
+|---|---|---|
+| Move the gateway certificate to automated issuance and renewal | **Strong**: removes the failure mode | Do now |
+| Alert on any certificate expiring within 21 days, discovered automatically from endpoints | **Strong**: catches the whole class | Do now |
+| Add mobile logins to the login SLO | **Medium**: faster detection of any login failure | Do this quarter |
+| Add an expiry check to the TLS runbook | **Weak but cheap**: helps diagnosis | Do now, 10 minutes |
+| "Remind teams to track certificate expiry" | **Weak**: relies on memory | Don't track it |
+
+Three tracked actions with owners and dates come out of it, rather than a dozen. The review is shared in the monthly incident forum, because other teams' manually issued certificates are the same risk.
 
 ## When to Use / Trade-offs
 
@@ -665,6 +713,171 @@ Psychological safety led from the top, quality of analysis over quantity, mechan
 - Postmortems as compliance paperwork.
 - Using incident counts in team performance targets.
 
+### What's the difference between an incident, a problem and a change, and why does it matter? {#incident-vs-problem}
+
+**Level:** Foundation
+
+**Model answer:**
+These terms come from IT service management (ITIL), and they separate three activities that need different urgency.
+
+- **Incident**: an unplanned interruption or degradation of a service. The goal is to **restore service** as fast as possible, even with a workaround. A rollback that ends the impact closes the incident, whether or not anyone understands the bug.
+- **Problem**: the underlying cause of one or more incidents, known or not yet known. **Problem management** investigates and removes it at a sensible pace, often after the incident. A problem with a workaround but no fix yet is a **known error**.
+- **Change**: a planned addition, modification or removal of something that could affect services, such as a deploy, a config change or an infrastructure update. Most incidents follow a change, which is why "what changed?" is the first question.
+
+Why the distinction matters:
+- It **stops root-cause analysis delaying recovery**. Investigating during the incident is fine, but restoring service comes first.
+- It **keeps the follow-up from being lost**. The incident is closed but the problem stays open until it's fixed, so recurring incidents get linked to one problem record instead of being treated as unrelated bad luck.
+- It **connects incidents to change data**. Linking each incident to the change that triggered it shows which kinds of change are risky, and feeds the change failure rate.
+
+Modern teams rarely use the full ITIL process, but the separation survives in the post-incident review and its tracked actions.
+
+**What the interviewer is looking for:**
+Restore versus fix, problems spanning several incidents, and the link between incidents and changes.
+
+**Follow-ups:**
+- Three incidents in a month share one contributing factor. How do you handle that?
+- How would you measure the change failure rate from incident data?
+
+**Red flags:**
+- Keeping the incident open until the root cause is found.
+- Treating recurring incidents as unrelated.
+
+### How do you train responders so they're ready before a real major incident? {#incident-drills}
+
+**Level:** Senior
+
+**Model answer:**
+Incident response is a skill, and people only build it through practice. Real SEV1s are too rare and too stressful to be the training.
+
+**Training formats, from cheap to realistic:**
+- **Shadowing and reverse shadowing**: new responders follow an experienced one, then lead while the experienced one watches and steps in only if needed.
+- **Tabletop exercises**: a facilitator walks a group through a scenario in a meeting room, revealing information step by step ("the error rate is now 40%, and the CEO is asking for an update"). They're cheap and good for practising roles, communication and decisions.
+- **"Wheel of misfortune"**: re-run a real past incident, with the facilitator playing the system and answering the responder's questions from the actual data.
+- **Game days**: inject a real failure into a production-like or production environment (kill a zone, break a dependency, expire a certificate in staging), and respond with the real tools, alerts and runbooks.
+
+**What to practise:**
+- **Declaring and taking roles**: who's IC, who handles comms, opening the channel.
+- **Mitigation levers**: has everyone on the rotation actually done a rollback, a failover or a flag kill?
+- **Communication** under pressure: the first status-page update within 15 minutes, using the template.
+- **Escalation**: paging another team, a vendor, or the security team.
+
+**Make it routine:** a quarterly exercise per rotation, a different scenario each time, findings treated like incident actions, and a short debrief on what went well. Track readiness simply: who on the rotation has practised each lever and each role.
+
+**What the interviewer is looking for:**
+A range of formats, practising roles and levers rather than just debugging, and a regular cadence with follow-up.
+
+**Follow-ups:**
+- How do you run a game day in production safely?
+- What would you change if exercises keep going well but real incidents don't?
+
+**Red flags:**
+- "People learn on the job."
+- Exercises whose findings are never acted on.
+
+### A senior executive joins a SEV1 channel and starts asking engineers directly for updates and pushing for a fix. What do you do as incident commander? {#exec-pressure}
+
+**Level:** Senior
+
+**Model answer:**
+The executive's need is legitimate: they're accountable to customers, the board or the press, and silence makes them anxious. The problem is the channel, not the person. Direct questions pull responders off the work, and pressure for "a fix" can push the team towards risky actions.
+
+**In the moment:**
+1. **Acknowledge them quickly and personally**: "Thanks, I'm the IC. You'll get updates every 20 minutes from our comms lead in #inc-exec-updates, and the next one is at 14:40."
+2. **Move the conversation**: invite them to the stakeholder channel or a short call with the comms lead. Ask what they need, such as a customer statement or a time estimate for the board.
+3. **Protect the responders**: ask people to route questions through the IC, and keep the working channel for the work.
+4. **Answer the real question honestly**: what's affected, what we're doing, the next decision point, and when they'll hear more. Never promise a fix time you don't have. Offer the next checkpoint instead.
+5. **Use their authority if it helps**: an executive can approve a costly mitigation (turn off a revenue feature, fail over, contact a key customer) faster than anyone else.
+
+**Afterwards:**
+- Check whether the exec updates were frequent and useful enough. Missing updates usually cause the intervention.
+- Agree the process with leadership *before* the next incident: where updates go, how often, and who to ask.
+- Cover it in IC training. It happens often, and new ICs find it hard to push back on seniority.
+
+**What the interviewer is looking for:**
+Empathy for the executive's need, protecting responders, a predictable update cadence, honest answers without invented estimates, and fixing the process afterwards.
+
+**Follow-ups:**
+- The executive orders a rollback you think would make things worse. What do you do?
+- How would you write the status update they need for a key customer?
+
+**Red flags:**
+- Ignoring the executive, or letting them run the incident.
+- Promising a resolution time to make the pressure go away.
+
+### How would you introduce AI assistance into incident response, and where should people stay in control? {#ai-assisted-incident-response}
+
+**Level:** Architect
+
+**Model answer:**
+AI tools, including features built into incident platforms and in-house agents over your telemetry, are good at **reading and summarising** large amounts of information fast. They're weaker at judging what's safe to do. Design around that.
+
+**Good uses, low risk:**
+- **Summaries**: the incident so far for someone joining, drafts of stakeholder updates, and the first draft of the post-incident timeline from the channel and tool logs.
+- **Context gathering**: recent deploys and config changes for the affected services, similar past incidents, related alerts, the relevant runbook.
+- **Investigation help**: suggesting queries, correlating a spike with a change, explaining an unfamiliar error message.
+
+**Keep people in control of:**
+- **Declaring severity and closing incidents.** These affect customers and contracts.
+- **Production actions.** An AI may *propose* a rollback, a failover or a config change, with its evidence. A person approves it, and the action runs through the normal tooling, with the normal permissions and audit trail. Give agents read-only access by default.
+- **External communication.** Drafts are reviewed before they reach a status page or a customer.
+
+**Make it trustworthy:**
+- **Show the evidence**: links to the dashboards, logs and changes behind each suggestion, so responders can verify instead of trust.
+- **Guard the data**: telemetry and incident channels contain customer data and secrets. Use approved models and data agreements, redact, and treat log content as **untrusted input**. A log line can contain text written to manipulate an agent (prompt injection).
+- **Measure it**: time to mitigate and the quality of hypotheses with and without assistance, the number of wrong suggestions followed, and responder feedback. Review AI suggestions in post-incident reviews like any other contributing factor.
+- **Keep skills sharp**: responders must still be able to work without the assistant. Practise in drills without it.
+
+**What the interviewer is looking for:**
+Matching AI to reading and summarising tasks, human approval for actions and communications, evidence and audit, data protection including prompt injection, and measuring the effect.
+
+**Follow-ups:**
+- An AI agent suggested a rollback that made the incident worse. What do you change?
+- What data would you exclude from the assistant's access?
+
+**Red flags:**
+- Letting an agent run production changes on its own judgement.
+- Sending raw logs containing customer data to an unapproved model.
+
+### How do you prepare engineering for a peak event such as Black Friday or a major launch? {#peak-event-readiness}
+
+**Level:** Architect
+
+**Model answer:**
+Start 8–12 weeks out. Most of the work is reducing uncertainty before the day, not heroics on it.
+
+**Know the expected load:**
+- Forecast traffic per journey with the business (marketing campaigns, previous years, sales targets), including the **peak minute**, not just the daily total.
+- Identify the critical journeys and their dependencies, including third parties (payments, fraud checks, email, CDN).
+
+**Prove capacity:**
+- **Load-test** the critical journeys at 1.5–2 times the forecast peak in a production-like environment, or in production during quiet hours, with real dependencies or realistic stubs.
+- Fix what breaks, then test again. Check quotas, connection limits, autoscaling maximums and database headroom.
+- **Pre-scale** before the event rather than trusting autoscaling to react fast enough, and reserve capacity where it's scarce.
+- Ask third parties about their readiness and limits, and agree rate limits with them.
+
+**Reduce risk:**
+- A **change freeze** (or slow-down) for risky changes in the days around the peak, with a fast path for urgent fixes.
+- **Degradation plans** per journey: what gets switched off first (recommendations, reviews, non-essential emails), with tested kill switches. A **virtual waiting room** if demand could exceed capacity.
+- **Operational readiness reviews** per critical service: alerts, dashboards, runbooks, on-call cover, and failover tested.
+
+**On the day:**
+- Extended on-call cover, a staffed incident bridge or "war room" with an IC rota, and a direct line to key vendors.
+- A **shared live dashboard** of business and SLO metrics, with clear decision points ("at 80% database CPU, turn off recommendations").
+- Business and engineering leads together for fast decisions.
+
+**Afterwards:** a review of what held, what nearly broke and what the forecast got wrong, to feed into next year.
+
+**What the interviewer is looking for:**
+Forecasting with the business, load testing at a margin, pre-scaling, freezes and degradation plans, readiness reviews and a structured on-the-day operation.
+
+**Follow-ups:**
+- The load test shows the database will saturate at 70% of the forecast peak, three weeks before the event. What are your options?
+- How do you decide what goes into the change freeze?
+
+**Red flags:**
+- Relying on autoscaling without a load test.
+- No agreed degradation order.
+
 ## Cheat Sheet
 
 ### Response
@@ -693,6 +906,16 @@ Psychological safety led from the top, quality of analysis over quantity, mechan
 
 - **GDPR breach** — notify the supervisory authority within 72 hours of awareness.
 - **EU DORA** — financial entities report major ICT incidents in stages, starting within hours of classification.
+
+### Revisit
+
+- **Incident vs problem vs change** — restore service, remove the underlying cause, manage planned modifications. Close the incident when impact ends and keep the problem open.
+- **Strong actions** — automate or remove the failure mode, and alert on the whole class. "Be more careful" isn't a tracked action.
+- **Detection gaps** — an SLO that excludes a client (such as mobile) leaves customers to detect its failures.
+- **Responder training** — shadowing, tabletops, wheel of misfortune, game days. Practise roles and mitigation levers, not only debugging.
+- **Executive in the channel** — acknowledge, give a cadence and a separate channel, protect responders, never promise a fix time.
+- **AI in incidents** — summaries and context are low-risk. People approve actions and external comms. Treat log content as untrusted input.
+- **Peak readiness** — forecast the peak minute, load-test at 1.5–2 times, pre-scale, freeze risky changes, and agree the degradation order.
 
 ## Further Reading
 
