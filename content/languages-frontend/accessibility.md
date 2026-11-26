@@ -6,7 +6,7 @@ tags: [a11y, wcag]
 level: Senior
 estimatedMinutes: 45
 related: [reactjs, web-performance]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -64,6 +64,31 @@ Conformance levels: **A** (minimum), **AA** (standard target), **AAA** (enhanced
 - Support **zoom to 200% and reflow at 320 CSS px width** without loss of content; respect user font-size settings (relative units).
 - Respect **`prefers-reduced-motion`**; avoid auto-playing motion.
 
+### Worked example: does this colour pass?
+
+WCAG's contrast ratio compares the **relative luminance** (L) of two colours, from 0 for black to 1 for white:
+
+- Convert each sRGB channel to linear light, then L = 0.2126 R + 0.7152 G + 0.0722 B. Green dominates, because eyes are most sensitive to it.
+- Ratio = (L of the lighter colour + 0.05) ÷ (L of the darker colour + 0.05), from 1:1 up to 21:1.
+
+The thresholds: **4.5:1** for normal text and **3:1** for large text (24 px, or about 18.7 px bold) at AA, and **3:1** for UI components and meaningful graphics.
+
+| Foreground | Background | Ratio | Normal text | Large text, icons, borders |
+|---|---|---|---|---|
+| `#767676` grey | White | **4.54** | Pass | Pass |
+| `#777777` grey | White | 4.48 | **Fail** | Pass |
+| `#767676` grey | `#F3F4F6` light-grey card | 4.13 | **Fail** | Pass |
+| `#949494` grey | White | 3.03 | Fail | Pass |
+| `#2563EB` blue | White (and white on blue) | 5.17 | Pass | Pass |
+| `#60A5FA` light blue | White | 2.54 | Fail | **Fail** |
+
+Lessons from the table:
+- **There's no rounding.** 4.48 doesn't count as 4.5. A one-step difference in a hex value can decide the result.
+- **The background matters as much as the text.** The same grey that passes on white fails on a tinted card. Check every surface a token is used on, including hover and disabled-looking states that still carry information.
+- **Light brand colours often fail even the 3:1 for icons and focus rings.** Pair them with a darker shade for text and outlines.
+
+Automate it: check contrast for every colour token pair in the design system (in CI), and let axe catch live combinations in component tests. Contrast is one of the few accessibility rules a machine can check completely.
+
 ### ARIA
 
 ARIA adds roles, states and properties for assistive technologies. Rules:
@@ -90,6 +115,33 @@ flowchart LR
   E --> F["Release with accessibility statement and feedback route"]
   F --> G["Monitor: audits, issues, regressions"]
   G -->|"fixes and learnings"| A
+```
+
+### Client-side navigation a screen reader can follow
+
+```mermaid
+sequenceDiagram
+  participant U as Screen reader user
+  participant L as Orders link
+  participant R as Client router
+  participant P as New page
+  participant SR as Screen reader
+  %% step: The user presses Enter on the Orders link in the navigation.
+  %% step: The router intercepts it and changes the URL with the History API. There's no full page load, so the browser announces nothing.
+  %% step: The router renders the orders page and updates document.title to "Your orders – Acme".
+  %% step: Without extra work, focus stays on the old link or falls back to the body. A screen reader user hears nothing, and doesn't know the page changed.
+  %% step: So the router moves focus to the new page's h1, which has tabindex="-1" so it can receive focus without entering the tab order.
+  %% step: The screen reader announces the focused heading, "Your orders, heading level 1", which confirms the page changed and where the user is.
+  %% step: The user continues reading from the top of the new content, just as after a normal page load.
+  %% step: An alternative is a polite live region announcing "Orders page loaded" with focus reset to the top. Pick one pattern and use it consistently, and test it with real screen readers.
+  U->>L: Press Enter on Orders
+  L->>R: Client-side navigation
+  R->>P: Render page, update document.title
+  Note over SR: Without help, nothing is announced
+  R->>P: Move focus to the h1
+  P-->>SR: "Your orders, heading level 1"
+  Note over U: Continues from the top of the page
+  Note over R: Alternative: polite live region announcement
 ```
 
 ## When to Use / Trade-offs
@@ -506,6 +558,179 @@ Use of proven libraries/patterns, keyboard and focus models, drag alternatives, 
 **Red flags:**
 - Charts as images with no alternative.
 
+### What is an element's accessible name, and where does it come from? {#accessible-name}
+
+**Level:** Foundation
+
+**Model answer:**
+The **accessible name** is what assistive technology calls an element: what a screen reader says ("Search, button"), and what a voice-control user says to activate it ("click Search"). Every interactive element needs one.
+
+Browsers compute it in a defined order (the Accessible Name and Description Computation spec). Simplified:
+1. **`aria-labelledby`**: text of the referenced element(s).
+2. **`aria-label`**: a string on the element.
+3. **Native labelling**: `<label>` for form fields, `alt` for images, `<legend>` for fieldsets, `<caption>` for tables.
+4. **Content**: for buttons, links and headings, their text content (including the `alt` of images inside them).
+5. As a last resort, `title` or `placeholder`. These are unreliable, so don't depend on them.
+
+Practical rules:
+- **Prefer visible text** as the name, through native labelling or content. It works everywhere and stays in sync with what sighted users see.
+- **Icon-only buttons** need a name: `<button aria-label="Close">` or visually hidden text.
+- **Label in Name** (WCAG 2.5.3): when there's a visible label, the accessible name must include it, ideally starting with it. If a button shows "Send" but its `aria-label` is "Submit message", a voice user saying "click Send" fails.
+- Don't override good visible names with `aria-label`, and don't add names to non-interactive `div`s just to make them speak.
+- Check names in the browser's **accessibility tree** inspector, and with a screen reader.
+
+**What the interviewer is looking for:**
+What the accessible name is used for, the order of sources, preferring visible text, icon-only controls, and Label in Name.
+
+**Follow-ups:**
+- Why is `placeholder` a poor label?
+- How would you name a "Delete" button that appears in every row of a table?
+
+**Red flags:**
+- Icon buttons with no name.
+- `aria-label` text that contradicts the visible label.
+
+### How do you make dynamic updates accessible, such as form errors, toasts and loading states? {#live-regions}
+
+**Level:** Senior
+
+**Model answer:**
+Sighted users notice content appearing anywhere on the screen. Screen reader users only hear what has focus, or what is **announced**. So every important dynamic change needs a deliberate strategy.
+
+**Two tools:**
+- **Move focus** to the new content when the user needs to act on it or it replaces their context: a dialog opening, an error summary after a failed submit, a new page.
+- **Live regions** to announce without moving focus: `role="status"` (or `aria-live="polite"`) for updates that can wait until the user pauses, and `role="alert"` (assertive) only for urgent, time-sensitive messages.
+
+**Patterns:**
+- **Form errors**: on submit, show an **error summary** at the top with links to each field, and move focus to it. Each field also gets its message linked with `aria-describedby`, and `aria-invalid="true"`. Inline validation while typing should be polite, or wait until the user leaves the field.
+- **Toasts and confirmations** ("Saved"): a polite status region. Don't auto-dismiss messages users need to act on, and give enough time (WCAG 2.2.1).
+- **Loading**: announce the start of long operations ("Loading results") and the end ("24 results"), and mark the updating region `aria-busy="true"` while it changes.
+- **Search results updating as you type**: announce the count politely after a short pause, not each keystroke.
+
+**Implementation details that trip people up:**
+- The live region must **exist in the DOM before** the text changes. Inserting a region and its message at the same moment is often not announced.
+- Keep messages **short** and don't repeat them. Too many announcements are as bad as none.
+- Test with several screen readers. Live region behaviour varies between them.
+
+**What the interviewer is looking for:**
+Focus moves versus announcements, polite versus assertive, concrete patterns for errors, toasts and loading, and the implementation gotchas.
+
+**Follow-ups:**
+- How would you announce that an item was added to the basket?
+- Why is `role="alert"` on every message a problem?
+
+**Red flags:**
+- Colour-only error states with no announcement.
+- Assertive announcements for routine updates.
+
+### How do you support users who zoom, magnify, or use forced colours such as Windows High Contrast? {#zoom-and-forced-colours}
+
+**Level:** Senior
+
+**Model answer:**
+**Zoom and reflow:**
+- **Text resize to 200%** without loss of content or function (WCAG 1.4.4). Use relative units for text, and don't fix container heights that clip larger text.
+- **Reflow at 320 CSS pixels wide** (1.4.10), which equals 400% zoom on a 1280-pixel screen. Content should fit in one column without horizontal scrolling, except for things that genuinely need two dimensions, such as data tables, maps and diagrams.
+- **Text spacing** (1.4.12): layouts must survive users increasing line height, letter and word spacing.
+- **Fixed headers and footers** eat the viewport at high zoom, and can hide the focused element. WCAG 2.2's **Focus Not Obscured** (2.4.11) addresses this. Make sticky elements collapse or shrink at small heights.
+
+**Screen magnifier users** see a small part of the screen at a time:
+- Keep **related things close**: error messages next to their fields, and actions near what they act on.
+- Avoid content that appears far from where the user is looking, such as a toast in the opposite corner.
+
+**Forced colours (Windows contrast themes):**
+- The browser replaces your colours with the user's system palette, and the `forced-colors: active` media query lets you adjust.
+- Information shown **only by background colour or background images** disappears. Selected states, focus indicators and custom checkboxes drawn with backgrounds are common failures.
+- Use **borders or outlines** for state and focus. A transparent outline is invisible normally but becomes visible in forced colours.
+- Use `currentColor` in SVG icons so they follow the system text colour, and system colour keywords (`CanvasText`, `Highlight`, `ButtonText`) where needed.
+- Respect **`prefers-contrast`** and **`prefers-reduced-motion`** as well.
+
+Test by zooming to 400% in a browser at 1280 px width, enabling a Windows contrast theme, and using a magnifier on key journeys.
+
+**What the interviewer is looking for:**
+Reflow and resize criteria, sticky elements and Focus Not Obscured, magnifier-friendly layout, forced-colours failure modes and fixes, and how to test.
+
+**Follow-ups:**
+- A custom toggle switch disappears in high-contrast mode. Why, and how do you fix it?
+- Which content is exempt from the reflow requirement?
+
+**Red flags:**
+- Fixed pixel heights on text containers.
+- Conveying state only through background colour.
+
+### A large customer asks for your Accessibility Conformance Report before signing. How do you produce one you can stand behind? {#accessibility-conformance-report}
+
+**Level:** Architect
+
+**Model answer:**
+An **Accessibility Conformance Report (ACR)** documents how a product meets accessibility standards, usually by completing the **VPAT** template from the Information Technology Industry Council. It comes in editions for **WCAG**, US **Section 508**, the EU's **EN 301 549** (relevant to the European Accessibility Act and public procurement), and an international edition combining them. Procurement teams in government, education and large enterprises routinely require one.
+
+**Producing an honest one:**
+1. **Define the scope**: which product, version and platforms (web, iOS, Android, documents, emails), and which user journeys.
+2. **Audit properly**: automated scanning *plus* expert manual testing against every success criterion, with keyboard and screen-reader testing on the scoped platforms. An ACR filled in from an automated scan alone isn't credible.
+3. **Report each criterion** as Supports, Partially Supports, Does Not Support or Not Applicable, with **specific remarks**: what doesn't conform, where, and the impact. Vague "partially supports" with no explanation undermines trust.
+4. **Pair it with a remediation roadmap** for the gaps, with dates the organisation will actually meet.
+5. **Have it reviewed** by an accessibility specialist, and date it.
+
+**Keep it true:**
+- Re-test and update it on a schedule and after major releases. A stale ACR is a liability.
+- Build accessibility checks into the delivery process (design system, CI checks, Definition of Done), so conformance doesn't decay between audits.
+- Track customer-reported accessibility issues, and fix them within published timeframes.
+
+**Legal and commercial care:** an ACR is a representation to customers. Overstating conformance creates contractual and legal risk. Involve legal for the wording, but keep the content factual.
+
+**What the interviewer is looking for:**
+What an ACR and VPAT are, the editions, a scoped, manual, criterion-level audit, honest remarks, a remediation roadmap, and keeping it current.
+
+**Follow-ups:**
+- The audit finds 30 failures two weeks before the deal closes. What do you tell the customer?
+- How do third-party components you embed affect your ACR?
+
+**Red flags:**
+- Marking everything "Supports" based on an automated scan.
+- An ACR last updated three years and many releases ago.
+
+### How do you make an AI chat interface with streaming responses accessible? {#accessible-chat-ui}
+
+**Level:** Architect
+
+**Model answer:**
+Chat interfaces look simple, but streaming text, constant updates and rich content create real barriers if left to default behaviour.
+
+**Announcing responses:**
+- **Don't announce token by token.** Putting a streaming message in a live region makes screen readers stutter fragments, or queue an endless backlog. Mark the message `aria-busy="true"` while it streams, and announce it **once complete**, or in sentence-sized chunks for long answers.
+- Give the conversation a structure: a `role="log"` container (polite by default), each message labelled with who said it ("Assistant said:"), and headings or landmarks so users can jump between messages.
+- Announce status changes briefly: "Assistant is responding", "Response complete", errors and retries.
+
+**Focus and control:**
+- **Keep focus in the message input** after sending. Don't steal it to the new response.
+- A keyboard-accessible **Stop generating** button, announced when it appears.
+- Don't auto-scroll in a way that moves content away from magnifier users or someone reading earlier messages. Offer a "jump to latest" control instead.
+- Make message actions (copy, retry, feedback) real buttons with clear names, such as "Copy response 3".
+
+**Rendering rich content:**
+- Render Markdown into **semantic HTML**: real headings, lists, tables with headers, and links with meaningful text.
+- **Code blocks** as `<pre><code>` with a language label and an accessible copy button.
+- Images and charts the assistant produces need text alternatives. Generate them, then let users ask for more detail.
+
+**Other needs:**
+- Respect `prefers-reduced-motion` for typing animations and cursors.
+- Support voice input and dictation, and don't time out a half-written prompt.
+- Plain-language options and adjustable reading complexity help cognitive accessibility.
+
+Test with screen readers on desktop and mobile, keyboard only and magnification, and include disabled users in research, because chat is a new interaction pattern for many assistive-technology users.
+
+**What the interviewer is looking for:**
+Avoiding token-by-token announcements, a log structure, focus management, a stop control, semantic rendering of rich output, and testing with real assistive technology.
+
+**Follow-ups:**
+- How would you announce a response that takes 40 seconds to stream?
+- How do you test this in an automated way?
+
+**Red flags:**
+- `aria-live="assertive"` on the streaming text.
+- Markdown rendered as styled `div`s with no semantics.
+
 ## Cheat Sheet
 
 - **POUR** — Perceivable, Operable, Understandable, Robust.
@@ -523,6 +748,16 @@ Use of proven libraries/patterns, keyboard and focus models, drag alternatives, 
 - **Testing** — axe automation catches only part; add keyboard, screen-reader and user testing.
 - **Overlays** — don't fix underlying issues; avoid.
 - **European Accessibility Act** — applies from 28 June 2025 to many EU consumer products and services.
+
+### Revisit
+
+- **Contrast maths** — (L lighter + 0.05) ÷ (L darker + 0.05). 4.5:1 for normal text, 3:1 for large text and UI. No rounding, and check every background a token sits on.
+- **SPA navigation** — update the title, move focus to the new h1 (tabindex -1) or announce politely, and keep the pattern consistent.
+- **Accessible name** — from aria-labelledby, aria-label, native labels, then content. Prefer visible text, and include the visible label (Label in Name).
+- **Live regions** — move focus when the user must act, announce politely otherwise. The region must exist before the message changes.
+- **Zoom and forced colours** — reflow at 320 px, survive text spacing, keep sticky elements small, and show state with borders not backgrounds.
+- **Conformance report** — a criterion-level manual audit, honest remarks, a remediation roadmap, re-tested after major releases.
+- **Chat UIs** — no token-by-token announcements. Use a log role, keep focus in the input, provide a stop button, and render semantic HTML.
 
 ## Further Reading
 

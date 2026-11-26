@@ -6,7 +6,7 @@ tags: [planning, forecasting]
 level: Senior
 estimatedMinutes: 45
 related: [agile-scrum-kanban-safe, prioritisation]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -76,6 +76,28 @@ function forecastWeeks(items: number, history: number[], runs = 10_000): { p50: 
 }
 ```
 
+### Worked example: a forecast from eight weeks of data
+
+A team has **40 items** left for a release, sliced to a similar small size. Over the last eight weeks it finished **4, 6, 3, 7, 5, 6, 2 and 5** items, an average of 4.75 a week. On its last two releases, the backlog grew by about **15%** during delivery as work was discovered, so plan for about **46 items**.
+
+**The average-based answer:** 46 ÷ 4.75 ≈ 9.7, so "10 weeks". It sounds reasonable, but it's the middle of the distribution. It's a coin flip.
+
+**The Monte Carlo answer:** simulate 20,000 possible futures, each drawing a random week from the eight observed weeks until 46 items are done:
+
+| Confidence | Weeks to finish |
+|---|---|
+| 50% | 10 |
+| 70% | 11 |
+| 85% | 11 |
+| 95% | 12 |
+
+What to say to stakeholders:
+- "**85% likely within 11 weeks**, 95% within 12." The extra week is the price of confidence, and it's visible rather than hidden padding.
+- "This assumes the backlog grows by about 15%, as before, and the team stays the same size. If either changes, we'll re-run it."
+- **Re-run it every week** with the latest throughput and backlog. The forecast narrows as the work progresses, and a drifting date shows up early.
+
+Two things make it work: items sliced to a similar size (so counting them is meaningful), and history from the same team doing similar work. With no history, use a reference class (similar past projects) until a few weeks of data exist.
+
 ### Why estimates go wrong
 
 - **Planning fallacy:** people underestimate their own tasks even when they know similar tasks overran (Kahneman & Tversky).
@@ -102,6 +124,31 @@ flowchart TD
   H --> I["Business decision: commit by flexing scope, date or both"]
   I --> J["Track actuals, re-forecast at milestones"]
   J --> H
+```
+
+### Using a spike to narrow an estimate
+
+```mermaid
+sequenceDiagram
+  participant PM as Product manager
+  participant T as Team
+  participant X as Provider sandbox
+  %% step: The product manager asks whether bank transfer payments can launch this quarter.
+  %% step: The team answers with a wide range, 6 to 14 weeks, and names the biggest unknown: how the provider's refund API behaves. An honest range is more useful than a falsely precise number.
+  %% step: Instead of guessing, they agree a time-boxed spike of 3 days, aimed at that one unknown.
+  %% step: The team builds a throwaway refund call against the provider's sandbox. The goal is learning, not production code.
+  %% step: They find that refunds are asynchronous and confirmed by webhook. That's more work than hoped, but it's now understood.
+  %% step: The unknown becomes a known piece of work, about two weeks, and the range narrows.
+  %% step: The team gives a new forecast, 8 to 11 weeks at 85% confidence, with its assumptions written down.
+  %% step: The product manager commits to the quarter, with a planned scope cut ready: support staff handle refunds manually at launch if the date gets tight.
+  PM->>T: Can we launch bank transfers this quarter?
+  T-->>PM: 6 to 14 weeks, refunds are the big unknown
+  PM->>T: Agree a 3-day spike on refunds
+  T->>X: Throwaway refund call in the sandbox
+  X-->>T: Refunds are async, via webhooks
+  Note over T: Unknown is now known work, about 2 weeks
+  T-->>PM: 8 to 11 weeks at 85%, assumptions listed
+  PM->>T: Commit, with manual refunds as the fallback
 ```
 
 ## When to Use / Trade-offs
@@ -503,6 +550,171 @@ Purpose-driven estimation, data, probabilistic standards, smaller batches, calib
 - Mandating more detailed upfront estimates.
 - Blaming teams for missed estimates.
 
+### What's the difference between effort and duration, and why does it matter for estimates? {#effort-vs-duration}
+
+**Level:** Foundation
+
+**Model answer:**
+- **Effort** is the working time a task needs: "about 3 days of work".
+- **Duration** (elapsed time) is how long it takes on the calendar from start to finish: "done in 2 weeks".
+
+They differ a lot, because work rarely flows without stopping:
+- **Waiting**: for code review, another team's API, an approval, a test environment, or answers from a stakeholder.
+- **Interruptions and other work**: support, incidents, meetings, other projects. Few people get more than a few focused hours a day.
+- **Handoffs** between people and teams, each adding queue time.
+- **Dependencies** that have to happen in order.
+
+In many teams, **flow efficiency** (working time ÷ elapsed time) is 15–40%. So a "3-day" task taking two weeks isn't a bad estimate of effort. It's a missing estimate of everything else.
+
+Why it matters:
+- Stakeholders hear durations ("when will it be ready?"), while engineers often estimate effort. Converting one into the other naively causes most "missed" dates.
+- Forecasting from **historical cycle times or throughput** captures waiting and interruptions automatically, because it measures what actually happened.
+- Reducing **waiting** (smaller batches, fewer handoffs, faster reviews) usually shortens durations more than working faster.
+
+**What the interviewer is looking for:**
+The distinction, the sources of waiting, flow efficiency, and why forecasts from historical flow data handle it better.
+
+**Follow-ups:**
+- How would you estimate a task that depends on another team?
+- What would you change to make durations closer to effort?
+
+**Red flags:**
+- Converting effort into a delivery date with no allowance for waiting.
+- "If it's 3 days of work, it'll be done on Thursday."
+
+### What is a spike, and how do you run one so it actually improves an estimate? {#spikes}
+
+**Level:** Senior
+
+**Model answer:**
+A **spike** is a short, time-boxed piece of work whose goal is **learning, not shipping**: answering a specific question that's making an estimate (or a design decision) too uncertain.
+
+**Running a good spike:**
+1. **Name the question precisely.** "Can the provider's API do partial refunds, and how?" Not "investigate payments".
+2. **Time-box it**, usually hours to a few days, agreed up front. If the time runs out, that's itself an answer: the area is harder than expected.
+3. **Do the smallest thing that answers it**: a prototype against a sandbox, a query against production-sized data, reading the code of the legacy system, a proof of concept for a library.
+4. **Produce an output others can use**: a short write-up with the answer, the evidence, the new risks found, and the revised estimate or design decision.
+5. **Throw the code away** (or at least don't merge it as-is). Spike code is written to learn quickly, not to last.
+
+**Choosing what to spike:** the unknowns with the **largest effect on the estimate or decision**. A risk that could add two months is worth a three-day spike. One that could add two days isn't.
+
+**Pitfalls:**
+- Spikes without a clear question that turn into unplanned feature development.
+- Treating the spike's prototype as nearly done production code.
+- Spiking things that could be answered by asking someone who knows.
+
+**What the interviewer is looking for:**
+A precise question, a time-box, the minimum work to answer it, a usable output and discarded code, chosen by the size of the uncertainty.
+
+**Follow-ups:**
+- The spike's time-box ends without an answer. What now?
+- How do spikes fit into sprint planning?
+
+**Red flags:**
+- Open-ended "research" with no question or end.
+- Shipping the spike's code.
+
+### How do you forecast when the backlog keeps growing during delivery? {#backlog-growth}
+
+**Level:** Senior
+
+**Model answer:**
+Backlogs almost always grow while you deliver them: discovered work, edge cases, bugs found in testing, and new requests. A forecast that assumes today's scope is final will be wrong in a predictable direction.
+
+**Measure the growth:**
+- Track **items added** and **items finished** per week, as two lines on a burn-up chart. Separate **discovered work** (needed for the existing scope) from **new scope** (requests).
+- From past projects, compute a **split or growth rate**: for example, every planned item turned into 1.3 delivered items on average, or the backlog grew 15% over the project.
+
+**Include it in the forecast:**
+- In a Monte Carlo forecast, multiply the remaining items by a sampled growth factor from history, or simulate arrivals of new items each week alongside completions.
+- Show the **burn-up** with a scope line, so everyone sees both progress and growth. A burn-down hides scope growth as "slow progress".
+
+**Manage it explicitly:**
+- **Discovered work** for the agreed scope is expected. That's why the forecast includes it.
+- **New scope** is a decision: each addition is traded against the date or other items, by the product owner, visibly.
+- If growth is consistently far above history, find out why. It may be unclear requirements, poor slicing, or a system harder to change than assumed. That's information, not just a bad forecast.
+
+**What the interviewer is looking for:**
+Measuring arrivals and completions, using historical growth in the forecast, burn-ups with a scope line, and separating discovered work from new scope.
+
+**Follow-ups:**
+- The backlog has grown 40% in three weeks. What do you do?
+- Why is a burn-down chart misleading here?
+
+**Red flags:**
+- Forecasting only from today's item count.
+- Treating every new item as the team's fault.
+
+### How would you build reference-class data so the organisation can forecast large projects better? {#reference-class-data}
+
+**Level:** Architect
+
+**Model answer:**
+**Reference class forecasting** predicts a project's outcome from what actually happened on **similar past projects**, rather than from the plan's internal details. It's the strongest known correction for optimism on large work, but most organisations don't keep the data.
+
+**What to record for each significant project or initiative:**
+- **Type and context**: migration, new product, integration, platform change, rewrite. Team size and experience, technology, number of teams involved and external dependencies.
+- **The original estimate and its date**, and later re-estimates.
+- **Actual effort and duration**, scope at the start and end, and the major causes of variance (unknown legacy behaviour, waiting for another team, requirement changes).
+
+**Make it easy and honest:**
+- Capture it at the **end of each project** as part of the retrospective, in a lightweight shared register (a spreadsheet is fine to start).
+- Make it **blameless**. The point is calibration, not finding someone who estimated badly. If people fear the data, they won't record it honestly.
+- Collect **throughput and cycle-time data** automatically from delivery tools for team-level forecasting.
+
+**Use it:**
+- For a new project, pick the reference class (for example, "API migrations of 100+ endpoints"), look at the distribution of actual outcomes and **overrun ratios**, and adjust the bottom-up estimate accordingly. "Our last four migrations took 1.4 to 2.1 times their initial estimate" is powerful evidence.
+- Present forecasts as ranges grounded in that distribution.
+- Review accuracy yearly: are forecasts improving, and are the same causes of overrun recurring? Recurring causes are improvement opportunities, not just forecasting inputs.
+
+**What the interviewer is looking for:**
+What to record, blameless capture, automated flow data, applying overrun distributions to new projects, and learning from recurring causes.
+
+**Follow-ups:**
+- What if no past project is similar enough?
+- How do you stop teams from padding estimates once they know about overrun ratios?
+
+**Red flags:**
+- Using the data to blame individual estimators.
+- Ignoring history because "this project is different".
+
+### Estimate the build and run cost of a new product capability for a business case. {#business-case-estimate}
+
+**Level:** Architect
+
+**Model answer:**
+A business case needs **total cost over time** with honest uncertainty, not just engineering weeks.
+
+**1. Build cost:**
+- Decompose into major pieces of work. Size them with ranges (or by reference class for similar past work), including **non-coding work**: design, testing, security review, data migration, documentation, rollout and training.
+- Convert team-weeks to cost with fully loaded rates, and give a range (for example, P50 and P85).
+- Add **one-off costs**: licences, vendor onboarding, external audits, hardware.
+
+**2. Run cost (per year), the part business cases usually forget:**
+- **Infrastructure**, estimated from expected usage: requests, storage, data transfer, third-party API calls per transaction, and AI token costs. Express it as a **unit cost** (per order, per active user) times forecast volume, so it scales with the business case's own growth assumptions.
+- **Operations**: on-call, monitoring, incident load, and support.
+- **Maintenance**: dependency upgrades, security fixes and small enhancements. A common rule of thumb is 15–25% of the build effort per year, but check against your own history.
+- Vendor subscriptions and their growth with usage.
+
+**3. Risk and uncertainty:**
+- State the **assumptions** that drive the numbers most (adoption rate, transaction volume, integration complexity), and show how the cost changes if each is wrong (a sensitivity table).
+- Identify the biggest unknowns, and propose **spikes or a pilot** to narrow them before the full commitment.
+
+**4. Present it for a decision:**
+- Total cost of ownership over 3 years, as a range.
+- What could be cut to reduce cost or risk (a smaller first release), and the decision points where the investment can be stopped or scaled.
+
+**What the interviewer is looking for:**
+Build ranges including non-coding work, run cost from unit economics, operations and maintenance, sensitivity on key assumptions, and staged decisions.
+
+**Follow-ups:**
+- Finance wants a single number. What do you give them?
+- How would you estimate the run cost of an LLM-based feature?
+
+**Red flags:**
+- Build cost only, with no run or maintenance cost.
+- A single-point total with no assumptions.
+
 ## Cheat Sheet
 
 - **Estimates serve decisions** — no decision, no estimate; match precision to the decision.
@@ -519,6 +731,16 @@ Purpose-driven estimation, data, probabilistic standards, smaller batches, calib
 - **Spike** — time-boxed investigation to reduce a key uncertainty before estimating.
 - **Long tail** — the last 10–20% of migrations takes disproportionately long.
 - **Commit at P85** — use the P50–P85 gap as an explicit buffer for fixed dates.
+
+### Revisit
+
+- **Average vs Monte Carlo** — dividing items by average throughput gives a P50 date (a coin flip). Monte Carlo gives P85 and P95, so the buffer is visible.
+- **Plan for growth** — include the historical backlog growth (such as 15%) in the item count, and re-run the forecast weekly.
+- **Spikes** — a precise question, a time-box, the minimum work to answer it, a write-up, and throwaway code. Spike the unknowns with the biggest impact.
+- **Effort vs duration** — waiting, interruptions and handoffs make elapsed time several times the working time. Historical flow data captures them.
+- **Burn-up with a scope line** — shows progress and growth separately. Discovered work is expected, while new scope is a visible trade-off.
+- **Reference classes** — record estimates, actuals and causes per project, blamelessly. Apply past overrun ratios to new estimates.
+- **Business-case cost** — build ranges, run cost from unit costs, operations and maintenance, sensitivity on key assumptions, and staged decisions.
 
 ## Further Reading
 
