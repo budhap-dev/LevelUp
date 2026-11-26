@@ -6,7 +6,7 @@ tags: [etl, pipelines, analytics]
 level: Senior
 estimatedMinutes: 60
 related: [databases-sql-nosql, messaging-event-streaming]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -66,13 +66,36 @@ select
   o.placed_at::date            as order_date,
   o.total_minor / 100.0         as order_total,
   o.currency,
-  c.country
+  c.country,
+  o.updated_at                -- needed by the incremental filter below
 from {{ ref('stg_orders') }} o
 join {{ ref('dim_customers') }} c using (customer_id)
 {% if is_incremental() %}
-where o.updated_at > (select max(updated_at) from {{ this }})
+-- Look back an hour to catch late-committing rows; the merge on order_id keeps re-runs idempotent.
+where o.updated_at >= (select max(updated_at) - interval '1 hour' from {{ this }})
 {% endif %}
 ```
+
+### Worked example: the rows an incremental load never saw
+
+An incremental model loads orders every 15 minutes with `where updated_at > (select max(updated_at) from target)`. In PostgreSQL, `now()` returns the **transaction's start time**, so a row's `updated_at` can be well before the moment it becomes visible.
+
+| Time | What happens |
+|---|---|
+| 10:00:05 | Transaction T1 starts, sets order A's `updated_at` to 10:00:05, then waits on a slow payment call |
+| 10:00:20 | Transaction T2 updates order B (`updated_at` 10:00:20) and commits at once |
+| 10:00:30 | The load runs. It sees B but not A, because A isn't committed. The target's maximum `updated_at` becomes 10:00:20 |
+| 10:00:40 | T1 commits. Order A is now visible, with `updated_at` 10:00:05 |
+| 10:15:00 | The next load reads rows with `updated_at > 10:00:20`. Order A is older than the watermark, so it's **never loaded** |
+
+Nothing fails and no alert fires. The warehouse is just quietly missing rows, until finance reconciles revenue and finds the gap.
+
+**Fixes, from simplest to most robust:**
+- **A lookback window, plus a merge on the unique key.** Re-read the last hour on every run (`updated_at >= max(updated_at) - interval '1 hour'`) and merge by `order_id`. Rows seen twice are simply updated again, so the run stays idempotent, and late commits up to an hour are caught. Choose the window from the longest transaction you expect, and monitor transaction duration.
+- **Watermark on commit order, not on a timestamp column.** CDC reads the database log in commit order, so a late commit simply arrives later. That's why CDC is preferred for important tables.
+- **Reconcile.** A daily check compares row counts and totals per day between the source and the warehouse, and alerts on gaps. It catches this class of bug whatever the cause.
+
+The dbt model above uses the lookback and merge pattern. It also selects `updated_at`, because an incremental filter on the target can only use columns the target stores.
 
 ### Orchestration
 
@@ -113,6 +136,36 @@ flowchart LR
   ORCH -.-> MART
   CAT["Catalogue and governance: owners, classification, access"] -.-> RAW
   CAT -.-> MART
+```
+
+### Change data capture, from commit to table
+
+```mermaid
+sequenceDiagram
+  participant App as Billing service
+  participant PG as PostgreSQL
+  participant DZ as Debezium
+  participant K as Kafka
+  participant S as Lakehouse sink
+  participant D as dbt
+  %% step: Debezium starts by creating a logical replication slot, then snapshots the existing rows so the pipeline starts from a complete copy.
+  %% step: Snapshot rows are published to Kafka as read events, keyed by each row's primary key.
+  %% step: The billing service updates a subscription and commits.
+  %% step: The change reaches Debezium from the write-ahead log through the replication slot, in commit order. Nothing queries the billing tables.
+  %% step: Debezium publishes a change event with the before and after values, the operation type and the log position, keyed by subscription id so changes to one row stay in order.
+  %% step: The sink consumes the topic and appends events to the bronze table in the lakehouse.
+  %% step: The sink commits its Kafka offsets only after the table commit. If it crashes in between, events are written twice, so later layers deduplicate by key and log position.
+  %% step: dbt's incremental model merges the latest version of each subscription into the silver table, including deletes.
+  %% step: If Debezium stops, the replication slot keeps retaining log files on the database server, which can fill its disk. Alert on slot lag.
+  Note over DZ: Create slot, start snapshot
+  DZ->>K: Snapshot rows as read events
+  App->>PG: UPDATE subscription, commit
+  PG-->>DZ: Change from the WAL
+  DZ->>K: Change event, keyed by id
+  K->>S: Append to bronze table
+  Note over S: Offsets committed after table commit
+  D->>S: Merge latest version into silver
+  Note over PG: Stopped consumer means WAL piles up
 ```
 
 ## When to Use / Trade-offs
@@ -509,6 +562,178 @@ Catalogue/lineage, tag-based controls, minimisation, access, retention/erasure, 
 **Red flags:**
 - Full production PII copied into every analytical layer and tool.
 
+### What is data lineage, and what is it used for? {#data-lineage}
+
+**Level:** Foundation
+
+**Model answer:**
+**Data lineage** is the map of where data comes from and where it goes: which sources feed which tables, which transformations produce which columns, and which dashboards, models and exports use them. It can be recorded at **table** level or, more usefully, at **column** level.
+
+Where it comes from:
+- **Transformation tools** know their own graph. dbt builds lineage from `ref()` and `source()`.
+- **Query parsing** of warehouse logs reconstructs which queries read and write which tables.
+- **Orchestrators and the OpenLineage standard** emit lineage events from jobs, collected by catalogues such as Marquez, DataHub, OpenMetadata or the warehouse's own catalogue.
+
+What it's used for:
+- **Impact analysis before a change**: "if the billing team renames this column, which 14 models and 3 dashboards break?" This is how data contracts are enforced in CI.
+- **Root-cause analysis**: a dashboard number is wrong, so trace upstream to the job or source that changed.
+- **Trust and governance**: show where a published metric comes from, and trace personal data through every layer to apply access controls, retention and erasure.
+- **Clean-up**: find tables nobody reads and stop paying for them.
+
+Lineage is only valuable if it's **automatic and current**. A hand-drawn diagram is out of date within a month.
+
+**What the interviewer is looking for:**
+The definition, how lineage is captured, and concrete uses for change, debugging and governance.
+
+**Follow-ups:**
+- How would you use lineage to support a right-to-erasure request?
+- Why is column-level lineage harder to capture than table-level?
+
+**Red flags:**
+- Lineage maintained by hand.
+- Not knowing what would break if a source column changed.
+
+### How do open table formats such as Apache Iceberg work? {#open-table-formats}
+
+**Level:** Senior
+
+**Model answer:**
+A data lake is just files in object storage, which has no transactions: a reader can see half-written data, and two writers can overwrite each other. **Open table formats** (Iceberg, Delta Lake, Hudi) add a **metadata layer** that turns a set of Parquet files into a table with database-like guarantees.
+
+**How Iceberg does it:**
+- Data lives in immutable **data files** (usually Parquet).
+- **Manifest files** list data files with statistics (row counts, column minimum and maximum values), and a **manifest list** groups manifests into a **snapshot**: the table's complete state at one commit.
+- A **metadata file** records the schema, partitioning and the list of snapshots. The **catalog** (a REST catalog, AWS Glue, Polaris, Unity Catalog, Nessie) holds a pointer to the current metadata file.
+- A commit writes new files, then **atomically swaps the catalog's pointer**. Readers see either the old snapshot or the new one, never a mixture. If two writers conflict, one retries (optimistic concurrency).
+
+**What that gives you:**
+- **ACID commits** on object storage.
+- **Time travel**: query an older snapshot, which helps with audits, debugging and reproducing ML training data.
+- **Schema evolution** by column id, so renaming or reordering columns doesn't break old files.
+- **Hidden partitioning and partition evolution**: queries filter on `event_time`, and Iceberg prunes by the partition transform (such as day). The partitioning can change later without rewriting old data.
+- **Fast planning**: manifest statistics let engines skip files without listing directories.
+- **Several engines on one copy**: Spark, Trino, Flink, Snowflake, BigQuery, DuckDB and others read and write the same table.
+
+**What it needs from you:** maintenance. Run **compaction** of small files (common with streaming writes), **expire old snapshots** and remove orphaned files, or costs and planning times grow. Updates and deletes can be copy-on-write (rewrite files) or merge-on-read (write delete files and merge when reading). Choose per table based on update frequency.
+
+**What the interviewer is looking for:**
+The metadata hierarchy, atomic catalog commits, the features that follow, multi-engine access, and the need for maintenance.
+
+**Follow-ups:**
+- A streaming job writes thousands of tiny files an hour. What happens, and what do you do?
+- How would you choose between Iceberg and Delta Lake?
+
+**Red flags:**
+- Treating a folder of Parquet files as a transactional table.
+- No compaction or snapshot expiry.
+
+### How do you keep warehouse costs under control as usage grows? {#warehouse-costs}
+
+**Level:** Senior
+
+**Model answer:**
+**Know the pricing model first,** because the levers differ:
+- **Pay per data scanned** (for example BigQuery on-demand, about $6.25 per TiB): cost follows bytes read, so query design matters most.
+- **Pay for compute time** (Snowflake warehouses billed in credits per second while running, BigQuery capacity editions, Databricks SQL warehouses): cost follows how long and how large the compute runs, so sizing, auto-suspend and concurrency matter most.
+
+**Reduce what queries read:**
+- **Partition** large tables by date and **cluster** by common filters, so queries prune most of the data. Require a partition filter on the biggest tables.
+- Avoid `SELECT *` on wide tables, because columnar storage charges by the columns you read.
+- **Materialise** expensive, frequently used results (incremental models, aggregate tables) instead of recomputing them in every dashboard refresh.
+
+**Control compute:**
+- **Auto-suspend** warehouses after a minute or two of idleness, and right-size them. Bigger isn't always faster per dollar.
+- Separate warehouses or reservations per workload (ELT, BI, data science), so each can be sized and attributed.
+- Schedule heavy jobs sensibly, and stop dashboards refreshing every 5 minutes when the data changes daily.
+
+**Guardrails and visibility:**
+- **Limits**: maximum bytes billed per query, resource monitors and budgets per warehouse or project.
+- **Attribution**: query tags or labels by team, model and dashboard, and a weekly report of the most expensive queries and models.
+- **Remove waste**: tables and models nobody reads (find them with lineage and access logs), and old snapshots and retention you don't need.
+
+**What the interviewer is looking for:**
+Pricing models and their levers, pruning and materialisation, compute sizing and auto-suspend, guardrails and attribution.
+
+**Follow-ups:**
+- One dashboard costs $20,000 a month. How do you investigate?
+- When would you move from on-demand to capacity pricing?
+
+**Red flags:**
+- Warehouses that never suspend.
+- No idea which team or model drives cost.
+
+### How do you build training data for ML models without leaking future information? {#point-in-time-features}
+
+**Level:** Architect
+
+**Model answer:**
+A model trained on features computed with **information that wasn't available at prediction time** looks excellent offline and fails in production. This is **data leakage**, and the commonest kind in data pipelines is time-travel leakage. Example: predicting churn on 1 March using the customer's support-ticket count "as of today", which includes tickets raised after 1 March, often *because* they were about to churn.
+
+**Point-in-time correctness:**
+- Every training example has an **event time**: when the prediction would have been made.
+- Each feature value is taken **as of that time**: the latest value with a timestamp at or before it, and never after. This is an **as-of join** (supported natively by many engines, and by feature stores).
+- Features need **history**, not just current values: slowly changing dimension tables, event logs or time-travel snapshots. A table that only holds the latest value can't produce correct training data.
+- Account for **availability delay**: if a feature lands in the warehouse 6 hours after the event, the training join must reflect that delay too, or it uses data the live model won't have.
+
+**Keep training and serving consistent:**
+- Compute features with **one definition** used for both the offline training data and the online serving path (a feature store such as Feast, Tecton or the cloud platforms', or shared transformation code), to avoid training–serving skew.
+- Log the feature values actually served at prediction time, and use those logs for future training where possible.
+
+**Validate:**
+- Hold out data by **time** (train on earlier periods, test on later ones), not with random splits.
+- Treat suspiciously strong features as leakage until proven otherwise.
+- Compare the distributions of features online and offline, and monitor for drift.
+
+**What the interviewer is looking for:**
+Understanding of time-travel leakage, as-of joins with history and availability delay, a single feature definition for training and serving, and time-based validation.
+
+**Follow-ups:**
+- How would you backfill a new feature for three years of training data?
+- What's training–serving skew, and how would you detect it?
+
+**Red flags:**
+- Joining training examples to today's version of a table.
+- Random train-test splits for a time-dependent problem.
+
+### Your company has 4,000 dbt models, and nobody trusts the numbers. How do you restore trust? {#restore-data-trust}
+
+**Level:** Architect
+
+**Model answer:**
+Trust breaks when numbers disagree, change without explanation, or are late. Fixing 4,000 models at once is impossible, so **focus on what the business actually relies on**.
+
+**1. Find what matters.**
+- Use query logs, BI usage and lineage to find the dashboards and metrics people actually use, and the models upstream of them. Often a few hundred models feed nearly all real usage.
+- Agree the **critical metrics** (revenue, active customers, churn) with their business owners.
+
+**2. Make critical metrics unambiguous.**
+- One **definition per metric** in a semantic or metrics layer, used by every dashboard, with a named business owner and a technical owner. Retire duplicate definitions.
+
+**3. Make the critical path reliable.**
+- **Tests** on those models: uniqueness, not-null, relationships and accepted values, plus **reconciliation** with source systems (totals per day match billing).
+- **Freshness and volume monitoring**, with alerts routed to the owning team.
+- **Data contracts** with the source teams for the critical inputs, checked in CI.
+- **Certify** these models and dashboards visibly in the catalogue and BI tool, so people know which ones to trust.
+
+**4. Shrink and organise the rest.**
+- Deprecate unused models and dashboards (announce, wait, then remove), often a large share of the total.
+- Give every remaining model an owner and a layer (staging, intermediate, mart), with style and testing standards enforced in CI.
+
+**5. Make problems visible, then rare.**
+- When a number is wrong, say so quickly with an incident-style notice, fix it, and publish what changed. Silence destroys trust faster than errors.
+- Track data incidents, time to detect, and time to fix as health metrics for the data platform.
+
+**What the interviewer is looking for:**
+Prioritising by real usage, single metric definitions with owners, tests, reconciliation and monitoring on the critical path, certification, pruning, and transparent incident handling.
+
+**Follow-ups:**
+- Finance and product disagree about the definition of an active customer. How do you resolve it?
+- How would you measure whether trust has improved?
+
+**Red flags:**
+- Adding tests to all 4,000 models before talking to the business.
+- Fixing numbers silently.
+
 ## Cheat Sheet
 
 ### Foundations
@@ -531,6 +756,16 @@ Catalogue/lineage, tag-based controls, minimisation, access, retention/erasure, 
 - **Semantic layer** — single definitions of business metrics across tools.
 - **Data contract** — schema, semantics, quality, SLAs and evolution rules between producer and consumers.
 - **Data mesh** — domain ownership, data as a product, self-serve platform, federated governance.
+
+### Revisit
+
+- **Late-committing rows** — a timestamp watermark with `>` misses rows committed after the load. Use a lookback window with a merge on the key, or CDC, and reconcile daily.
+- **CDC pipeline** — a snapshot, then log changes in commit order, keyed by primary key. Commit offsets after the table commit, and alert on replication slot lag.
+- **Data lineage** — automatic, ideally column-level, from dbt, query parsing and OpenLineage. Use it for impact analysis, debugging and governance.
+- **Iceberg** — data files, manifests, snapshots and an atomic catalog pointer swap. Gives ACID, time travel and multi-engine access, but needs compaction and snapshot expiry.
+- **Warehouse costs** — pay-per-scan needs pruning, pay-per-compute needs auto-suspend and sizing. Add query limits and attribution by team.
+- **Point-in-time features** — as-of joins on history, allowing for availability delay, one definition for training and serving, time-based splits.
+- **Restoring trust** — focus on used metrics, one definition with owners, reconcile with sources, certify, prune, and announce data incidents.
 
 ## Further Reading
 

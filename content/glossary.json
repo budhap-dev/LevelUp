@@ -6918,5 +6918,142 @@
       "incident-management",
       "ci-cd-pipelines"
     ]
+  },
+  {
+    "id": "software-catalogue",
+    "term": "Software catalogue",
+    "aka": [
+      "service catalogue"
+    ],
+    "group": "cloud-devops",
+    "definition": "A registry of the services, libraries, pipelines, APIs and resources an organisation runs, recording each one's owning team, lifecycle, dependencies and links to docs, dashboards and runbooks.",
+    "details": [
+      "Best stored with the code (for example Backstage's catalog-info.yaml) and validated in CI.",
+      "Accurate ownership drives paging, vulnerability response, migrations and cost allocation."
+    ],
+    "useCases": [
+      "Finding every service affected by a critical vulnerability, and its owner, in minutes."
+    ],
+    "related": [
+      "platform-engineering",
+      "incident-management"
+    ]
+  },
+  {
+    "id": "negative-caching",
+    "term": "Negative caching",
+    "aka": [],
+    "group": "data",
+    "definition": "Caching the fact that something doesn't exist, so repeated lookups for missing items don't reach the database.",
+    "details": [
+      "Use short TTLs, and invalidate the entry when the item is created.",
+      "Never cache a transient error as if it were a confirmed absence."
+    ],
+    "useCases": [
+      "Protecting the database from bots requesting non-existent ids."
+    ],
+    "related": [
+      "caching"
+    ]
+  },
+  {
+    "id": "working-set",
+    "term": "Working set",
+    "aka": [
+      "hit-ratio curve"
+    ],
+    "group": "data",
+    "definition": "The set of distinct items that accounts for most requests over a period. Its size decides how big a cache must be for a target hit ratio.",
+    "details": [
+      "Measured by sampling real keys and replaying them through a cache simulator to plot hit ratio against cache size.",
+      "Skewed popularity means a small share of items often carries most traffic."
+    ],
+    "useCases": [
+      "Sizing a Redis cluster from the database's safe read rate."
+    ],
+    "related": [
+      "caching"
+    ]
+  },
+  {
+    "id": "open-table-format",
+    "term": "Open table format",
+    "aka": [
+      "Apache Iceberg",
+      "Delta Lake",
+      "Apache Hudi"
+    ],
+    "group": "data",
+    "definition": "A metadata layer over files in object storage that provides tables with atomic commits, snapshots, schema evolution and time travel, readable by many engines.",
+    "details": [
+      "Iceberg commits by atomically swapping a catalog pointer to new metadata.",
+      "Needs maintenance such as compaction and snapshot expiry."
+    ],
+    "useCases": [
+      "A lakehouse shared by Spark, Trino and a cloud warehouse."
+    ],
+    "related": [
+      "data-engineering-basics"
+    ]
+  },
+  {
+    "id": "data-lineage",
+    "term": "Data lineage",
+    "aka": [
+      "OpenLineage"
+    ],
+    "group": "data",
+    "definition": "A map of where data comes from, how it's transformed and where it's used, at table or column level.",
+    "details": [
+      "Captured automatically from transformation tools, query logs and OpenLineage events.",
+      "Used for impact analysis, root-cause analysis and governance."
+    ],
+    "useCases": [
+      "Showing which dashboards break if a source column is renamed."
+    ],
+    "related": [
+      "data-engineering-basics",
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "point-in-time-join",
+    "term": "Point-in-time join",
+    "aka": [
+      "as-of join"
+    ],
+    "group": "data",
+    "definition": "Joining each training example to the feature values that were available at that example's time, never later ones, to prevent leakage.",
+    "details": [
+      "Requires feature history, not just current values.",
+      "Must also allow for the delay before data becomes available."
+    ],
+    "useCases": [
+      "Building churn-model training data from customer activity history."
+    ],
+    "related": [
+      "data-engineering-basics",
+      "ai-ml-fundamentals"
+    ]
+  },
+  {
+    "id": "semantic-layer",
+    "term": "Semantic layer",
+    "aka": [
+      "metrics layer"
+    ],
+    "group": "data",
+    "definition": "A shared definition of business metrics and dimensions, such as revenue or active customers, that every dashboard and tool queries instead of re-implementing the logic.",
+    "details": [
+      "Gives one definition and owner per metric.",
+      "Examples include dbt's semantic layer, LookML and Cube."
+    ],
+    "useCases": [
+      "Ending disagreements between finance and product about monthly recurring revenue."
+    ],
+    "related": [
+      "data-engineering-basics",
+      "data-modelling"
+    ]
   }
 ]
