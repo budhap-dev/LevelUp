@@ -6742,5 +6742,181 @@
     "related": [
       "finops"
     ]
+  },
+  {
+    "id": "burn-rate",
+    "term": "Burn rate",
+    "aka": [
+      "error budget burn rate"
+    ],
+    "group": "cloud-devops",
+    "definition": "How fast a service is consuming its error budget relative to an even spend over the SLO window. A burn rate of 1 uses exactly the whole budget by the end of the window.",
+    "details": [
+      "Multi-window alerts page on high burn over short windows and ticket on low burn over long ones.",
+      "Each alert tier fires after a fixed share of the budget is spent."
+    ],
+    "useCases": [
+      "Paging on a 14.4x burn over one hour for a 30-day SLO."
+    ],
+    "related": [
+      "observability-sre",
+      "incident-management"
+    ]
+  },
+  {
+    "id": "tail-sampling",
+    "term": "Tail sampling",
+    "aka": [
+      "tail-based sampling"
+    ],
+    "group": "cloud-devops",
+    "definition": "Deciding whether to keep a trace after it has completed, so all errors and slow traces can be kept while ordinary ones are sampled.",
+    "details": [
+      "Needs all spans of a trace at the same Collector, typically via a load-balancing exporter keyed by trace id.",
+      "Costs memory for buffering traces until they finish."
+    ],
+    "useCases": [
+      "Keeping every failed payment trace while storing 5% of successful ones."
+    ],
+    "related": [
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "continuous-profiling",
+    "term": "Continuous profiling",
+    "aka": [
+      "always-on profiling"
+    ],
+    "group": "cloud-devops",
+    "definition": "Sampling stack traces from production processes all the time at low overhead, so you can see which code consumes CPU, memory or time for any service and period.",
+    "details": [
+      "Collected by eBPF agents or language profilers, and shown as flame graphs.",
+      "OpenTelemetry is adding profiles as a signal alongside traces, metrics and logs."
+    ],
+    "useCases": [
+      "Finding the hot functions behind a fleet's CPU bill.",
+      "Explaining a slow span with no child spans."
+    ],
+    "related": [
+      "observability-sre",
+      "web-performance"
+    ]
+  },
+  {
+    "id": "exemplar",
+    "term": "Exemplar",
+    "aka": [],
+    "group": "cloud-devops",
+    "definition": "A sample trace id attached to a metric data point, linking an aggregate such as a latency bucket to a specific request that contributed to it.",
+    "details": [
+      "Lets you jump from a spike on a graph to a representative trace.",
+      "Supported by Prometheus, OpenTelemetry and most observability backends."
+    ],
+    "useCases": [
+      "Clicking a p99 latency spike to open one of the slow traces."
+    ],
+    "related": [
+      "observability-sre"
+    ]
+  },
+  {
+    "id": "perpetual-diff",
+    "term": "Perpetual diff",
+    "aka": [
+      "permanent diff"
+    ],
+    "group": "cloud-devops",
+    "definition": "An IaC plan that keeps showing changes after a successful apply, because the code and the API disagree about a value or another system keeps changing it.",
+    "details": [
+      "Common causes: normalised values, server-side defaults, plan-time functions, two owners for one setting.",
+      "Noisy plans train reviewers to miss real destroys."
+    ],
+    "useCases": [
+      "Fixing a security group that shows rule changes on every plan."
+    ],
+    "related": [
+      "infrastructure-as-code"
+    ]
+  },
+  {
+    "id": "terraform-state",
+    "term": "Terraform state",
+    "aka": [
+      "state file",
+      "OpenTofu state"
+    ],
+    "group": "cloud-devops",
+    "definition": "The file in which Terraform and OpenTofu record which real resources correspond to each resource in the configuration, with their attributes, so plans can compute changes.",
+    "details": [
+      "Keep it remote, encrypted, versioned and locked, and treat it as sensitive.",
+      "Write-only arguments (Terraform 1.11) keep some secrets out of state entirely."
+    ],
+    "useCases": [
+      "Splitting state per service and environment to limit blast radius."
+    ],
+    "related": [
+      "infrastructure-as-code"
+    ]
+  },
+  {
+    "id": "game-day",
+    "term": "Game day",
+    "aka": [
+      "tabletop exercise",
+      "wheel of misfortune"
+    ],
+    "group": "cloud-devops",
+    "definition": "A planned exercise in which a team responds to a simulated or deliberately injected failure, to practise incident roles and mitigations and to find gaps before a real incident does.",
+    "details": [
+      "Ranges from tabletop walkthroughs to real failure injection in production-like environments.",
+      "Findings are tracked like incident actions."
+    ],
+    "useCases": [
+      "Practising a regional failover every quarter."
+    ],
+    "related": [
+      "incident-management",
+      "resilience-patterns"
+    ]
+  },
+  {
+    "id": "problem-management",
+    "term": "Problem management",
+    "aka": [
+      "known error"
+    ],
+    "group": "cloud-devops",
+    "definition": "Investigating and removing the underlying causes of one or more incidents, separately from the incident response that restores service.",
+    "details": [
+      "A problem with a workaround but no fix yet is a known error.",
+      "Linking recurring incidents to one problem stops them being treated as unrelated."
+    ],
+    "useCases": [
+      "Tracking a flaky dependency behind three incidents in a month."
+    ],
+    "related": [
+      "incident-management"
+    ]
+  },
+  {
+    "id": "change-freeze",
+    "term": "Change freeze",
+    "aka": [
+      "code freeze"
+    ],
+    "group": "delivery",
+    "definition": "A period during which risky changes to production are paused or restricted, usually around a peak business event, with a fast path for urgent fixes.",
+    "details": [
+      "It reduces change-related risk but builds up a backlog of changes, which then ship as a big batch afterwards.",
+      "Scope it to risky change types, not all deploys."
+    ],
+    "useCases": [
+      "The days around Black Friday for an online retailer."
+    ],
+    "related": [
+      "incident-management",
+      "ci-cd-pipelines"
+    ]
   }
 ]

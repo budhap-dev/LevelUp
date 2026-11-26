@@ -6,7 +6,7 @@ tags: [terraform, bicep, iac]
 level: Senior
 estimatedMinutes: 60
 related: [azure, ci-cd-pipelines]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -77,6 +77,8 @@ Terraform/OpenTofu keep a **state file** mapping resources in code to real resou
 - **Least privilege:** only the pipeline identity can read/write production state.
 - **Split state by blast radius and ownership:** per service and environment, separate networking/platform state from application state. One giant state is slow, risky and a coordination bottleneck.
 - **Refactor safely:** `moved` blocks to rename/restructure without destroy/create; `import` blocks to adopt existing resources; `terraform state` commands only with care and backups.
+- **Keep secrets out of state where you can:** since Terraform 1.11, providers can offer **write-only arguments** (for example a database password) that are sent to the API but never stored in state or plan files, fed from ephemeral values such as a secret read from a vault at apply time.
+- **Locking on S3** no longer needs a DynamoDB table: Terraform 1.11 made S3-native locking (`use_lockfile = true`) generally available and deprecated the DynamoDB arguments.
 
 ### Modules
 
@@ -91,6 +93,47 @@ Terraform/OpenTofu keep a **state file** mapping resources in code to real resou
 - Reviewers approve the code **and the plan**; production applies require approval in the pipeline.
 - **Apply from the pipeline** using workload identity federation (OIDC) — no long-lived cloud credentials; humans have read-only access to prod by default.
 - **Drift detection:** scheduled plans alert when reality differs from code; fix by reverting the manual change or codifying it.
+
+### Worked example: a plan that wants to replace the database
+
+A pull request "tidies up" a PostgreSQL server's name and moves the resource into a module. The plan posted to the PR ends with:
+
+```text
+  # azurerm_postgresql_flexible_server.orders will be destroyed
+  # (because azurerm_postgresql_flexible_server.orders is not in configuration)
+  - resource "azurerm_postgresql_flexible_server" "orders" { ... }
+
+  # module.orders_db.azurerm_postgresql_flexible_server.this must be replaced
+-/+ resource "azurerm_postgresql_flexible_server" "this" {
+      ~ name = "orders-prod" -> "orders-prod-pg" # forces replacement
+      ...
+    }
+
+Plan: 1 to add, 0 to change, 1 to destroy.
+```
+
+Two separate problems are hiding in it:
+1. **The resource's address changed** (from `azurerm_postgresql_flexible_server.orders` to `module.orders_db.azurerm_postgresql_flexible_server.this`). Terraform doesn't know it's the same server, so it plans to destroy the old address and create the new one.
+2. **The `name` attribute changed.** Most cloud resources can't be renamed in place, so the provider marks it `# forces replacement`.
+
+**Fixes:**
+- For the address, tell Terraform it's a move, not a delete:
+
+```hcl
+moved {
+  from = azurerm_postgresql_flexible_server.orders
+  to   = module.orders_db.azurerm_postgresql_flexible_server.this
+}
+```
+
+- For the name, revert it. A cosmetic rename isn't worth recreating a production database. If a new name were truly required, it would be a migration project: a new server, data copied, traffic cut over.
+
+The new plan reads `has moved to module.orders_db...` and `Plan: 0 to add, 0 to change, 0 to destroy.`
+
+**Guardrails that would have stopped it even if a reviewer missed it:**
+- `lifecycle { prevent_destroy = true }` on stateful resources in the module, so any plan that destroys them fails.
+- A CI gate that reads `terraform show -json` and blocks any `delete` action on stateful resource types without an explicit override label.
+- Cloud-side protection that IaC can't bypass by accident: deletion protection on databases, resource locks on the resource group, and tested backups.
 
 ## How It Works
 
@@ -107,6 +150,37 @@ flowchart LR
   SCHED["Scheduled drift check"] --> PLAN2["plan in detect mode"]
   PLAN2 -->|"drift found"| ALERT["Alert owning team"]
   CLOUD -. "manual change" .-> PLAN2
+```
+
+### A change from pull request to apply
+
+```mermaid
+sequenceDiagram
+  participant E as Engineer
+  participant P as Pipeline
+  participant S as State backend
+  participant C as Cloud APIs
+  participant R as Reviewer
+  %% step: An engineer opens a pull request changing a stack's configuration.
+  %% step: The pipeline, using a read-only identity, takes the state lock and reads the current state, so no apply can run while it plans.
+  %% step: It refreshes from the cloud APIs, reading the real resources so the plan reflects reality, including any drift.
+  %% step: It posts the plan to the PR (1 to add, 1 to change, 0 to destroy) and saves the exact plan file as an artefact.
+  %% step: Planning is done, so it releases the lock.
+  %% step: The reviewer approves the code and the plan. After merging, the production environment's approval rule releases the apply job.
+  %% step: The apply job, with the deploy identity, takes the lock again.
+  %% step: It applies the saved plan, not a fresh one. If the state changed since that plan, Terraform refuses it as stale, so nothing unreviewed gets applied.
+  %% step: The changes are made through the cloud APIs.
+  %% step: The pipeline writes a new, versioned state and releases the lock. A bad apply can be traced, and the previous state recovered.
+  E->>P: Open pull request
+  P->>S: Lock and read state
+  P->>C: Refresh real resources
+  P-->>R: Plan posted, plan file saved
+  P->>S: Release lock
+  R->>P: Approve, merge, approve prod
+  P->>S: Lock for apply
+  Note over P: Apply the saved plan, stale plans rejected
+  P->>C: Make the changes
+  P->>S: Write new state version, unlock
 ```
 
 ## When to Use / Trade-offs
@@ -528,6 +602,170 @@ Inventory, import-vs-rebuild decisions, declarative import tooling, the clean-pl
 - Recreating production databases to "get them into Terraform".
 - Leaving console write access open after importing.
 
+### What does idempotency mean for IaC, and why does a plan sometimes show changes when nothing has changed? {#perpetual-diffs}
+
+**Level:** Foundation
+
+**Model answer:**
+**Idempotency** means applying the same configuration twice has the same effect as applying it once. After a successful apply, the next plan should show **no changes**. That's what makes a plan trustworthy: anything it shows should be a real difference.
+
+When a plan keeps showing changes nobody made (a **perpetual diff**), the usual causes are:
+- **The provider normalises a value**: you wrote `"10.0.0.0/16 "`, `"ALLOW"` or a JSON policy with keys in one order, and the API returns it trimmed, lowercased or reordered.
+- **Defaults set by the cloud**: an attribute you didn't set gets a server-side default, or another system (an autoscaler, a policy engine) changes it after the apply. Tags added by Azure Policy or an AWS service are common.
+- **Values computed at plan time**: `timestamp()`, random values without a stable seed, or data sources that change on every read.
+- **Two owners for one setting**: a resource is managed in two stacks, or an inline rule list and a separate rule resource both manage the same security group.
+- **Provider bugs**, fixed by upgrading the provider.
+
+Fixes, in order of preference:
+1. Write the value the way the API returns it, or use the provider's canonical form (for example `jsonencode` for policies).
+2. Give each setting **one owner**.
+3. Use `lifecycle { ignore_changes = [...] }` for attributes that another system legitimately manages (for example `desired_count` managed by an autoscaler), and document why.
+
+Don't learn to ignore noisy plans. Once reviewers expect noise, they stop noticing the real destroy.
+
+**What the interviewer is looking for:**
+The idempotency definition, common causes of perpetual diffs, and fixing them instead of tolerating noise.
+
+**Follow-ups:**
+- When is `ignore_changes` the wrong tool?
+- How would you detect perpetual diffs across 100 stacks?
+
+**Red flags:**
+- "The plan always shows a few changes; we just apply it."
+- Using `ignore_changes = all` broadly.
+
+### How do you share values between IaC stacks, such as network ids from a platform stack to application stacks? {#cross-stack-dependencies}
+
+**Level:** Senior
+
+**Model answer:**
+Splitting state by ownership and blast radius means application stacks need values from platform stacks: VNet or subnet ids, DNS zones, a Key Vault, a cluster's OIDC issuer. Options, from tightest to loosest coupling:
+
+| Option | How | Trade-offs |
+|---|---|---|
+| **Remote state data source** (`terraform_remote_state`) | Read another stack's outputs directly | Simple, but the consumer needs read access to the whole state, which may contain secrets. Tight coupling to that stack's outputs |
+| **Provider data sources** | Look up the resource itself, by name or tags (`azurerm_subnet`, `aws_vpc` with filters) | No state access, and resilient to how the producer is built. Needs stable naming or tagging conventions |
+| **Published parameters** | The producer writes values to a parameter store (SSM Parameter Store, App Configuration, Key Vault, a platform API), and consumers read them | A clear, versioned contract between teams, readable by non-Terraform tools too |
+| **Orchestrators** | Terragrunt dependencies, Terraform Stacks, Spacelift or env0 stack dependencies | Manages run order and passes outputs automatically, at the cost of another tool |
+
+Recommendations:
+- Treat outputs a platform team exposes as an **API contract**: documented, versioned, and changed with notice.
+- Prefer **data sources or published parameters** across team boundaries, and keep remote state reads within one team.
+- **Avoid cycles.** If two stacks need each other's outputs, the split is wrong, so move the shared resource to a lower layer.
+- Define the **apply order** for bootstrapping (network, then shared services, then applications), and make consumers fail clearly if a dependency is missing.
+
+**What the interviewer is looking for:**
+The options and their coupling, state-access security, outputs as contracts, and avoiding cycles.
+
+**Follow-ups:**
+- The platform team renames a subnet. How do you avoid breaking 40 application stacks?
+- When would you merge two stacks back together?
+
+**Red flags:**
+- Giving every application pipeline read access to the network team's state.
+- Hard-coding resource ids copied from the portal.
+
+### How do you upgrade a Terraform provider across a major version safely? {#provider-upgrades}
+
+**Level:** Senior
+
+**Model answer:**
+Major provider versions (for example `azurerm` 3 to 4, or `aws` 5 to 6) remove deprecated arguments, change defaults and sometimes change how resources are modelled. A careless upgrade can produce plans that replace resources.
+
+1. **Read the upgrade guide** and changelog. Note removed arguments, renamed resources, new defaults and any "forces replacement" changes.
+2. **Fix deprecation warnings on the current version first.** Most providers deprecate before removing, so warnings in today's plans are the to-do list.
+3. **Upgrade the internal modules first**, release them as a new major version, and test them in a sandbox with realistic configurations. Use `terraform test` or Terratest where you have them.
+4. **Upgrade stack by stack**, lowest risk first. For each stack:
+   - Change the version constraint, then run `terraform init -upgrade`, which updates the **lock file** (`.terraform.lock.hcl`). Commit it.
+   - Run a plan and read it closely. The target is **no changes** apart from expected ones. Investigate any replacement before going on.
+   - Use `moved` blocks, or `removed` and `import` blocks, where resources were renamed or split.
+5. **Apply in non-production first**, then production with the usual approvals.
+6. **Automate the next one**: Renovate or Dependabot opens PRs for minor provider updates, with plans attached, so the gap never grows to several major versions.
+
+**What the interviewer is looking for:**
+Reading upgrade guides, clearing deprecations first, modules before stacks, lock files, zero-change plans and staying current.
+
+**Follow-ups:**
+- A new provider version changes a default, causing a diff on 300 resources. What do you do?
+- Why commit the lock file?
+
+**Red flags:**
+- Unpinned providers in production stacks.
+- Applying an upgrade plan with unexplained replacements.
+
+### How would you use IaC to recover from the loss of a region? {#iac-for-dr}
+
+**Level:** Architect
+
+**Model answer:**
+IaC makes infrastructure **rebuildable**, but a disaster tests things a normal apply never touches.
+
+**What IaC can and can't restore:**
+- It **recreates infrastructure**: networks, clusters, databases (empty), queues, roles and policies.
+- It **doesn't restore data**. That comes from replicas, backups and object replication, each with its own RPO. The plan must say which data source each component uses after failover.
+
+**Remove circular dependencies on the failed region:**
+- **State**: if state lives only in the failed region, you can't plan. Replicate state storage to another region, and know how to point the backend at the replica.
+- **Pipeline and tooling**: runners, secrets, artefact registries and module registries must be usable from the recovery region.
+- **Identity and DNS**: deployment identities and DNS changes must work without the failed region.
+- **Hard-coded regional values**: AMI ids, availability zone names, endpoints and ARNs written into code. Parameterise them by region.
+
+**Make the recovery region deployable in advance:**
+- The same modules deploy to both regions, with region-specific variables, tested regularly.
+- **Quotas and capacity** in the recovery region are raised now, not during the disaster.
+- For a tight RTO, keep a **pilot light** or warm standby already deployed, so recovery is "scale up and switch traffic" rather than "build everything".
+
+**Prove it:** rebuild the recovery environment from scratch on a schedule, time it against the RTO, and fix whatever needed a person. A rebuild that has never been run is a guess.
+
+**What the interviewer is looking for:**
+Infrastructure versus data recovery, circular dependencies on the failed region, regional parameterisation, quotas, and timed rebuild tests.
+
+**Follow-ups:**
+- Your Terraform state backend is in the region that failed. What now?
+- How long would a full rebuild of your largest stack take, and how would you find out?
+
+**Red flags:**
+- "It's all in Terraform, so DR is solved."
+- A recovery region that has never been deployed to.
+
+### How do you stop an IaC change from deleting production data across an organisation with 80 teams? {#destructive-change-protection}
+
+**Level:** Architect
+
+**Model answer:**
+Assume a destructive plan will eventually be approved by someone in a hurry. Build layers so that no single mistake loses data.
+
+**1. In the code and modules:**
+- `prevent_destroy` on stateful resources in shared modules (databases, storage, key vaults, queues with data), so plans that would destroy them fail.
+- Separate **stateful and stateless** resources into different stacks. An application stack that is torn down often shouldn't contain the database.
+
+**2. In the pipeline:**
+- Parse `terraform show -json` and **block delete or replace actions** on a list of stateful types unless the PR carries an explicit, reviewed override. This catches what `prevent_destroy` misses, such as resources outside shared modules.
+- Show destroy and replace counts prominently in the PR, not buried in a long plan.
+- Run production applies only from the pipeline, with saved plans and required approvals.
+
+**3. In the cloud:**
+- **Deletion protection** settings (RDS `deletion_protection`, Azure resource locks, GCP deletion protection flags), set by modules and enforced by policy. IaC would have to remove them in a separate, visible change first.
+- **Least-privilege deploy identities**: application pipelines can't delete shared platform resources at all.
+- Organisation policies (SCPs, Azure Policy) that deny deleting protected resources except through a break-glass role.
+
+**4. Recovery:**
+- **Backups and point-in-time restore** outside the blast radius of IaC (separate account or vault, immutable retention), restored in regular tests.
+- State versioning, so a bad apply can be understood and the previous state recovered.
+
+**5. Culture and process:** treat a near miss as an incident and review it. Publish the stateful-type list and the override process so they aren't surprises.
+
+**What the interviewer is looking for:**
+Defence in depth: module lifecycle rules, plan-parsing gates, cloud-side deletion protection, permissions and policies, and tested backups.
+
+**Follow-ups:**
+- A team legitimately needs to replace a database. How does the override work?
+- What does `prevent_destroy` not protect against?
+
+**Red flags:**
+- Relying on reviewers reading every plan.
+- Backups in the same account and blast radius as the IaC that might delete them.
+
 ## Cheat Sheet
 
 ### Fundamentals
@@ -550,6 +788,16 @@ Inventory, import-vs-rebuild decisions, declarative import tooling, the clean-pl
 - **GitOps** — declarative, versioned, pulled and continuously reconciled desired state.
 - **OpenTofu** — the open-source (MPL) fork of Terraform after the 2023 BSL licence change.
 - **Crossplane** — Kubernetes-native IaC with continuous reconciliation and composed platform APIs.
+
+### Revisit
+
+- **Two kinds of replacement** — an address change shows destroy and create (fix with `moved`). An attribute marked `# forces replacement` needs reverting or a planned migration.
+- **Saved plans** — apply the exact reviewed plan file. Terraform rejects it if the state changed since it was made.
+- **Perpetual diffs** — normalised values, server-side defaults, plan-time functions or two owners for one setting. Fix them so plans stay trustworthy.
+- **Cross-stack values** — prefer data sources or published parameters across teams. Remote state reads expose the whole state. Avoid cycles.
+- **Provider upgrades** — clear deprecations first, upgrade modules before stacks, commit the lock file, expect zero-change plans.
+- **IaC and DR** — IaC rebuilds infrastructure, not data. Replicate state and tooling, parameterise regions, and time real rebuilds.
+- **Destructive-change defence** — `prevent_destroy`, plan-parsing gates, cloud deletion protection, least-privilege identities, and backups outside the blast radius.
 
 ## Further Reading
 

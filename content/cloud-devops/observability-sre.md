@@ -6,7 +6,7 @@ tags: [observability, sre, slo, opentelemetry]
 level: Architect
 estimatedMinutes: 90
 related: [docker-kubernetes, dora-metrics, system-design]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-26
 status: complete
 ---
 
@@ -55,6 +55,29 @@ Burn rate = how fast you're consuming the budget relative to an even spend. Burn
 | Ticket | 1 | 3 days | 6 h | 10% in 3 days |
 
 The short window makes the alert reset quickly once the problem is fixed.
+
+### Worked example: how long until the burn-rate alert fires?
+
+Take a 99.9% availability SLO over 30 days (a 0.1% error budget) with the three alerts above. A long-window alert fires once the average burn rate over that window reaches its threshold. So for an error rate that jumps and then stays constant:
+
+time to fire ≈ threshold ÷ actual burn rate × long window
+
+| Error rate | Burn rate | First alert to fire | Time to fire | Budget spent by then |
+|---|---|---|---|---|
+| 100% (full outage) | 1,000 | Page (14.4 over 1 h) | ~1 minute | 2% |
+| 5% | 50 | Page (14.4 over 1 h) | ~17 minutes | 2% |
+| 2% | 20 | Page (14.4 over 1 h) | ~43 minutes | 2% |
+| 1% | 10 | Page (6 over 6 h) | ~3.6 hours | 5% |
+| 0.5% | 5 | Ticket (1 over 3 days) | ~14 hours | 10% |
+| 0.2% | 2 | Ticket (1 over 3 days) | ~36 hours | 10% |
+
+What the table shows:
+- **Each alert fires when a fixed share of the budget is gone** (2%, 5% or 10%), however bad the incident is. That's the design: page when the budget is at risk, not on every blip.
+- **Big outages page fast, and moderate ones page slowly.** A 2% error rate (one in fifty checkouts failing) takes 43 minutes to page. If that's too slow for a critical journey, add a faster tier (for example a burn rate of 30 over 15 minutes), or set a tighter SLO for that journey. Both mean more pages.
+- **Slow burns become tickets**, because they can't exhaust the budget before someone looks during working hours.
+- The **short window** (5 minutes for the first page) doesn't delay firing for a sustained problem. What it does is let the alert clear within minutes after the fix, instead of staying red for an hour.
+
+The same arithmetic works for latency SLIs, with "requests slower than the threshold" as the bad events.
 
 ### Instrumenting with OpenTelemetry
 
@@ -122,6 +145,35 @@ flowchart LR
   T -. trace_id in logs .- L
   M -. exemplars .- T
 ```
+
+### Following one order through a queue
+
+```mermaid
+sequenceDiagram
+  participant U as Browser
+  participant A as Orders API
+  participant Q as Message queue
+  participant W as Fulfilment worker
+  participant C as OTel Collector
+  %% step: The browser sends POST /orders with a W3C traceparent header, or the API starts a new trace if there isn't one.
+  %% step: The API's server span for the request carries the trace id. Every log line it writes includes the same trace_id.
+  %% step: Publishing the OrderPlaced message creates a producer span, and the instrumentation writes the trace context into the message headers. Without this, the trace ends at the queue.
+  %% step: The API's spans are batched and exported to the Collector over OTLP.
+  %% step: Seconds or minutes later, the worker receives the message.
+  %% step: The worker extracts the context from the headers. Its consumer span joins the same trace, or links to it when one batch contains messages from many traces.
+  %% step: The worker's spans, including a slow call to the warehouse API, are exported with the same trace id.
+  %% step: The Collector's tail sampler has waited for the trace to complete. It's slower than 1 second, so it's kept in full: one trace from click to fulfilment, linked to its logs.
+  U->>A: POST /orders with traceparent
+  Note over A: Server span, trace id in logs
+  A->>Q: Publish with trace context in headers
+  A->>C: Export spans over OTLP
+  W->>Q: Receive message
+  Note over W: Extract context, consumer span
+  W->>C: Export worker spans
+  Note over C: Tail sampling keeps slow trace
+```
+
+Tail sampling needs every span of a trace to reach the same Collector instance. A first tier uses the load-balancing exporter, keyed by trace id, to route spans to the instances that make the sampling decision.
 
 ## When to Use / Trade-offs
 
@@ -555,6 +607,181 @@ Data-driven cost attribution, concrete per-signal techniques, team-level account
 - A blanket 90% cut in retention or sampling with no analysis.
 - Turning off tracing to save money.
 
+### What should a service's main dashboard show, and what should it leave out? {#service-dashboards}
+
+**Level:** Foundation
+
+**Model answer:**
+A service dashboard's job is to answer, within a minute during an incident: **are users affected, since when, and where should I look next?**
+
+**Top row: the user's view.**
+- The **SLIs and SLOs**: request success rate and latency (p50, p95, p99) against their targets, plus the error budget remaining.
+- **Traffic**: requests per second, because a drop in traffic is often the first sign of an upstream failure.
+
+**Next: the service's health (RED and saturation).**
+- Errors broken down by type or status code, and latency by endpoint for the few endpoints that matter.
+- **Saturation**: CPU and memory against limits, connection pools, queue depth, thread or event-loop lag.
+
+**Then: dependencies and changes.**
+- Latency and errors of calls to each dependency (database, caches, downstream services, third parties).
+- **Deploy, config and flag change markers** on every graph, because "what changed?" is the first incident question.
+
+**Make it usable:**
+- Use the same time range and consistent units, and keep it on one screen.
+- Link out to traces, logs filtered by service, the runbook and the owning team.
+- Template it by service and environment, so every service has the same layout.
+
+**Leave out:** dozens of host metrics with no thresholds, vanity counters, and per-customer series. Put investigation detail in linked views.
+
+**What the interviewer is looking for:**
+A layout ordered from user impact to causes, SLOs at the top, change markers, links to deeper tools, and restraint.
+
+**Follow-ups:**
+- How would a business-journey dashboard differ from a service dashboard?
+- How do you stop dashboards multiplying and going stale?
+
+**Red flags:**
+- A wall of CPU graphs with no SLIs.
+- No deploy markers.
+
+### How do you define SLIs for an asynchronous pipeline, such as a queue consumer or a nightly batch job? {#async-slis}
+
+**Level:** Senior
+
+**Model answer:**
+Request success and latency don't fit work that has no user waiting on a response. Ask what users actually experience: **is the result there, on time, and correct?**
+
+| SLI type | Definition | Example SLO |
+|---|---|---|
+| **Freshness** | Age of the newest processed data, or time from an event happening to its result being visible | 99% of orders appear in the warehouse system within 5 minutes |
+| **Throughput or completion** | Share of items processed successfully, rather than failing or being dead-lettered | 99.9% of messages processed without going to the DLQ |
+| **End-to-end latency** | Time from enqueue to completion per item, which captures queueing delay as well as processing | p99 under 2 minutes |
+| **Correctness** | Share of outputs that pass validation or reconciliation against the source | 99.99% of nightly balances match the ledger |
+| **Batch deadline** | Job completes by a time the business depends on | The 02:00 report is ready by 06:00 on 99% of days |
+
+**Measuring it well:**
+- Stamp each message with its **creation time**, and measure at the consumer as "now − created". Queue age metrics such as the age of the oldest message are a good leading signal.
+- **Count dead-lettered and skipped items as bad events.** They're failures, even though nothing crashed.
+- For correctness, run **reconciliation jobs** that compare counts and totals between source and destination, and turn them into an SLI.
+- Remember the queue's own metrics measure the queue, not the user. A low queue depth can mean the producer stopped.
+
+Burn-rate alerting works the same way once you have good and bad events: "messages older than 5 minutes when processed" becomes the bad-event count.
+
+**What the interviewer is looking for:**
+Freshness, completion, end-to-end latency and correctness as SLIs, measured from creation time, with dead letters counted as failures.
+
+**Follow-ups:**
+- How do you alert on a pipeline when the producer silently stops sending?
+- What's the SLI for a job that runs once a day?
+
+**Red flags:**
+- Using consumer CPU as the SLI.
+- Ignoring the dead-letter queue.
+
+### What is continuous profiling, and when is it worth adding? {#continuous-profiling}
+
+**Level:** Senior
+
+**Model answer:**
+A profile shows **which code consumes a resource**: CPU time, memory allocations, lock contention or wall-clock time, aggregated by stack trace and usually shown as a flame graph. **Continuous profiling** samples production processes all the time at low overhead (typically around 1–2% CPU), so you can query any service at any time, rather than attaching a profiler during an incident.
+
+How it's collected:
+- **eBPF-based agents** profile every process on a node without code changes, which works well for compiled languages and increasingly for runtimes such as the JVM, Node.js and Python.
+- **Language SDKs** (Go's pprof, async-profiler for the JVM, runtime profilers for Node.js and Python) give richer detail such as allocations and locks.
+- Tools include Grafana Pyroscope, Parca, Datadog, Elastic and cloud profilers. OpenTelemetry is adding profiles as a fourth signal alongside traces, metrics and logs.
+
+Where it pays off:
+- **Cost**: finding the few functions that burn most of the fleet's CPU. At scale, a 10% saving in a hot path is a real bill reduction.
+- **Latency**: explaining a slow trace span that has no child spans. The profile shows whether it's JSON serialisation, regex, garbage collection or lock contention.
+- **Regressions**: comparing profiles before and after a deploy.
+- **Memory**: allocation hot spots, and leaks that grow slowly.
+
+Link it to the other signals: profiles tagged with `service.name`, version and ideally span ids, so you can jump from a slow trace to the code responsible.
+
+It's less useful for small, I/O-bound services that spend their time waiting on databases. Traces already answer their questions.
+
+**What the interviewer is looking for:**
+What a profile shows, low-overhead continuous collection, eBPF versus SDKs, concrete uses for cost and latency, and linking to traces.
+
+**Follow-ups:**
+- A span shows 400 ms of work with no child spans. How would you investigate?
+- How would you prove a profiling-driven optimisation saved money?
+
+**Red flags:**
+- Profiling only on laptops with synthetic load.
+- Assuming high CPU is always the database's fault.
+
+### Design the telemetry pipeline for 2 TB of telemetry a day from 300 services, with PII redaction and two backends. {#telemetry-pipeline}
+
+**Level:** Architect
+
+**Model answer:**
+**Topology: OpenTelemetry Collectors in two tiers.**
+- **Agents** on every node (a DaemonSet) or as sidecars. They receive OTLP from SDKs, scrape local metrics, tail container logs, and add resource attributes such as Kubernetes metadata (`k8sattributes`). Keep them light: batch, memory limits, and forwarding.
+- A **gateway tier** behind a load balancer for the heavy processing: redaction, sampling, routing and export. Scale it horizontally on queue size and CPU.
+- For tail sampling, the first gateway layer uses the **load-balancing exporter keyed by trace id**, so all spans of a trace reach the same sampling instance.
+
+**Processing in the gateway:**
+- **Redaction** with the transform and attributes processors (OTTL): delete or hash known sensitive attributes (`user.email`, `http.request.header.authorization`), and pattern-match card numbers and tokens in log bodies. It's a safety net. Teams must still avoid logging PII in the first place.
+- **Filtering** of health checks and debug logs, plus **tail sampling**: keep errors and slow traces, sample the rest by service.
+- **Metric hygiene**: drop or aggregate high-cardinality attributes before export.
+
+**Routing:** use the routing connector to send security-relevant logs to the SIEM, application telemetry to the observability backend, and some data to cheap object storage for long-term retention.
+
+**Reliability:**
+- `memory_limiter` first in every pipeline, and **persistent queues** (file storage) on exporters, so a backend outage queues data instead of crashing collectors or losing it.
+- Back-pressure: when the gateway is saturated, the agents' queues absorb bursts. Decide in advance what is dropped first (debug logs before traces before metrics).
+- **Monitor the pipeline itself**: accepted, refused and dropped data per signal, queue sizes and export latency, with alerts. Telemetry loss is an incident.
+
+**Governance:** configuration in Git, deployed through the platform pipeline. Semantic conventions are enforced, and costs are shown per service, since 2 TB a day is a significant bill.
+
+**What the interviewer is looking for:**
+Agent and gateway tiers, trace-aware load balancing for tail sampling, redaction as a safety net, routing to several backends, persistent queues and pipeline self-monitoring.
+
+**Follow-ups:**
+- The SIEM backend is down for two hours. What happens to the data?
+- How do you roll out a redaction rule change safely?
+
+**Red flags:**
+- Exporting straight from 300 services to a vendor, with no central control.
+- Tail sampling without routing by trace id.
+
+### You need to move from one observability vendor to another without losing visibility during the move. How? {#observability-migration}
+
+**Level:** Architect
+
+**Model answer:**
+**1. Decouple instrumentation from the vendor first.** If services use a vendor's proprietary agent or SDK, the migration is a rewrite of every service. Move them to **OpenTelemetry SDKs and the Collector** first, still exporting to the current vendor. From then on, the backend is a Collector configuration change.
+
+**2. Dual-ship during the transition.** The Collector exports to both backends at once. Expect to pay for both for a few months, and consider sampling the data sent to the new one at first to control cost.
+
+**3. Rebuild what people actually use, not everything:**
+- Inventory **alerts, SLOs, dashboards and saved queries**, ranked by use. Many will be unused, so retire those rather than migrating them.
+- Translate the alerts and SLOs first, because they protect production. Run them in both systems and compare: do they fire on the same events?
+- Translate queries between languages (for example from a vendor's query language to PromQL or LogQL) with care, and validate results against the old system.
+- Rebuild the key service and journey dashboards from templates.
+
+**4. Move people, not just data:**
+- Train on-call engineers before the switch. Incident response with an unfamiliar tool is slow.
+- Switch paging to the new system **team by team**, with the old system as a fallback for a few weeks.
+
+**5. Cut over and clean up:**
+- Decide about historical data: export what's needed for compliance or long-term trends, and accept starting fresh for the rest.
+- Remove the old exporter and agent, and cancel the contract only after a full on-call cycle without problems.
+
+Measure success by the time to detect and resolve incidents during and after the move, not by the number of dashboards migrated.
+
+**What the interviewer is looking for:**
+OpenTelemetry as the decoupling step, dual-shipping, migrating alerts first with validation, pruning unused assets, training, and a team-by-team cutover.
+
+**Follow-ups:**
+- How would you handle vendor-specific features with no equivalent, such as a particular APM view?
+- How do you keep the dual-shipping cost under control?
+
+**Red flags:**
+- A big-bang switch on a single date.
+- Migrating every dashboard, including the 70% nobody opens.
+
 ## Cheat Sheet
 
 - **Observability** — ask new questions of a system using correlated, high-cardinality telemetry.
@@ -572,6 +799,16 @@ Data-driven cost attribution, concrete per-signal techniques, team-level account
 - **Toil** — manual, repetitive, automatable operational work; keep it under ~50%.
 - **traceparent** — W3C header `00-<trace id>-<parent span id>-<flags>` that carries trace context between services.
 - **Blameless postmortem** — find contributing factors in the system, not a culprit; actions get owners and dates.
+
+### Revisit
+
+- **Burn-rate timing** — time to fire ≈ threshold ÷ burn rate × long window. Each tier fires after a fixed share of the budget (2%, 5%, 10%), so a 2% error rate takes about 43 minutes to page.
+- **Short windows** — they don't delay a sustained alert. They let it clear within minutes after the fix.
+- **Context through queues** — inject trace context into message headers. Consumers continue the trace, or link to it for batches.
+- **Service dashboards** — SLIs and traffic first, then RED and saturation, then dependencies, with deploy markers and links to traces and logs.
+- **Async SLIs** — freshness, completion (dead letters count as bad), end-to-end latency from creation time, and correctness via reconciliation.
+- **Continuous profiling** — low-overhead, always-on flame graphs for cost, latency and regressions. Link them to traces.
+- **Telemetry pipeline** — agent and gateway Collectors, trace-id load balancing for tail sampling, redaction, routing, persistent queues and self-monitoring.
 
 ## Further Reading
 
