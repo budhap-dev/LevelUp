@@ -1,7 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { groups, loadTopic, topics } from '@/lib/content';
 import { LEVELS, type Level } from '@/lib/content/constants';
-import type { Topic } from '@/lib/content/schema';
+import type { Topic, TopicMeta } from '@/lib/content/schema';
+import { Icon } from '@/components/Icon';
+import { groupIcon } from '@/components/groupIcons';
 
 export const CONTENT_TOPICS = topics.filter((t) => t.status !== 'stub');
 
@@ -68,14 +70,59 @@ export function useLoadedTopics(ids: string[]): { loaded: Map<string, Topic>; re
   return { loaded, ready: ids.every((id) => loaded.has(id)) };
 }
 
-const chip =
-  'cursor-pointer rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-fg-soft transition-colors duration-150 select-none hover:border-accent has-checked:border-accent has-checked:bg-accent has-checked:text-on-accent has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent';
+/** Selectable pill with a tick that fills in when chosen; `count` is decorative (aria-hidden) so the accessible name stays the label. */
+function Chip({ label, checked, onToggle, count }: { label: string; checked: boolean; onToggle: () => void; count?: number }) {
+  return (
+    <label
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-full border py-1.5 pr-3 pl-1.5 text-sm transition-[background-color,border-color,color,scale] duration-200 ease-(--ease-out-expo) select-none active:scale-[0.97] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
+        checked ? 'border-accent bg-accent-soft text-accent-ink' : 'border-line bg-surface text-fg-soft hover:border-accent hover:text-fg'
+      }`}
+    >
+      <input type="checkbox" className="sr-only" checked={checked} onChange={onToggle} />
+      <span
+        aria-hidden="true"
+        className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-200 ${
+          checked ? 'border-accent bg-accent text-on-accent' : 'border-line bg-surface text-transparent'
+        }`}
+      >
+        <Icon name="check" className={`size-3 transition-transform duration-300 ease-(--ease-out-expo) ${checked ? 'scale-100' : 'scale-0'}`} />
+      </span>
+      <span className="leading-snug">{label}</span>
+      {count !== undefined && (
+        <span aria-hidden="true" className={`text-xs tabular-nums ${checked ? 'text-accent-ink/70' : 'text-muted'}`}>
+          {count}
+        </span>
+      )}
+    </label>
+  );
+}
 
-function Field({ legend, actions, children }: { legend: string; actions?: ReactNode; children: ReactNode }) {
+/** Group-level checkbox: checked when every topic is chosen, mixed when some are. */
+function GroupToggle({ label, chosen, total, onChange }: { label: string; chosen: number; total: number; onChange: (all: boolean) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = chosen > 0 && chosen < total;
+  }, [chosen, total]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label={`All ${label}`}
+      checked={chosen === total}
+      onChange={() => onChange(chosen < total)}
+      className="size-4 shrink-0 cursor-pointer accent-accent"
+    />
+  );
+}
+
+function Field({ legend, hint, actions, children }: { legend: string; hint?: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <fieldset className="border-t border-line pt-5 first:border-0 first:pt-0">
       <div className="flex items-center justify-between gap-3">
-        <legend className="text-sm font-semibold text-fg">{legend}</legend>
+        <legend className="text-sm font-semibold text-fg">
+          {legend}
+          {hint && <span className="ml-2 text-xs font-normal text-muted">{hint}</span>}
+        </legend>
         {actions}
       </div>
       <div className="mt-3">{children}</div>
@@ -101,11 +148,29 @@ export function SessionSetup({
   const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   const available = counts ? counts.due + counts.fresh + (state.ahead ? counts.later : 0) : 0;
   const sessionSize = Math.min(state.size, available);
+  const selected = new Set(state.topicIds);
+  const baseId = useId();
+  // Groups start expanded on wider screens and collapsed on phones, where the full list is very long.
+  const [open, setOpen] = useState<Set<string>>(() =>
+    typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches ? new Set() : new Set(groups.map((g) => g.id)),
+  );
+  const toggleOpen = (id: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const setGroup = (ids: string[], all: boolean) =>
+    onChange({ ...state, topicIds: all ? [...new Set([...state.topicIds, ...ids])] : state.topicIds.filter((id) => !ids.includes(id)) });
+  /** Questions at the chosen levels in interview mode; flashcards otherwise. */
+  const countOf = (t: TopicMeta) => (showLevels ? state.levels.reduce((n, l) => n + (t.questionLevels[l] ?? 0), 0) : t.flashcardCount);
 
   return (
     <div className="space-y-5 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <Field
         legend="Topics"
+        hint={`${state.topicIds.length} of ${CONTENT_TOPICS.length} chosen`}
         actions={
           <div className="flex gap-1 text-sm">
             <button type="button" className="rounded-md px-2 py-1 text-accent-ink hover:bg-accent-soft" onClick={() => onChange({ ...state, topicIds: CONTENT_TOPICS.map((t) => t.id) })}>
@@ -117,21 +182,61 @@ export function SessionSetup({
           </div>
         }
       >
-        <div className="space-y-3">
+        <div className="columns-1 gap-3 sm:columns-2">
           {groups
             .map((g) => ({ g, items: CONTENT_TOPICS.filter((t) => t.group === g.id) }))
             .filter(({ items }) => items.length)
-            .map(({ g, items }) => (
-              <div key={g.id} className="flex flex-wrap items-center gap-2">
-                <span className="w-full text-xs font-medium tracking-wide text-muted uppercase sm:w-44">{g.title}</span>
-                {items.map((t) => (
-                  <label key={t.id} className={chip}>
-                    <input type="checkbox" className="sr-only" checked={state.topicIds.includes(t.id)} onChange={() => onChange({ ...state, topicIds: toggle(state.topicIds, t.id) })} />
-                    {t.title}
-                  </label>
-                ))}
-              </div>
-            ))}
+            .map(({ g, items }, i) => {
+              const chosen = items.filter((t) => selected.has(t.id)).length;
+              const isOpen = open.has(g.id);
+              const bodyId = `${baseId}-${g.id}`;
+              return (
+                <section
+                  key={g.id}
+                  aria-label={g.title}
+                  style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}
+                  className={`mb-3 animate-page-in break-inside-avoid rounded-xl border p-3.5 transition-colors duration-200 ${chosen ? 'border-accent/40 bg-accent-soft/30' : 'border-line bg-subtle/40'}`}
+                >
+                  <header className="flex items-center gap-3">
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ${chosen ? 'bg-accent text-on-accent' : 'bg-subtle text-muted'}`}
+                    >
+                      <Icon name={groupIcon(g.id)} className="size-4.5" />
+                    </span>
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      aria-controls={bodyId}
+                      onClick={() => toggleOpen(g.id)}
+                      className="group/head flex min-w-0 flex-1 items-center gap-2 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-fg">{g.title}</span>
+                        <span className="block text-xs text-muted">
+                          {chosen} of {items.length} chosen
+                        </span>
+                      </span>
+                      <Icon
+                        name="chevron"
+                        className={`size-4 shrink-0 text-muted transition-transform duration-300 ease-(--ease-out-expo) group-hover/head:text-fg ${isOpen ? 'rotate-90' : ''}`}
+                      />
+                    </button>
+                    <GroupToggle label={g.title} chosen={chosen} total={items.length} onChange={(all) => setGroup(items.map((t) => t.id), all)} />
+                  </header>
+                  <div id={bodyId} hidden={!isOpen} className="mt-3 flex flex-wrap gap-1.5">
+                    {items.map((t) => (
+                      <Chip
+                        key={t.id}
+                        label={t.title}
+                        checked={selected.has(t.id)}
+                        count={countOf(t)}
+                        onToggle={() => onChange({ ...state, topicIds: toggle(state.topicIds, t.id) })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
         </div>
       </Field>
 
@@ -139,10 +244,7 @@ export function SessionSetup({
         <Field legend="Levels">
           <div className="flex flex-wrap gap-2">
             {LEVELS.map((l) => (
-              <label key={l} className={chip}>
-                <input type="checkbox" className="sr-only" checked={state.levels.includes(l)} onChange={() => onChange({ ...state, levels: toggle(state.levels, l) })} />
-                {l}
-              </label>
+              <Chip key={l} label={l} checked={state.levels.includes(l)} onToggle={() => onChange({ ...state, levels: toggle(state.levels, l) })} />
             ))}
           </div>
         </Field>
