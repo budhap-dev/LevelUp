@@ -6,7 +6,7 @@ tags: [hiring, interviews]
 level: Senior
 estimatedMinutes: 45
 related: [people-management, behavioural-interviews-star]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-27
 status: complete
 ---
 
@@ -30,7 +30,7 @@ Before anything else, agree with the hiring team:
 
 ### Structured interviewing
 
-Research on selection methods (e.g. Schmidt & Hunter's meta-analyses and later updates) consistently finds **structured interviews** among the more predictive methods; unstructured "chats" are less predictive and more prone to bias.
+Research on selection methods consistently finds **structured interviews** among the most predictive methods. Schmidt & Hunter's 1998 meta-analysis put general mental ability tests first, but Sackett and colleagues' 2022 re-analysis corrected an over-adjustment in the earlier figures and ranked **structured interviews highest** (a validity of about 0.42, against about 0.31 for cognitive ability tests and about 0.19 for unstructured interviews). Unstructured "chats" are less predictive and more prone to bias.
 
 Structure means:
 - **Standard questions/problems** per interview type, with known good, average and weak answers.
@@ -63,6 +63,25 @@ Example rubric for "system design" at senior level:
 
 Common biases: affinity/similarity, halo/horn, confirmation, first impressions, contrast (comparing to the previous candidate), and stereotypes. Mitigations: structure, rubrics, diverse panels, independent scoring, blind CV review for some stages, inclusive job ads (fewer "must haves", gender-neutral language), accessible processes and reasonable adjustments.
 
+### Worked example: a debrief where the evidence changed the decision
+
+A candidate for a senior backend role has four interviews. Before the debrief, the written feedback looks like a split decision:
+
+| Interviewer | Stage | Score | What they wrote first |
+|---|---|---|---|
+| A | Practical coding | 3 (Hire) | "Built a working CSV importer with tests. When asked to support a second format, refactored the parser behind an interface rather than adding conditionals." |
+| B | System design | 2 (Leaning no) | "Didn't come across as senior." |
+| C | Behavioural | 4 (Strong hire) | "Led the review of a payments incident: specific actions, numbers, what changed. Mentored two engineers to lead designs." |
+| D | Hiring manager | 1 (No hire) | "Not sure about culture fit." |
+
+The facilitator goes **by competency, not by interviewer**, and asks for evidence behind the two low scores:
+- **B's "didn't come across as senior"** is an impression, not evidence. Asked what the candidate actually did, B says the data model and API were good, but the candidate needed two prompts before considering what happens when the queue consumer fails. Against the rubric's anchors, that is a **2 on failure handling and a 3 on the rest of the design**: a real gap, but a narrow one.
+- **D's "culture fit"** turns out to mean the candidate disagreed with D about using a monorepo, and argued the case politely, with reasons. The values the company hires for include "disagree openly, then commit". That is **evidence for** the values bar, not against it. D withdraws the score.
+
+**Decision:** hire at senior, measured against the bar for the level rather than against the other candidate in the pipeline. The onboarding plan notes failure handling as something to develop, with a mentor who has run on-call for the queueing platform.
+
+**What the process changed:** without independent written feedback and an evidence-based discussion, the hiring manager's "no" would probably have decided it. The feedback after the debrief also went to B and D, so both now write evidence first and their verdict second.
+
 ## How It Works
 
 ```mermaid
@@ -75,6 +94,34 @@ flowchart LR
   F --> G["Offer and close: fast, transparent"]
   G --> H["Onboarding and 90-day check: was the decision right?"]
   H -->|"quality-of-hire data"| A
+```
+
+### A debrief, step by step
+
+```mermaid
+sequenceDiagram
+  participant I as Interviewers
+  participant T as Hiring tool
+  participant F as Facilitator
+  participant H as Hiring manager
+  %% step: Each interviewer submits a score per competency with written evidence, alone and within 24 hours, while their memory is fresh.
+  %% step: The tool only shows other people's feedback after you've submitted your own. Reading others first anchors your judgement, even when you don't mean it to.
+  %% step: Before the meeting, the facilitator (a bar-raiser or the hiring manager) reads all the feedback and maps the evidence to the role's competencies, noting where it agrees and where it conflicts.
+  %% step: The debrief opens with the most junior interviewer, then goes up in seniority. Senior people speaking first is the most common way debriefs become groupthink.
+  %% step: Interviewers give their evidence one competency at a time, rather than each reciting their whole interview.
+  %% step: Where scores conflict, the facilitator asks what exactly the candidate said or did. Conflicts are resolved by looking at the evidence, not at who holds the opinion.
+  %% step: Vague or coded language, such as "not a culture fit" or "didn't seem confident", is challenged and turned into specific evidence, or set aside.
+  %% step: The hiring manager decides against the bar for the level and role, not against other candidates in the pipeline. The level is decided separately if the evidence points to a different one.
+  %% step: The decision, level, rationale and any onboarding notes are recorded. Interviewers whose signal was off get feedback, which is how calibration improves over time.
+  I->>T: Submit scores and evidence, each alone
+  T-->>I: Others' feedback visible only after submitting
+  F->>T: Read all feedback, map evidence to competencies
+  F->>I: Open the debrief, most junior first
+  I->>F: Evidence, one competency at a time
+  F->>I: Conflict: what exactly did the candidate do?
+  F->>I: Challenge vague language
+  H->>F: Decide against the bar for the level
+  F->>T: Record decision, level, rationale and notes
 ```
 
 ## When to Use / Trade-offs
@@ -154,7 +201,7 @@ Definition, rubrics, independent scoring, and the evidence and fairness rational
 - Lead with the impact and the problems they'll work on, the team and the tech.
 - Keep **requirements short** — long lists deter qualified candidates (particularly those who apply only when they meet every point).
 - Use inclusive language; mention flexibility, accessibility and adjustments.
-- Include **salary range** and location/remote policy — transparency improves applications and saves time.
+- Include **salary range** and location/remote policy — transparency improves applications and saves time. In some places it's the law: several US states require ranges in job ads, and the EU Pay Transparency Directive (due in national law by June 2026) requires employers to give pay ranges before interview and bans asking about salary history.
 - Describe the interview process so candidates can prepare.
 
 **What the interviewer is looking for:**
@@ -500,6 +547,167 @@ Aligning assessment with real work, clear rules, emphasis on judgement and under
 - Ignoring the issue.
 - Blanket bans that don't reflect the job.
 
+### How do you write useful interview feedback? {#writing-interview-feedback}
+
+**Level:** Foundation
+
+**Model answer:**
+Feedback is the **only record** the debrief has of your interview. Its job is to let someone who wasn't there judge the candidate against the rubric.
+
+Structure it as:
+1. **Score per competency**, using the rubric's scale, and an overall recommendation.
+2. **Evidence for each score:** what the candidate said and did, as close to verbatim as you can. "Asked about expected traffic and read/write ratio before drawing anything", not "good at requirements".
+3. **What was missing** at the level, with the same specificity: "Didn't consider what happens if the payment provider times out, even when prompted once."
+4. **How much help you gave**, because a solution reached after three hints means something different from one reached alone.
+5. **Open questions** for the debrief or later interviews: "I didn't get to probe their testing approach."
+
+Practical habits:
+- **Take notes during the interview**, and write the feedback the same day, before you've talked to anyone else about the candidate.
+- **Evidence first, verdict last.** If you write "strong hire" first, you'll select evidence to fit it.
+- **Leave out** things unrelated to the job: appearance, accent, age, family, where they went to school, and "would I like to work with them". These are where bias gets in, and in many countries they create legal risk.
+- **Write as if the candidate might read it.** Under data-protection law in the UK and EU, candidates can request their personal data, which can include interview notes.
+
+**What the interviewer is looking for:**
+Scores tied to competencies, specific observable evidence, noting gaps and help given, timeliness, and excluding irrelevant or biased content.
+
+**Follow-ups:**
+- How would you rewrite "seemed a bit junior"?
+- Why should feedback be written before the debrief?
+
+**Red flags:**
+- One-line feedback such as "solid, hire".
+- Comments about personality or appearance instead of the job's competencies.
+
+### How do you run reference checks that add signal? {#reference-checks}
+
+**Level:** Senior
+
+**Model answer:**
+Most reference checks add almost nothing: the candidate picks people who'll praise them, and the questions invite generic praise. Done well, they **test specific things the interviews left uncertain**.
+
+- **Decide what you want to learn first.** Use the debrief's open questions: "Was the cross-team migration really led by the candidate?" "How do they handle being overruled?"
+- **Ask for the right referees:** a former manager, and a peer or someone they managed, for scope and leadership roles. Ask the candidate's permission, and never contact a current employer without explicit consent.
+- **Ask behavioural, comparative questions:**
+  - "What was their specific role in the migration? Who else was involved?"
+  - "Compared with other senior engineers you've worked with, where would you put them, and why?"
+  - "What would they need from a manager to do their best work?"
+  - "If you could hire them again into the same team, would you? Why?"
+- **Listen for hesitation and faint praise**, and follow it up politely. A referee who says "they were fine" about someone they managed for two years is telling you something.
+- **Know the limits:** many companies only confirm dates and job title, for legal reasons. A lack of detail is not a negative signal in itself.
+- **Use references as one input.** They can confirm or raise questions about evidence from the interviews, but shouldn't override a strong structured process on their own. If a reference raises a serious concern, investigate further rather than silently rejecting.
+
+**What the interviewer is looking for:**
+Targeting uncertainties from the interviews, choosing referees for scope, behavioural and comparative questions, consent and legal limits, and weighting references sensibly.
+
+**Follow-ups:**
+- A referee is lukewarm, but the interviews were strong. What do you do?
+- Why not check references before the interviews?
+
+**Red flags:**
+- "References are a formality."
+- Calling a current employer without the candidate's consent.
+
+### How do you make an offer and close a strong candidate? {#closing-offers}
+
+**Level:** Senior
+
+**Model answer:**
+**Closing starts at the first call**, not at the offer. By the offer stage, you should already know what the candidate cares about, which other processes they're in and their timeline.
+
+**Before the offer:**
+- **Ask early and keep asking:** "What would make this the right move for you?" "What are you weighing it against?" Typical answers are scope, growth, the team, the problem, compensation, flexibility and stability.
+- **Sell throughout the loop:** interviewers who are prepared, enthusiastic and honest about challenges are the strongest argument for joining.
+
+**The offer itself:**
+- **Move fast.** Aim to decide within 48 hours of the final interview, and call with the offer rather than emailing it.
+- **Make it clear and complete:** level, salary, bonus, equity (with a worked example of what it might be worth, and its vesting schedule), benefits, start date and flexibility.
+- **Pay fairly within the band** for the level, rather than in proportion to how hard the candidate negotiates. Paying different people different amounts for the same work causes resentment later and, in many places, legal risk. Some jurisdictions, including those implementing the EU Pay Transparency Directive, ban asking about salary history.
+- **Explain the level decision** if it's lower than they expected, and what growing to the next level would take.
+
+**After the offer:**
+- **Connect them with people:** their future manager, a peer, someone who joined recently, or a senior leader for senior hires.
+- **Handle competing offers** on substance. Compare scope, growth and the team, as well as money. If you can't match, say so honestly.
+- **Set a reasonable deadline** (about a week) and avoid exploding offers, which damage trust and your reputation.
+- **Keep in touch** between acceptance and start date. Candidates who go quiet are often reconsidering.
+
+**What the interviewer is looking for:**
+Understanding motivations early, speed, clear and fair offers within bands, honest handling of competing offers, and continuing contact until the start date.
+
+**Follow-ups:**
+- A candidate asks you to match a competitor's offer that is above your band. What do you do?
+- How do you explain a down-level to a candidate?
+
+**Red flags:**
+- Exploding offers with 24-hour deadlines.
+- Paying whatever is needed to close, outside the band.
+
+### How do you protect remote hiring against candidate fraud? {#candidate-fraud}
+
+**Level:** Architect
+
+**Model answer:**
+Remote hiring has made **identity and skill fraud** a real risk. Examples include proxy interviewers sitting the interview for someone else, AI-generated answers read out in real time, and impersonation with stolen identities. In 2022 the FBI warned of deepfake video and stolen personal data being used in remote job interviews. Since 2024, the US Department of Justice has brought repeated cases against schemes in which North Korean IT workers used stolen or fake identities to be hired remotely, sending the salaries to the North Korean government and sometimes stealing data.
+
+**Defences across the funnel**, proportionate and respectful to genuine candidates:
+- **Screening:** look for inconsistencies between the CV, LinkedIn history, the candidate's voice and video, and references, such as brand-new profiles with impressive histories or the same phone number on several applications.
+- **Interviews:** keep the camera on, and ask candidates to **explain and modify** their own work, or follow up on details of their past projects. Rehearsed or proxied answers fall apart quickly when the conversation goes off script.
+- **Identity checks:** verify identity documents against the person on video before the offer, using a specialist verification service where appropriate. For high-risk roles, hold at least one stage in person, or check identity in person on the first day.
+- **Consistency checks:** make sure the person who interviewed is the person who starts. Compare the voice and video from interviews with onboarding.
+- **Onboarding controls:** ship laptops only to the verified address, not to a forwarding address. Watch for remote-access tools, VPN use that hides location, and unusual access patterns in the first weeks. Grant **least-privilege access** that grows with tenure.
+- **Payroll and compliance:** check bank accounts and tax details against the verified identity, and check sanctions requirements.
+
+**Balance:** most candidates are genuine. Explain the checks and why they exist, apply them consistently rather than to people who "seem suspicious" (which invites bias), and keep identity data only as long as necessary, in line with data-protection law.
+
+**What the interviewer is looking for:**
+Awareness of real fraud patterns, defences at every stage from screening to payroll, security controls during onboarding, and fairness, consistency and privacy in how checks are applied.
+
+**Follow-ups:**
+- How would you detect a proxy interviewer during a technical interview?
+- Who should own these controls: recruiting, security or the hiring manager?
+
+**Red flags:**
+- Assuming fraud is too rare to worry about for a fully remote team.
+- Checks applied only to candidates who "seem suspicious".
+
+### Should you use AI tools to screen CVs or assess candidates? {#ai-in-hiring-decisions}
+
+**Level:** Architect
+
+**Model answer:**
+AI can reduce recruiters' workload, but using it to **decide** who progresses is high-risk for fairness, legal compliance and candidate trust. It needs strong safeguards.
+
+**Where the risks come from:**
+- **Learned bias:** models trained on past hiring decisions reproduce past patterns. Amazon scrapped an experimental CV-ranking tool, reported in 2018, after it learned to downgrade CVs that mentioned women's organisations.
+- **Opaque reasoning:** if you can't explain why a candidate was rejected, you can't check it's fair or job-related, or answer the candidate.
+- **Proxies:** even without protected characteristics, models can use proxies for them, such as names, gaps in employment, postcodes or universities.
+
+**The law increasingly applies:**
+- **New York City Local Law 144** (enforced since July 2023) requires an independent annual bias audit of automated employment decision tools, public results and notice to candidates.
+- The **EU AI Act** classes AI used to screen, rank or evaluate candidates as **high-risk**, with obligations for human oversight, transparency to candidates, logging and data quality. Check which obligations apply from which date.
+- **GDPR (Article 22)** restricts decisions based solely on automated processing that significantly affect people, and gives candidates rights to information and human review.
+
+**Lower-risk uses**, with humans deciding:
+- Drafting inclusive job ads and interview question banks, which people then review.
+- Scheduling, summarising logistics and answering candidates' process questions.
+- Helping interviewers **structure their notes** into the rubric, without generating scores.
+
+**If you do use AI in screening or assessment:**
+- Define what it assesses, and check it's job-related and consistent with the role profile.
+- **Audit it for adverse impact** before use and regularly afterwards, comparing pass rates across groups.
+- Keep a **human decision-maker** who can and does override it, and tell candidates how AI is used, with a way to ask for human review.
+- Prefer vendors who give you audit results and documentation, and test it on your own data.
+
+**What the interviewer is looking for:**
+The bias and explainability risks with real examples, awareness of NYC Local Law 144, the EU AI Act and GDPR Article 22, lower-risk uses, and safeguards such as audits, human decisions and transparency.
+
+**Follow-ups:**
+- A vendor says their tool is "bias-free". What would you ask them?
+- How would you test a screening tool for adverse impact?
+
+**Red flags:**
+- Auto-rejecting candidates on an AI score.
+- "The vendor handles compliance."
+
 ## Cheat Sheet
 
 - **Role profile first** — outcomes at 6/12 months, level, prioritised competencies, explicit non-requirements.
@@ -517,10 +725,21 @@ Aligning assessment with real work, clear rules, emphasis on judgement and under
 - **Interviewer calibration** — shadow, reverse-shadow, score shared recordings, review feedback quality.
 - **AI in interviews** — clear rules per stage; assess judgement, review and explanation.
 
+### Revisit
+
+- **Evidence over impressions** — "didn't seem senior" isn't evidence. Ask what the candidate actually said or did, scored against the rubric.
+- **Debrief order** — independent feedback first, the most junior speaks first, then discuss by competency and decide against the bar for the level.
+- **Useful feedback** — a score per competency, near-verbatim evidence, what was missing, how much help was given, and open questions.
+- **Reference checks** — target the interviews' open questions, use behavioural and comparative questions, and get the candidate's consent.
+- **Closing** — learn motivations from the first call, offer fast and complete within the band, and keep in touch until the start date.
+- **Candidate fraud** — proxies, deepfakes and stolen identities. Verify identity before the offer, probe candidates' own work, and control onboarding access.
+- **AI in hiring decisions** — high-risk under the EU AI Act; NYC Local Law 144 requires bias audits. Keep humans deciding and audit for adverse impact.
+
 ## Further Reading
 
 - [Google re:Work: A guide to structured interviewing](https://rework.withgoogle.com/intl/en/guides/a-guide-to-structured-interviewing-for-better-hiring-practices) — practical guidance and rationale.
 - [Schmidt & Hunter (1998): The validity and utility of selection methods](https://doi.org/10.1037/0033-2909.124.2.262) — the classic meta-analysis on selection methods (later updated with revised estimates).
 - [Lara Hogan's blog](https://larahogan.me/blog/) — practitioner writing on management, including interviewing and team building.
 - [The Manager's Path (Camille Fournier)](https://www.oreilly.com/library/view/the-managers-path/9781491973882/) — hiring and team-building from an engineering manager's perspective.
-- [ACAS: Recruiting staff](https://www.acas.org.uk/recruiting-someone) — UK guidance on fair, lawful recruitment (check local law in other jurisdictions).
+- [Sackett et al. (2022): Revisiting meta-analytic estimates of validity in personnel selection](https://doi.org/10.1037/apl0000994) — the re-analysis that ranks structured interviews first.
+- [Acas: Hiring someone](https://www.acas.org.uk/hiring-someone) — UK guidance on fair, lawful recruitment (check local law in other jurisdictions).
