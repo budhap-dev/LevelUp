@@ -5,6 +5,7 @@ import type { Group } from '@/lib/content/schema';
 import { useProgress } from '@/lib/progress/react';
 import { STATE_LABEL, StatusGlyph, StatusLabel } from '@/components/TopicStatusIcon';
 import { Icon, type IconName } from '@/components/Icon';
+import { groupIcon } from '@/components/groupIcons';
 import { useDueCounts } from '@/lib/srs/useDueCounts';
 import { VersionFooter } from './VersionFooter';
 
@@ -24,19 +25,6 @@ const LIBRARY: NavItem[] = [
   { to: '/glossary', label: 'Glossary', icon: 'glossary' },
   { to: '/bookmarks', label: 'Bookmarks', icon: 'bookmark' },
 ];
-
-const GROUP_ICON: Record<string, IconName> = {
-  'languages-frontend': 'code',
-  'backend-apis': 'server',
-  data: 'database',
-  'cloud-devops': 'cloud',
-  'architecture-design': 'network',
-  'quality-security': 'shield',
-  ai: 'sparkles',
-  delivery: 'rocket',
-  'product-business': 'target',
-  'leadership-people': 'users',
-};
 
 /** Row look shared by links and group toggles: soft fill on hover, accent fill when active, slight press. */
 const rowClass = (active: boolean) =>
@@ -123,7 +111,7 @@ function GroupSection({ group, open, onToggle }: { group: Group; open: boolean; 
   return (
     <>
       <button type="button" aria-expanded={open} aria-controls={panelId} onClick={onToggle} className={rowClass(false)}>
-        <RowIcon name={GROUP_ICON[group.id] ?? 'folder'} active={containsActive} />
+        <RowIcon name={groupIcon(group.id)} active={containsActive} />
         <span className={`flex-1 truncate ${containsActive ? 'font-medium text-fg' : ''}`}>{group.title}</span>
         <span aria-hidden="true" className="text-xs text-muted tabular-nums">
           {learned > 0 ? `${learned}/${topics.length}` : topics.length}
