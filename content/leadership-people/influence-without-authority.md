@@ -6,7 +6,7 @@ tags: [leadership, staff-engineer, communication]
 level: Architect
 estimatedMinutes: 45
 related: [stakeholder-management, technical-strategy, leadership]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-27
 status: complete
 ---
 
@@ -88,6 +88,24 @@ A good RFC or design doc includes:
 
 Will Larson's archetypes (Tech Lead, Architect, Solver, Right Hand) and Tanya Reilly's "big-picture thinking, project execution, levelling up others" both put influence at the centre. Your output is measured by the organisation's outcomes, not your own commits.
 
+### Worked example: mapping the stakeholders for one RFC
+
+The workload identity RFC above needs four teams to change how their services authenticate. Before writing more than the problem statement, the author maps the people it affects:
+
+| Stakeholder | Measured on | What they fear | What would make them support it | Approach |
+|---|---|---|---|---|
+| Security lead | Audit findings closed, incidents | That it slips like the last secrets project | A date, and owners for each service | Ally. Ask them to co-sponsor and present the audit risk |
+| Payments tech lead | Payment success rate, PCI compliance | An outage during migration on the most critical path | A tested rollback, and migrating last with the playbook proven | Sceptic with a legitimate fear. Meet first, and change the plan around their concern |
+| Platform lead | Paved-road adoption, team capacity | Owning a library they didn't plan for | Headcount, or reusing their existing identity broker | Co-author. The solution should be built on their component |
+| Identity team | Login availability | Scope creep into end-user authentication | The explicit non-goal in the RFC | Inform. Confirm the non-goal in writing |
+
+What the map changed:
+- **The order of conversations:** the Payments lead first, because they're the most influential sceptic, then Platform, whose capacity decides the date.
+- **The proposal itself:** payments migrates **last**, after three lower-risk services have proven the playbook, and Platform's existing broker replaces the new library originally planned. Both changes are credited to the people who suggested them.
+- **The framing:** for Payments, the RFC leads with "removes the shared secret that appears in your PCI audit scope". For Platform, it leads with "adoption of the broker you already run".
+
+The map takes an hour, and it's usually the difference between a meeting that confirms a decision and one that starts a three-month argument.
+
 ## How It Works
 
 ```mermaid
@@ -102,6 +120,33 @@ flowchart LR
 ```
 
 Every successful cycle increases your credibility for the next one. Influence compounds.
+
+### Pre-wiring the RFC, step by step
+
+```mermaid
+sequenceDiagram
+  participant A as Author
+  participant S as Security lead
+  participant P as Payments tech lead
+  participant L as Platform lead
+  participant F as Architecture forum
+  %% step: The author starts with the natural ally. The Security lead agrees the problem is real and offers to co-sponsor, bringing the audit finding as evidence.
+  %% step: Next, the most influential sceptic. The author shares a one-page draft with the Payments tech lead before anyone else sees it, and asks what would worry them.
+  %% step: The Payments lead's concern is specific: an authentication outage during migration would stop card payments. It's a legitimate fear, not obstruction.
+  %% step: The author changes the plan, with payments migrating last after the playbook is proven, and credits the change to the Payments lead in the document.
+  %% step: The Platform lead's capacity decides the timeline. The author asks whether the existing identity broker could be used instead of a new library.
+  %% step: The Platform lead agrees to co-author, on condition that the date moves by three weeks. The author accepts: a later date with an owner beats an earlier one without.
+  %% step: The RFC goes to the architecture forum with the problem, the options, a recommendation, and the names of the people who shaped it.
+  %% step: Nobody is surprised. The forum asks two questions about rollback, which the Payments lead answers, and approves it. The meeting ratifies a decision that was made in the conversations before it.
+  A->>S: Is this problem real for you?
+  A->>P: One-page draft: what would worry you?
+  P-->>A: An outage on the payment path
+  A->>A: Payments migrates last, credited to P
+  A->>L: Can we build on your existing broker?
+  L-->>A: Yes, as co-author, three weeks later
+  A->>F: RFC with options, recommendation and co-authors
+  F-->>A: Two questions, then approved
+```
 
 ## When to Use / Trade-offs
 
@@ -524,6 +569,161 @@ Understanding underlying goals, criteria-based decisions, evidence, reversibilit
 - Letting it drag on to avoid conflict.
 - Deciding by seniority or volume.
 
+### What are "currencies" in the Cohen–Bradford influence model, and how do you use them? {#influence-currencies}
+
+**Level:** Foundation
+
+**Model answer:**
+Allan Cohen and David Bradford's model, from *Influence Without Authority*, treats influence as **exchange**. People cooperate when they get something they value in return, now or later. The things people value are "currencies", and they differ from person to person:
+
+| Currency type | Examples in engineering |
+|---|---|
+| Inspiration | Being part of something meaningful: "this removes our biggest outage risk" |
+| Task | Help with their work: lending an engineer, doing the first migration, unblocking a dependency |
+| Position | Recognition and visibility: credit in a leadership update, presenting the result, a role in the decision |
+| Relationship | Being listened to, inclusion, personal support |
+| Personal | Learning, ownership, sense of competence: "you'd own the shared library" |
+
+Using the model:
+1. **Treat the other person as a potential ally**, not an obstacle.
+2. **Understand their world:** their goals, pressures and what they're measured on.
+3. **Work out which currencies they value**, and which ones you can offer. An overloaded tech lead values task help; a newly promoted one may value visibility.
+4. **Know what you need from them**, specifically.
+5. **Build the relationship before you need it**, so there's goodwill to draw on.
+6. **Make the exchange**, honestly and in a way that's good for both sides.
+
+It isn't transactional bargaining. Most exchanges are implicit and generous ("I'll review your RFC"), and they build a reputation that makes future cooperation easier. Offering only your own currency, such as technical elegance to someone who cares about delivery dates, is the most common way influence fails.
+
+**What the interviewer is looking for:**
+Influence as exchange, the types of currencies, matching currencies to the person, and building relationships before they're needed.
+
+**Follow-ups:**
+- Which currencies does a product manager usually value?
+- When does exchange become inappropriate?
+
+**Red flags:**
+- Only ever offering arguments about technical quality.
+- Treating influence as a series of explicit trades.
+
+### How do you build influence in a remote or async-first organisation? {#remote-influence}
+
+**Level:** Senior
+
+**Model answer:**
+Remote work removes the **corridor**: the chance conversations, lunches and meeting-room moments where relationships form and ideas get socialised. Influence has to be built deliberately.
+
+- **Write well, and often.** Documents are how ideas travel in remote organisations. Short, clear RFCs, weekly notes on what you've learned, and decisions written with their reasoning. Good writing builds credibility with people who've never met you.
+- **Schedule the relationships.** Regular 1:1s with peers in other teams, not only when you need something. A 25-minute call every month or two keeps relationships warm.
+- **Pre-wire asynchronously, then synchronously.** Share the draft for comments, then talk to the key people on a call. Some concerns are only raised out loud.
+- **Be visible in useful ways:** answer questions in public channels, review other teams' RFCs thoughtfully, give talks or demos. Help that others can see compounds.
+- **Over-communicate context.** Remote readers can't ask a quick follow-up, so explain the why, the trade-offs and what you need from whom.
+- **Mind time zones:** rotate meeting times, record decisions in writing, and leave review windows that suit people in other regions. Otherwise the same time zone always wins.
+- **Meet in person when it matters most:** planning sessions or the start of a big initiative are worth a trip. A day together can build months of trust.
+
+**What the interviewer is looking for:**
+Recognising what remote work removes, writing as the main channel, deliberate relationship building, async-then-sync pre-wiring, and fairness across time zones.
+
+**Follow-ups:**
+- How do you notice resistance when you can't read the room?
+- How would you build a relationship with a team lead you've never met?
+
+**Red flags:**
+- Relying on large video meetings to make decisions.
+- Only contacting people when you need something.
+
+### You pushed a decision through and damaged your relationship with another team's lead. How do you repair it? {#repairing-relationships}
+
+**Level:** Senior
+
+**Model answer:**
+Relationships are the main asset of anyone who works through influence. A win that costs one is often a net loss, so repair it deliberately.
+
+1. **Own your part specifically,** in private and soon: "I pushed the event schema decision through the forum without giving your concerns a proper hearing, and I didn't pre-wire you. That wasn't fair to you." Separate the decision, which may still be right, from how you got there.
+2. **Listen properly:** ask what the impact was for them and their team, and don't defend yourself while they answer. There may be costs you didn't know about.
+3. **Fix what you can:** if the decision created real problems for them, offer concrete help, such as engineering time for their migration, an adjustment to the rollout, or a revisit trigger in the ADR.
+4. **Change the process, not just the apology:** agree how you'll work together on future decisions ("I'll share drafts with you before they go to the forum").
+5. **Rebuild through reliability:** small commitments kept over the following weeks repair trust more than any conversation. Credit their team publicly where they've contributed.
+6. **Be patient:** trust comes back slower than it was lost. Don't push them for reassurance.
+
+**What the interviewer is looking for:**
+Specific ownership without abandoning a sound decision, listening, practical help, a changed way of working, and rebuilding trust over time.
+
+**Follow-ups:**
+- What if they want the decision reversed as the price of repair?
+- How would you know the relationship has recovered?
+
+**Red flags:**
+- "The decision was right, so the relationship will sort itself out."
+- A vague apology with no change in behaviour.
+
+### Your executive sponsor leaves halfway through a cross-organisation initiative. How do you keep it alive? {#losing-sponsor}
+
+**Level:** Architect
+
+**Model answer:**
+Sponsor changes are one of the most common reasons large initiatives die. Teams quietly deprioritise the work as soon as nobody senior is asking about it.
+
+**Immediately:**
+- **Assess where it stands:** what's done, what value has already been delivered, what's committed, and what depends on the sponsor's authority (budget, capacity in team roadmaps, an exceptions process).
+- **Find out what the departing sponsor will do before leaving:** a handover to their successor or a peer, and a message confirming the commitments.
+- **Steady the teams:** tell the teams doing the work what's happening and what stays the same, before rumours fill the gap.
+
+**Win a new sponsor:**
+- **Reframe it for the new leader's priorities.** The new person has their own goals and will judge inherited initiatives against them. Show how this work serves them, with results so far.
+- **Bring evidence, not history:** metrics on what's already improved, the cost of stopping, and the remaining plan.
+- **Offer options:** continue as planned; narrow the scope to the highest-value part; or pause cleanly at a stable point. Make it easy to say yes to something.
+
+**Make it less dependent on one person:**
+- Build **broader ownership** among directors and tech leads whose teams benefit.
+- Put commitments into **durable mechanisms** such as quarterly planning, engineering standards and ADRs, rather than one leader's attention.
+
+**Be ready to stop:** if the new leader decides it isn't a priority, wind it down properly. Finish or roll back half-migrated systems, document the state and the lessons, and avoid leaving teams with two ways of doing everything.
+
+**What the interviewer is looking for:**
+Quick assessment, a handover, steadying the teams, reframing for the new sponsor with evidence and options, embedding commitments in mechanisms, and stopping cleanly if needed.
+
+**Follow-ups:**
+- How would you design an initiative to survive a sponsor change from the start?
+- The new VP wants to cancel it. What do you say?
+
+**Red flags:**
+- Carrying on as if nothing has changed.
+- Leaving half-migrated systems when an initiative stops.
+
+### Where is the line between influence and manipulation? {#influence-vs-manipulation}
+
+**Level:** Architect
+
+**Model answer:**
+The techniques can look similar: framing, pre-wiring, building coalitions, timing. The difference is **honesty, transparency and whose interests are served**.
+
+| Influence | Manipulation |
+|---|---|
+| Shares the full picture, including the weaknesses of your proposal | Hides the downsides or the options you don't like |
+| Frames honestly in the other person's terms | Exploits fears or misleads about consequences |
+| Tells everyone the same story, adjusted for emphasis | Tells different people contradictory things |
+| Changes the proposal in response to feedback | Collects objections only to neutralise them |
+| Decides in the open, with dissent recorded | Engineers decisions so others can't object |
+| Serves the organisation's goals | Serves personal status at others' expense |
+
+Tests I use:
+- **The disclosure test:** would I be comfortable if everyone involved saw all my conversations and notes about this decision?
+- **The reversal test:** if someone used these tactics on me, would I feel informed or played?
+- **The options test:** did I present the alternatives fairly, including doing nothing?
+
+Senior people get good at persuasion, which makes it more important to use it honestly. Credibility is the foundation of all influence, and one discovered manipulation can destroy years of it. Politics in itself isn't bad: it's how groups with different interests reach decisions. The question is whether you take part openly.
+
+**What the interviewer is looking for:**
+A clear distinction based on honesty, transparency and interests, practical tests, and the recognition that credibility is the asset at stake.
+
+**Follow-ups:**
+- Is it manipulative to time a proposal for after a big incident?
+- How do you respond when someone is manipulating a decision?
+
+**Red flags:**
+- "All politics is manipulation, so I stay out of it."
+- Telling different stakeholders different stories about the same proposal.
+
 ## Cheat Sheet
 
 - **Influence foundations** — credibility, relationships, framing; build them before you need them.
@@ -540,10 +740,20 @@ Understanding underlying goals, criteria-based decisions, evidence, reversibilit
 - **Executive framing** — impact, likelihood, cost, options and a recommendation on one page, with the decision needed by a date.
 - **Revisit triggers** — agree in advance the evidence that would reopen a decision, so dissent becomes a testable hypothesis.
 
+### Revisit
+
+- **Stakeholder map** — for each person: what they're measured on, what they fear, what would make them support it, and how to approach them.
+- **Order of pre-wiring** — allies first for evidence, then the most influential sceptic, then whoever controls the capacity or date.
+- **Influence currencies** — inspiration, task, position, relationship and personal (Cohen and Bradford). Offer what the other person values.
+- **Remote influence** — writing is the main channel; schedule relationships, pre-wire async then live, and rotate time zones.
+- **Repairing a relationship** — own your part specifically, listen, fix what you can, change the process and rebuild through reliability.
+- **Losing a sponsor** — assess, get a handover, steady the teams, reframe for the new leader with evidence and options, or stop cleanly.
+- **Influence vs manipulation** — the same story to everyone, the downsides disclosed, open decisions. Would you be comfortable if everyone saw your notes?
+
 ## Further Reading
 
 - [StaffEng guides](https://staffeng.com/guides/) — Will Larson's guides on operating as a Staff+ engineer.
 - *The Staff Engineer's Path*, Tanya Reilly (O'Reilly) — big-picture thinking, execution and levelling up others.
 - *Influence Without Authority*, Allan R. Cohen & David L. Bradford — the reciprocity ("currencies") model.
 - [Google re:Work: psychological safety](https://rework.withgoogle.com/intl/en/guides/understand-team-effectiveness) — research on what makes teams effective.
-- [Amazon leadership principles](https://www.amazon.jobs/content/en/our-workplace/leadership-principles) — origin of "disagree and commit".
+- [Amazon leadership principles](https://www.amazon.jobs/content/en/our-workplace/leadership-principles) — popularised "disagree and commit", a phrase usually traced to Intel under Andy Grove.

@@ -6,7 +6,7 @@ tags: [mentoring, growth]
 level: Senior
 estimatedMinutes: 30
 related: [people-management, leadership]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-27
 status: complete
 ---
 
@@ -52,6 +52,25 @@ Good mentors move between modes deliberately. Default to coaching questions, giv
 - **Stretch assignments:** slightly beyond current ability, with a safety net. Agree checkpoints, be available, don't take over.
 - **Design and incident reviews:** invite mentees to present and run them, and debrief afterwards.
 
+### Worked example: a six-month mentoring plan
+
+Priya, a mid-level engineer, wants to lead a cross-team design. That's the clearest gap between her and senior in the career framework. Her mentor, a staff engineer in another team, agrees a plan with her in the first session:
+
+| Month | Practice on real work | Mentor's main mode | Evidence of progress |
+|---|---|---|---|
+| 1 | Read three strong past design docs; write a one-page critique of one | Mentoring: share what makes them work | Spots the missing failure analysis in one of them unprompted |
+| 2 | Co-write the design for a small change with her tech lead | Coaching: "What would the reviewers ask first?" | Her sections need one review round instead of three |
+| 3 | Lead the design for a feature inside her own team | Coaching, plus feedback on the draft | Approved; the team's review comments are about trade-offs, not gaps |
+| 4 | Pre-wire and lead a design touching two teams | Sponsoring: the mentor asks her manager to give her this project | The other team's lead accepts it after one meeting |
+| 5 | Present it at the architecture forum | Rehearsal, then stepping back | Handles a hard question about rollback calmly |
+| 6 | Review the cycle; write her own brag-document entry | Feedback both ways | Her manager cites the design in her promotion case |
+
+What made it work:
+- **One concrete goal**, chosen by Priya, with each month building on the last.
+- **Real work every month**, not reading lists. The sessions were spent preparing for and debriefing the work.
+- **The mode changed over time:** advice early, questions in the middle, sponsorship once she was ready for a visible opportunity, then stepping back.
+- **Evidence was observable**, so both of them could tell whether it was working, and so could her manager.
+
 ## How It Works
 
 ```mermaid
@@ -69,6 +88,34 @@ flowchart LR
 ```
 
 A good one-to-one rhythm: start with what's on the mentee's mind, then review the action from last time, work through one topic in depth (often by coaching questions), agree one concrete action and finish with feedback on the session itself.
+
+### A stretch assignment, step by step
+
+```mermaid
+sequenceDiagram
+  participant M as Mentor
+  participant E as Mentee
+  participant G as Mentee's manager
+  participant S as Stakeholders
+  %% step: The mentor sponsors the mentee for a cross-team design, explaining to the manager why she's ready and what support she'll have. The manager owns the assignment, so the decision is theirs.
+  %% step: The manager offers the assignment and frames it explicitly as a stretch: what success looks like, why she was chosen, and that wobbles are expected.
+  %% step: The mentee shares her plan early. The mentor asks questions ("Who will object first, and why?") rather than rewriting it.
+  %% step: The mentee pre-wires the stakeholders herself. The mentor has given a heads-up to one sceptical lead so she gets a fair hearing, but doesn't do the conversations for her.
+  %% step: Halfway through, a stakeholder pushes back hard and the mentee is discouraged. She brings it to her mentoring session.
+  %% step: The mentor coaches instead of taking over: "What's the concern underneath the objection? What would need to be true for them to support it?" The mentee decides her own next step.
+  %% step: The mentee presents the revised design, and it's approved.
+  %% step: The mentor makes the work visible, crediting the mentee by name in the leadership update. Sponsorship continues after the assignment ends.
+  %% step: They debrief together: what worked, what she'd change, and what the next stretch could be.
+  M->>G: Sponsors her for the cross-team design
+  G->>E: Offers it, framed as a stretch
+  E->>M: Shares her plan early
+  E->>S: Pre-wires the stakeholders herself
+  S-->>E: Pushes back hard
+  M->>E: Coaching questions, not a rescue
+  E->>S: Presents the revised design
+  M->>G: Credits her by name in the leadership update
+  M->>E: Debrief and the next stretch
+```
 
 ## When to Use / Trade-offs
 
@@ -487,6 +534,169 @@ Accurate description of both paths, coaching for motivation, safe experiments, t
 - Treating management as the natural next step for every senior engineer.
 - Steering people towards your own path.
 
+### How do you find a mentor and make the relationship useful as a mentee? {#finding-a-mentor}
+
+**Level:** Foundation
+
+**Model answer:**
+Most good mentoring relationships start with **a specific ask**, not "will you be my mentor?"
+
+**Finding one:**
+- **Start from your goal:** "I want to get better at leading designs across teams." Then look for people who visibly do that well, inside or outside your team.
+- **Look beyond your reporting line:** a mentor in another team can be more candid, and broadens your network.
+- **Start small:** ask for one 30-minute conversation about a specific question. If it's useful, ask whether they'd be open to meeting regularly for a few months.
+- **Use structures that exist:** company mentoring programmes, communities of practice, and external communities such as meet-ups or online groups for people with your background or path.
+- **Have several:** different people for different needs, such as a technical mentor, someone further along your career track, and a peer who's facing the same challenges.
+
+**Making it useful:**
+- **Own the agenda.** Bring a topic or a real situation to each session, and send it a day ahead.
+- **Bring real work:** a draft design, a difficult conversation you're planning, feedback you've received.
+- **Act and report back.** Try the advice, then tell your mentor what happened. Mentors invest more in people who use their time well.
+- **Ask for candid feedback,** and react to it with curiosity rather than defence.
+- **Review it every few months,** and end it gracefully when it has served its purpose.
+
+**What the interviewer is looking for:**
+Starting from a goal, a specific small ask, mentors outside the reporting line, several mentors, and mentee ownership of the agenda and follow-through.
+
+**Follow-ups:**
+- What would you do if your mentor's advice didn't fit your situation?
+- How do you approach someone very senior who doesn't know you?
+
+**Red flags:**
+- Waiting to be assigned a mentor.
+- Arriving at sessions with nothing to discuss.
+
+### What is reverse mentoring, and when is it useful? {#reverse-mentoring}
+
+**Level:** Senior
+
+**Model answer:**
+In **reverse mentoring**, a more junior person mentors someone more senior. It was popularised by Jack Welch at General Electric in 1999, when he paired executives with younger employees to learn about the internet.
+
+**Where it helps in engineering:**
+- **New tools and practices:** a junior engineer fluent in a new framework, or in using AI coding assistants well, mentors a staff engineer or manager.
+- **Perspective on the organisation:** a director learns what onboarding, on-call or the promotion process actually feels like from someone who went through it recently.
+- **Inclusion:** a leader learns about the experience of people from under-represented groups, which they can't see from their position. This needs particular care, because it asks people to share personal and sometimes painful experiences.
+
+**Making it work:**
+- **Make it voluntary on both sides**, with a clear purpose and a fixed period.
+- **Protect the junior mentor:** what they say must have no effect on their performance reviews, and they must not end up doing the senior person's learning for them. Agree confidentiality explicitly.
+- **The senior person must act like a mentee:** bring questions, listen, take the advice seriously and report back. If it turns into the senior person explaining things, it has failed.
+- **Recognise the mentor's contribution:** it's real work, and should count in their review.
+- **Use what's learned:** the most valuable result is often a change the senior person makes in the organisation, such as fixing an onboarding step or a biased process.
+
+**What the interviewer is looking for:**
+What it is, useful areas (new technology, the ground-level view, inclusion), protecting the junior mentor, the senior person genuinely acting as a mentee, and turning insight into change.
+
+**Follow-ups:**
+- What could go wrong in a reverse-mentoring pairing between a VP and a graduate?
+- How would you pick the topics?
+
+**Red flags:**
+- Using reverse mentoring as a token gesture with no follow-through.
+- Junior mentors exposed to retaliation for candour.
+
+### How do you use the GROW model in a coaching conversation? {#grow-model}
+
+**Level:** Senior
+
+**Model answer:**
+**GROW**, popularised by John Whitmore in *Coaching for Performance*, structures a conversation so the other person reaches their own plan:
+
+| Stage | Purpose | Example questions |
+|---|---|---|
+| **Goal** | What do they want from this conversation and beyond? | "What would a good outcome be by the end of this half hour?" |
+| **Reality** | What's actually happening now? Facts before interpretations | "What have you tried? What happened when you raised it? What's in your control?" |
+| **Options** | What could they do? Widen before narrowing | "What else could you do? What would you do if you weren't worried about upsetting them?" |
+| **Will** (or Way forward) | What will they do, and how committed are they? | "What's your first step, and when? On a scale of 1 to 10, how likely are you to do it?" |
+
+*A short example:* a mentee says their design reviews always run over and they feel they've lost control of them.
+- **Goal:** "I want to run the next one so it ends with a decision."
+- **Reality:** the questions show the meetings have 12 attendees, no pre-read, and the most senior person always reopens the problem statement.
+- **Options:** send a pre-read with the decision needed, trim the invitation list, pre-wire the senior person, or time-box each section.
+- **Will:** the mentee chooses to send a pre-read and meet the senior person beforehand, scores their commitment 8 out of 10, and agrees to report back.
+
+Tips:
+- **It isn't a script.** Conversations loop back. Reality often changes the goal.
+- **Resist jumping to Options** with your own ideas. If you do offer one, offer it as one of several, after theirs.
+- **A commitment score below about 7** usually means the plan is wrong or too big. Ask what would make it a 9.
+
+**What the interviewer is looking for:**
+The four stages and their purpose, good questions for each, a realistic example, and the discipline of letting the other person generate options and commit.
+
+**Follow-ups:**
+- When would you stop coaching and just give advice?
+- How do you coach someone who wants you to give them the answer?
+
+**Red flags:**
+- Using GROW as a way to lead someone to the mentor's preferred answer.
+- Skipping Reality and solving the wrong problem.
+
+### How do you support a newly promoted engineering manager in their first six months? {#supporting-new-managers}
+
+**Level:** Architect
+
+**Model answer:**
+The move from engineer to manager is a **change of job**, not a promotion within the same one, and most new managers get little support. Common struggles: still trying to be the best engineer on the team, avoiding difficult conversations, measuring their own days by output, and feeling isolated.
+
+**Before and at the start:**
+- **Make the job explicit:** what the manager is now accountable for (people's growth, hiring, delivery through others, team health) and what to stop doing.
+- **Hand over properly:** the previous manager or their own manager walks them through each person's goals, history and any open issues.
+- **Give them a manager-mentor** who isn't their own manager: an experienced manager in another area they can be candid with.
+
+**During the first months:**
+- **Rehearse the hard parts:** the first critical feedback conversation, the first underperformance case, saying no to a stakeholder. Role-play them in mentoring sessions.
+- **Teach the core practices:** effective 1:1s, delegation, feedback, running a debrief, and what good looks like in hiring and reviews.
+- **Peer cohorts:** groups of new managers meeting fortnightly with an experienced facilitator, working through real situations. They reduce isolation and spread good practice.
+- **Shadowing:** they sit in on an experienced manager's calibration or difficult conversation, with consent.
+
+**Watch for warning signs:** working evenings to keep coding, a team that routes every decision through them, avoided conversations, or their team's engagement dropping. Name them early and kindly.
+
+**Keep a way back:** make it normal to return to the IC track if management turns out not to be right, without it being seen as failure.
+
+**What the interviewer is looking for:**
+Treating it as a new job, explicit expectations, a mentor outside the reporting line, rehearsal of hard conversations, peer cohorts, early warning signs, and a respectable way back.
+
+**Follow-ups:**
+- The new manager is still the main contributor of code on their team. What do you say?
+- How do you know the support is working?
+
+**Red flags:**
+- "They'll learn on the job."
+- Measuring a new manager by their own technical output.
+
+### A mentee tells you something serious in confidence. Where are the limits of confidentiality? {#mentoring-confidentiality-limits}
+
+**Level:** Architect
+
+**Model answer:**
+Confidentiality is the foundation of mentoring: people only share real problems if they trust it stays private. But it **can't be absolute**, and the time to say so is **at the start**, not in the middle of a difficult conversation.
+
+**Set it up in the first session:** "What we discuss stays between us, unless you tell me something that means someone is at risk of harm, or that I'm required to report, such as harassment or a serious breach of the law. If that happens, I'll tell you before I do anything."
+
+**Situations and responses:**
+- **Planning to leave, or struggling with their manager:** this stays confidential. Help them think it through. Don't pass it to their manager, even with good intentions.
+- **Burnout or mental-health strain:** listen, take it seriously and encourage them to use support such as their GP, an employee assistance programme or occupational health. Ask what they'd like you to do. Only act without consent if you believe they're at risk of serious harm.
+- **Harassment or discrimination:** many companies require managers, and sometimes all leaders, to report it. Know your company's policy. Explain the options and what reporting would involve, and support them through it. If you're obliged to report, tell them first and involve them as much as possible.
+- **A serious security, safety or legal breach:** you can't keep it quiet. Encourage them to report it themselves, through whistleblowing channels if needed, and explain that you'll have to raise it if they don't.
+
+**Throughout:**
+- **Tell them before acting**, and explain why. Being surprised destroys trust even when the action was right.
+- **Share only what's necessary**, with the right people (HR, a specialist channel), not their manager by default.
+- **Don't investigate yourself.** That's the job of HR or the relevant function.
+- **Get advice:** HR or an ethics line can tell you what you must do without you naming anyone at first.
+
+**What the interviewer is looking for:**
+Setting limits at the start, distinguishing confidential matters from ones with a duty to act, knowing the company's policy, telling the mentee before acting, sharing only what's necessary, and not investigating personally.
+
+**Follow-ups:**
+- Your mentee asks you to promise never to tell anyone before they've told you anything. What do you say?
+- How do you handle this if the mentee's manager is your close friend?
+
+**Red flags:**
+- Promising absolute confidentiality.
+- Quietly telling the mentee's manager "for their own good".
+
 ## Cheat Sheet
 
 - **Mentor vs coach vs sponsor** — share experience vs ask questions vs use your influence for their opportunities.
@@ -502,6 +712,16 @@ Accurate description of both paths, coaching for motivation, safe experiments, t
 - **Opportunity equity** — make visible work explicit, rotate it and track who gets it.
 - **Senior → Staff** — growth in scope and leverage, not just technical depth; sponsor a staff-scope problem.
 - **IC/management pendulum** — moving between tracks is normal; neither is a promotion over the other.
+
+### Revisit
+
+- **Mentoring plan** — one concrete goal, real work each month, the mode shifting from advice to coaching to sponsorship, and observable evidence.
+- **Stretch with a mentor** — sponsor to the manager, the mentee leads, coach rather than rescue when it wobbles, then credit them by name.
+- **Finding a mentor** — start from a goal, make a small specific ask, look outside your reporting line, own the agenda and report back.
+- **Reverse mentoring** — a junior person mentors a senior one on new tools, the ground-level view or inclusion. Protect the junior mentor.
+- **GROW** — Goal, Reality, Options, Will (Whitmore). Let them generate the options; a commitment below 7 out of 10 means change the plan.
+- **New managers** — a new job, not a promotion. Give them a mentor outside their reporting line, rehearse hard conversations, and use peer cohorts.
+- **Confidentiality limits** — state them at the start: risk of harm, harassment and legal breaches can't stay private. Tell them before you act.
 
 ## Further Reading
 

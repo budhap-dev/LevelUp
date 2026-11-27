@@ -6,7 +6,7 @@ tags: [leadership]
 level: Senior
 estimatedMinutes: 60
 related: [people-management, technical-strategy, influence-without-authority]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-27
 status: complete
 ---
 
@@ -61,6 +61,29 @@ Netflix popularised "context, not control"; the military calls a similar idea **
 - Explicit **decision rights** — who decides what.
 - **Feedback loops** to see how it's going.
 
+### Worked example: a task list versus commander's intent
+
+An engineering manager hands a team the migration of customer notifications to a new email provider. Here are two ways to brief it:
+
+**As a task list:** "Move all templates to the new provider by 30 June. Use the provider's SDK. Send everything through the new queue. Check with me before changing anything else."
+
+**As intent:**
+- **Goal:** all customer email goes through the new provider by 30 June, when the old contract ends.
+- **Why:** the old provider's delivery failures cost us about 2% of password-reset emails, which is our top support complaint. The contract date is fixed.
+- **Constraints:** no customer may miss a transactional email (password resets, receipts) during the move. Marketing email can pause for up to a day.
+- **Decision principles:** protect transactional email over everything else; prefer reversible steps; tell support before customers notice anything.
+- **Decision rights:** the team decides the how. Escalate only if the date or a constraint is at risk.
+
+Three things then happen that the plan didn't anticipate:
+
+| Situation | Team with a task list | Team with intent |
+|---|---|---|
+| The new provider rate-limits bulk sends, which would delay receipts during a sale | Waits two days for the manager, who's on leave | Sends transactional email first and throttles marketing, because "transactional over everything else" |
+| The provider's SDK doesn't support the retry behaviour the team needs | Uses the SDK as instructed, and loses some emails on retries | Calls the provider's HTTP API directly, because the goal is delivery, not the SDK |
+| Testing finds 40 unused templates | Migrates all of them, as listed | Retires them after a quick check with marketing, saving a week |
+
+The intent version took longer to write and, at first, longer to discuss. Its value is that **the team could make good decisions in situations nobody foresaw**, without waiting for the leader. That's what "context, not control" means in practice.
+
 ### Trust
 
 The trust equation (Maister): trust = (credibility + reliability + intimacy) / self-orientation. Leaders earn it by:
@@ -87,6 +110,31 @@ flowchart TD
   F -->|"share wins and lessons"| A
   G["Leader models the behaviour"] --> D
   G --> E
+```
+
+### Delegating a decision with intent
+
+```mermaid
+sequenceDiagram
+  participant L as Leader
+  participant T as Team
+  participant S as Stakeholder
+  %% step: The leader briefs the goal, why it matters, the constraints and the decision principles, rather than a list of tasks. The team decides how.
+  %% step: The team plays it back in its own words. Misunderstandings are cheapest to fix here, before any work starts.
+  %% step: Midway, something nobody planned for happens: the new provider rate-limits bulk sends during a sale.
+  %% step: The team applies the principle "protect transactional email over everything else": receipts go first and marketing is throttled. Nobody waits for permission.
+  %% step: The team tells the leader what it decided and why. Informing isn't asking: the decision has already been made.
+  %% step: The marketing lead complains to the leader that the campaign went out slowly.
+  %% step: The leader backs the team's decision publicly and explains the principle behind it. Overruling a team that followed the intent would teach it to stop deciding.
+  %% step: At the retrospective, the team and leader review the decision and sharpen the principle, adding a limit on how long marketing email may be delayed. The intent gets better with each use.
+  L->>T: Goal, why, constraints, principles
+  T-->>L: Plays the intent back
+  Note over T: Provider rate-limits bulk sends
+  T->>T: Receipts first, throttle marketing
+  T->>L: What we decided, and why
+  S->>L: The campaign went out slowly
+  L->>S: Backs the team, explains the principle
+  L->>T: Retro: refine the principle together
 ```
 
 ## When to Use / Trade-offs
@@ -505,6 +553,160 @@ Quantified trade-offs, protected capacity mechanisms, deliberate debt management
 - Always prioritising short-term delivery.
 - Treating health work as something engineers do in their spare time.
 
+### You've been promoted to lead the team you were part of. What changes, and how do you handle it? {#promoted-from-peer}
+
+**Level:** Foundation
+
+**Model answer:**
+Leading former peers is one of the hardest transitions, because **the relationships change before the people do**.
+
+What changes:
+- **Your job:** success is now the team's output, not yours. Your time goes on direction, unblocking, growing people and stakeholders. Keeping your old workload means doing two jobs badly.
+- **Your relationships:** you'll give feedback to, and possibly evaluate, people who were your friends. Some information you'll now hold, such as salaries or reorganisation plans, can't be shared.
+- **How your words land:** a casual opinion from the lead sounds like a decision.
+
+How to handle it:
+1. **Name it openly.** In 1:1s with each person: "This is a change for both of us. What would you want from me as a lead? What worries you?" Expect mixed feelings, especially from anyone who wanted the role. Talk to them first.
+2. **Don't change everything at once.** Listen first, keep what works, and explain any changes you do make.
+3. **Be consistent and fair.** No favouritism towards friends and no overcorrection against them. The team watches closely.
+4. **Give up some technical ownership on purpose.** Hand your areas to others, and stop being the person who decides every technical debate. That creates room for others to lead.
+5. **Get support:** your own manager, a mentor who has made the same transition, or a peer group of new leads.
+6. **Address problems early.** The first time you have to give critical feedback to a former peer, do it promptly and privately. Avoiding it is how authority quietly drains away.
+
+**What the interviewer is looking for:**
+Understanding how the job and relationships change, open conversations, fairness, letting go of technical control, early handling of difficult feedback, and seeking support.
+
+**Follow-ups:**
+- A teammate who also applied for the role is disengaged. What do you do?
+- How do you stay technical without competing with your team?
+
+**Red flags:**
+- Carrying on as an individual contributor with a title.
+- Treating close friends differently in assignments or feedback.
+
+### How do you keep a team motivated through a long, grinding project? {#sustaining-motivation}
+
+**Level:** Senior
+
+**Model answer:**
+Long projects, such as a year-long migration or compliance programme, lose energy in the middle. The start is exciting, the end is in sight later, and the middle is just work. Motivation research gives useful levers.
+
+- **Make progress visible.** Teresa Amabile's research found that making progress on meaningful work is one of the strongest everyday motivators, and that setbacks are the strongest demotivators. Break the project into milestones of weeks, not quarters. Track and celebrate them: "40 of 120 services migrated".
+- **Reconnect to purpose.** Show the impact as it happens: the first incident that didn't happen, customer feedback, cost savings. "Why are we doing this?" fades unless someone keeps answering it.
+- **Give autonomy and mastery** (Daniel Pink's framing): let people own parts end to end, choose how to solve problems, and learn something new. Rotate people between repetitive and interesting work.
+- **Remove friction fast.** Nothing drains energy like a blocker that leaders ignore. Clear obstacles visibly, and say what you did.
+- **Vary the rhythm:** a hack day to build tooling for the boring parts, a demo to another team, a short break between phases.
+- **Watch individuals:** 1:1s to notice who is flagging. Some people need a change of task; some need recognition; some are near burnout.
+- **Be honest about the grind.** "This phase is tedious and it matters" is more credible than forced enthusiasm.
+
+**What the interviewer is looking for:**
+Visible progress and small wins, purpose shown through real impact, autonomy and mastery, removing blockers, varying the rhythm, and attention to individuals.
+
+**Follow-ups:**
+- The deadline moves out by three months. How do you tell the team?
+- How do you recognise people for unglamorous work?
+
+**Red flags:**
+- Motivation through pressure and deadlines alone.
+- Pizza and slogans instead of removing blockers.
+
+### You made a public decision as a leader that turned out to be wrong. How do you handle it? {#owning-a-wrong-decision}
+
+**Level:** Senior
+
+**Model answer:**
+How a leader handles their own mistakes sets the standard for everyone else. Owning one well **builds** trust; defending it destroys it.
+
+1. **Recognise it early.** Watch the signals you agreed when you made the decision, such as revisit triggers in the ADR. Sunk cost and ego are what keep people going the wrong way.
+2. **Separate a bad decision from a bad outcome.** If the decision was reasonable with the information at the time, say so, but still change course. If you missed information you should have sought, own that specifically.
+3. **Say it plainly, in the same forum where you made the decision:** "In March I decided we'd build our own feature-flag service. Six months in, it's cost twice what I estimated and isn't as reliable as the managed options. That was my call, and I'm reversing it."
+4. **Come with the way forward:** the new plan, what it costs, and how you'll minimise the disruption for the people affected.
+5. **Credit the people who raised concerns**, especially if you overruled them. It shows that dissent is valued.
+6. **Share what you've learned** and change the process if needed, for example by adding a spike or a cost review for build-versus-buy decisions.
+7. **Don't over-apologise or overcorrect.** One honest acknowledgement, then focus on moving forward. Becoming afraid to decide anything is a worse outcome.
+
+**What the interviewer is looking for:**
+Early recognition, separating decision quality from outcome, plain public ownership in the same forum, a way forward, crediting dissenters, and learning without paralysis.
+
+**Follow-ups:**
+- How do you tell your own manager?
+- What if reversing it means writing off months of a team's work?
+
+**Red flags:**
+- Quietly letting the decision fade without acknowledging it.
+- Blaming the team that implemented it.
+
+### How do you build a leadership bench so the organisation doesn't depend on you? {#succession-planning}
+
+**Level:** Architect
+
+**Model answer:**
+A leader whose team falls apart when they're away hasn't built an organisation. They've built a dependency. Succession planning is about **growing several people who could step up**, not naming one heir.
+
+**Identify:**
+- For each critical role, including your own and key technical roles, ask: if this person left tomorrow, who could step in now, who in a year, and who in two?
+- Look beyond the obvious candidates. Informal leaders, such as the person others go to for help or the one who calms incidents, are often missed.
+
+**Develop through real responsibility:**
+- **Delegate parts of your own job,** permanently and visibly: running planning, owning a stakeholder relationship, leading the operations review, representing the team at the architecture forum.
+- **Use absences deliberately:** when you're on holiday, someone acts in your role with real authority, and you don't take decisions back when you return.
+- **Rotate stretch roles** such as incident commander, project lead or interim manager, with coaching and a debrief.
+- **Sponsor them:** put their names forward, and make their work visible to your own leadership.
+
+**Make it a system:**
+- Discuss succession and development in talent reviews twice a year, with named people and plans.
+- Track how many critical roles have at least one "ready now" successor.
+- Reward leaders for the people they develop, including people who get promoted out of their team.
+
+**The hard part is personal:** letting others do parts of your job less well at first, and getting comfortable with being less needed. A useful test is a two-week holiday with no contact: if things go well, the bench exists.
+
+**What the interviewer is looking for:**
+Thinking in terms of roles and readiness, developing people through real delegated responsibility, sponsorship, a recurring system with measures, and the leader's own willingness to let go.
+
+**Follow-ups:**
+- Your strongest potential successor wants to move to the IC track. What do you do?
+- How do you avoid succession planning becoming favouritism?
+
+**Red flags:**
+- "Nobody else could do my job."
+- A single named successor, with nobody else developed.
+
+### The company is cutting costs and has frozen hiring. How do you lead your organisation through it? {#leading-through-cost-cutting}
+
+**Level:** Architect
+
+**Model answer:**
+In a downturn, people's biggest fear is uncertainty, and the most valuable things a leader gives are **honesty, focus and care**.
+
+**Communicate honestly and early:**
+- Share what you know, what you don't know, and when you'll know more. Rumours fill every silence.
+- Don't promise what you can't control ("there won't be layoffs"). Say what you will do: "I'll tell you as soon as I know anything that affects this team."
+
+**Refocus the work:**
+- With fewer people than planned, **stop things explicitly.** Agree with product and business leaders which commitments go, and say so publicly. Otherwise teams try to do the original plan with less, and burn out.
+- Prioritise work that protects revenue, reduces cost or reduces serious risk. Show the organisation's work in those terms.
+- **Look for real efficiencies:** cloud costs, duplicated tools, idle environments, abandoned services. Engineers often know where money is wasted.
+
+**Look after people:**
+- Increase 1:1 attention. Watch for people taking on too much, and for anxious people going quiet.
+- Keep development going: stretch opportunities still exist, and growth matters more when promotions and pay rises are limited.
+- Be careful about attrition. In a hiring freeze, every regretted departure is a permanent loss, so act early on retention risks.
+
+**Protect the foundations:** don't cut on-call health, security or reliability so far that you create the next crisis. Make that risk explicit to leadership if pressed.
+
+**Look after yourself,** and get support from peers. Leaders absorb a lot of anxiety in downturns, and a burnt-out leader can't steady anyone.
+
+**What the interviewer is looking for:**
+Honest communication without false promises, explicitly stopping work, aligning with business priorities, finding efficiencies, extra care for people and retention, protecting foundations, and the leader's own resilience.
+
+**Follow-ups:**
+- Leadership asks you to cut 20% of the budget. How do you decide what goes?
+- An engineer asks you directly whether layoffs are coming, and you know they are. What do you say?
+
+**Red flags:**
+- Promising job security you can't guarantee.
+- Doing the same plan with fewer people.
+
 ## Cheat Sheet
 
 - **Management vs leadership** — complexity and predictability vs direction and change (Kotter).
@@ -521,6 +723,16 @@ Quantified trade-offs, protected capacity mechanisms, deliberate debt management
 - **Crisis leadership** — calm, structured, directive, protect responders, blameless afterwards.
 - **Culture** — what gets rewarded and tolerated, embedded in hiring, promotion and rituals.
 - **Scaling leadership** — from making decisions to designing decision systems and growing leaders.
+
+### Revisit
+
+- **Commander's intent in practice** — goal, why, constraints, decision principles and decision rights, so teams handle situations nobody foresaw.
+- **Delegating with intent** — the team plays it back, decides and informs; the leader backs decisions that followed the principles.
+- **Promoted from peer** — name the change in 1:1s, start with anyone who wanted the role, stay fair, and hand over technical ownership.
+- **Sustaining motivation** — visible progress on meaningful work (Amabile), purpose shown through real impact, autonomy and mastery, blockers removed.
+- **Owning a wrong decision** — say it plainly in the forum where you made it, bring the way forward, credit the dissenters and keep deciding.
+- **Succession planning** — ready-now, one-year and two-year successors for critical roles, grown through permanently delegated responsibility.
+- **Leading through cost-cutting** — honest updates without false promises, stop work explicitly, protect foundations and watch retention.
 
 ## Further Reading
 
