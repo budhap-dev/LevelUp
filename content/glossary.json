@@ -7831,5 +7831,125 @@
     "related": [
       "typescript"
     ]
+  },
+  {
+    "id": "speculation-rules",
+    "term": "Speculation Rules API",
+    "aka": [
+      "prerendering",
+      "speculative loading"
+    ],
+    "group": "languages-frontend",
+    "definition": "A browser API, supported in Chromium browsers, where a page declares in JSON which likely next pages to prefetch or fully prerender, and how eagerly, so that navigating to them is near-instant.",
+    "details": [
+      "Eagerness ranges from immediate to conservative (on pointer-down); browsers cap how many speculations run at once.",
+      "Prerendered pages run their JavaScript, so delay analytics until the prerenderingchange event."
+    ],
+    "useCases": [
+      "Prerendering product pages from a listing when the user hovers over a link."
+    ],
+    "related": [
+      "web-performance"
+    ]
+  },
+  {
+    "id": "bfcache",
+    "term": "Back/forward cache",
+    "aka": [
+      "bfcache"
+    ],
+    "group": "languages-frontend",
+    "definition": "A browser optimisation that keeps a complete in-memory snapshot of a page when the user navigates away, so Back and Forward restore it instantly without reloading.",
+    "details": [
+      "unload handlers and open connections make pages ineligible; Chrome admits many Cache-Control: no-store pages since 2025, other browsers may not.",
+      "The pageshow event's persisted flag signals a restore, so stale data can be refreshed."
+    ],
+    "useCases": [
+      "Instant return to search results after viewing a product."
+    ],
+    "related": [
+      "web-performance",
+      "caching"
+    ]
+  },
+  {
+    "id": "soft-navigation",
+    "term": "Soft navigation",
+    "aka": [
+      "SPA route change"
+    ],
+    "group": "languages-frontend",
+    "definition": "A navigation in a single-page app where JavaScript changes the URL and content without the browser loading a new document, which classic Core Web Vitals don't measure as a new page.",
+    "details": [
+      "Chrome 151 shipped the Soft Navigations API in 2026 to measure LCP-like timings for them.",
+      "CrUX has published experimental soft-navigation metrics since October 2026."
+    ],
+    "useCases": [
+      "Measuring how fast a product page renders after clicking from a listing in a React app."
+    ],
+    "related": [
+      "web-performance",
+      "reactjs"
+    ]
+  },
+  {
+    "id": "brag-document",
+    "term": "Brag document",
+    "aka": [
+      "impact log",
+      "hype doc"
+    ],
+    "group": "leadership-people",
+    "definition": "A running personal record of your work and its impact, with dates, numbers, decisions and feedback, kept so promotions, reviews and interview stories rest on facts rather than memory.",
+    "details": [
+      "Update it weekly or after each milestone; numbers are hardest to reconstruct later.",
+      "Include work that multiplies others, such as mentoring, standards and incident leadership."
+    ],
+    "useCases": [
+      "Building a STAR story bank before staff-level interviews."
+    ],
+    "related": [
+      "behavioural-interviews-star",
+      "mentorship"
+    ]
+  },
+  {
+    "id": "bar-raiser",
+    "term": "Bar-raiser",
+    "aka": [
+      "independent interviewer"
+    ],
+    "group": "leadership-people",
+    "definition": "An experienced, specially trained interviewer from outside the hiring team who joins the loop to keep hiring standards consistent across teams, often facilitating the debrief and able to block a hire below the bar.",
+    "details": [
+      "Popularised by Amazon's hiring process.",
+      "Counters the hiring team's pressure to fill a role quickly."
+    ],
+    "useCases": [
+      "Keeping the bar consistent while dozens of teams hire at once."
+    ],
+    "related": [
+      "hiring-interviewing"
+    ]
+  },
+  {
+    "id": "kill-criteria",
+    "term": "Kill criteria",
+    "aka": [
+      "stop criteria"
+    ],
+    "group": "leadership-people",
+    "definition": "Conditions agreed before a project or bet starts that, if met, mean it should be stopped or changed, so the decision is made on evidence rather than sunk cost or ego.",
+    "details": [
+      "Pair them with success criteria and a review date.",
+      "Make the person who championed the work responsible for reporting against them."
+    ],
+    "useCases": [
+      "Stopping a platform migration whose costs came in 20% higher than planned."
+    ],
+    "related": [
+      "behavioural-interviews-star",
+      "technical-strategy"
+    ]
   }
 ]

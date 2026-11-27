@@ -6,7 +6,7 @@ tags: [interviews, star]
 level: Senior
 estimatedMinutes: 45
 related: [hiring-interviewing, influence-without-authority]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-27
 status: complete
 ---
 
@@ -61,6 +61,21 @@ Many companies publish their values or leadership principles (e.g. Amazon's Lead
 > **R:** Migrated in 10 weeks with no customer-facing incidents; payments SEV2s dropped from ~4/month to <1; the engineer I paired with was promoted.
 > **L:** I'd involve the reporting stakeholders even earlier — their late requirements cost us two weeks.
 
+### Worked example: rewriting a weak answer
+
+The question: *"Tell me about a time you improved the reliability of a system."* Here is the same real experience told twice:
+
+| Part | Weak version | Strong version | What changed |
+|---|---|---|---|
+| Headline | *(none: starts with the company's history)* | "I led the work that took our checkout API from 99.5% to 99.95% availability in a quarter." | The interviewer knows where the story is going and what to listen for |
+| Situation | Two minutes on the architecture, the team and a reorg | "Checkout had 3–4 customer-facing outages a month, mostly from one payment provider timing out." | One or two sentences with the stakes |
+| Task | "We needed to make it more reliable." | "As tech lead, I owned the reliability plan. Nobody had set a target." | Says what *you* owned and why it was hard |
+| Action | "We added retries and some monitoring, and things got better." | "I set an SLO with product, so we had a target and an error budget. I found that 70% of the failures were provider timeouts, so I added a circuit breaker and a fallback provider. I paired a mid-level engineer on the load tests, and I made the trade-off explicit with product: two weeks of feature work for this." | "I", specific decisions, why, and the people involved |
+| Result | "It went a lot better after that." | "Availability went from 99.5% to 99.95%, and outages fell from 3–4 a month to one in the next quarter. The circuit breaker pattern was adopted by two other teams." | Numbers, and impact beyond the immediate team |
+| Learning | *(none)* | "I'd set the SLO first next time. Arguing about priorities without a target cost us three weeks." | Shows reflection, and gives the interviewer a natural next question |
+
+The strong version is **shorter in total** (about two and a half minutes), because the situation is cut down and the time goes to actions and results. Nothing in it is invented: the difference is preparation. The numbers and decisions came from the candidate's brag document, not from memory on the day.
+
 ## How It Works
 
 ```mermaid
@@ -73,6 +88,35 @@ flowchart TD
   F --> G["Result: quantified impact"]
   G --> H["Learning: what you'd do differently"]
   H --> I["Pause and invite follow-up questions"]
+```
+
+### The same story, from the interviewer's side
+
+```mermaid
+sequenceDiagram
+  participant C as Candidate
+  participant I as Interviewer
+  participant N as Interviewer's notes
+  %% step: The interviewer asks a question chosen for a competency, here "handling disagreement". They have a rubric describing what weak, solid and strong evidence looks like.
+  %% step: The candidate opens with a one-sentence headline that includes the outcome. The interviewer now knows the scope and can judge whether the story fits the level.
+  %% step: Situation and task take about 30 seconds: the context, the stakes, and what the candidate owned.
+  %% step: The candidate starts on the actions, but says "we" throughout. The interviewer can't yet tell what the candidate did personally.
+  %% step: So the interviewer probes. This is normal and expected, not a sign that the answer is going badly.
+  %% step: The candidate gives specifics: a private 1:1 with the manager, data on where incidents came from, and an alternative proposal with success metrics.
+  %% step: The interviewer writes down the evidence, meaning what the candidate actually said and did, not an impression such as "seemed confident".
+  %% step: The interviewer probes the result. Strong candidates have numbers and know how they were measured.
+  %% step: The candidate gives the outcome (incidents down 60%) and a short lesson, which shows self-awareness.
+  %% step: After the interview, the interviewer scores each competency against the rubric's anchors, using only the evidence in their notes, before they see anyone else's feedback.
+  I->>C: "Tell me about a time you disagreed with a technical decision"
+  C->>I: Headline: talked us out of a rewrite, cut incidents 60%
+  C->>I: Situation and task in about 30 seconds
+  C->>I: "We decided to extract two modules…"
+  I->>C: Probe: "What did you personally do?"
+  C->>I: 1:1 with the manager, data, an alternative proposal
+  I->>N: Record evidence, not impressions
+  I->>C: Probe: "How did you know it worked?"
+  C->>I: Incidents down 60%, plus what they'd change
+  I->>N: Score each competency against the rubric
 ```
 
 ## When to Use / Trade-offs
@@ -471,6 +515,144 @@ Level-appropriate scope, clear personal contribution, business impact with evide
 - Impact that's purely personal output at a staff+ interview.
 - Claims that collapse under follow-up questions.
 
+### What questions should you ask at the end of an interview? {#questions-for-interviewer}
+
+**Level:** Foundation
+
+**Model answer:**
+"Do you have any questions for me?" is part of the interview. Good questions show you've thought about the role, and they get you information you need to decide. "No, I think you've covered everything" wastes the chance.
+
+Ask questions **this interviewer** can answer well, and that you actually want answered:
+- **About the work:** "What would you want someone in this role to have achieved in the first six months?" "What's the hardest technical problem the team is facing right now?"
+- **About how the team works:** "How do decisions like choosing a database get made here?" "What happened the last time a project fell behind?"
+- **About growth:** "What does the path from senior to staff look like here? Who made that move recently, and what did they do?"
+- **About the interviewer's experience:** "What made you join, and what would make you leave?" "What's something you'd change about how the team works?"
+
+Questions that ask for **examples of what happened** ("the last time…") get more honest answers than questions about policy ("Do you value work-life balance?"), for the same reason behavioural interview questions work.
+
+Avoid questions answered on the careers page, questions about salary or holiday in a technical round (save them for the recruiter), and anything that sounds like a closing pitch.
+
+**What the interviewer is looking for:**
+Preparation, genuine curiosity about the role, questions matched to the interviewer, and asking for concrete examples.
+
+**Follow-ups:**
+- How would your questions differ for the hiring manager and a future peer?
+- What would make you turn down an offer from us?
+
+**Red flags:**
+- No questions at all.
+- Only asking about perks and remote working in a technical interview.
+
+### "Tell me about a time you received difficult feedback." {#critical-feedback-story}
+
+**Level:** Senior
+
+**Model answer:**
+The interviewer wants to know whether you can **hear** criticism, **act** on it and **change**. Pick feedback that stung and was at least partly right.
+
+*Example:*
+- **S:** In my first year as a tech lead, my manager passed on feedback from a skip-level survey: two engineers on my team felt I made all the design decisions and only explained them afterwards.
+- **T:** I needed to understand whether it was true, and fix it without swinging to the opposite extreme of design by committee.
+- **A:** My first reaction was defensive, because I thought I'd been unblocking people. I asked my manager for specific examples rather than arguing, and found three designs in a quarter where I'd written the doc alone. I talked to both engineers 1:1 and asked what they'd wanted to happen. I changed how designs worked: the engineer picking up a piece of work drafts the design, I review it and only overrule with a written reason, and I hold my own opinion until others have spoken in design reviews.
+- **R:** Over the next two quarters, the two engineers each led a design. Engagement scores on "my opinion counts" went from the lowest on the floor to above average, and design throughput went up, because I was no longer the bottleneck.
+- **L:** I now ask for feedback on my own leadership in 1:1s every couple of months, so I don't have to wait for a survey.
+
+Show the emotional reaction honestly, but briefly. The interesting part is what you did next.
+
+**What the interviewer is looking for:**
+Real criticism rather than a disguised compliment, curiosity instead of defensiveness, specific changes in behaviour, and evidence the change lasted.
+
+**Follow-ups:**
+- Was there any feedback you received and decided not to act on?
+- How do you ask for feedback now?
+
+**Red flags:**
+- Feedback that is really praise ("I was told I work too hard").
+- Explaining why the feedback was wrong.
+
+### "Tell me about a time you had to choose between competing priorities." {#competing-priorities-story}
+
+**Level:** Senior
+
+**Model answer:**
+Show that you made the trade-off **explicit**, used a clear basis for it, and told the people who lost out.
+
+*Example:*
+- **S:** In the same month, our largest customer asked for an SSO integration promised in their renewal, the security team needed a dependency upgrade to fix a critical vulnerability, and my product manager wanted a launch for a marketing campaign. My team of five couldn't do all three.
+- **T:** As tech lead, I had to propose an order and get the three stakeholders to accept it.
+- **A:** I estimated each item with the team, then wrote one page with the cost of delay of each: the vulnerability was being actively exploited elsewhere, the renewal was worth £400k with a date in six weeks, and the campaign date could move. I proposed: security fix first (three days), then SSO, then the launch two weeks later than planned. Before the meeting, I spoke to the product manager, who stood to lose the most, and we agreed a smaller version of the launch that could still go out with the campaign. I wrote down the decision and who agreed.
+- **R:** The upgrade shipped in three days, SSO shipped a week before the renewal, which was signed, and the reduced launch hit the campaign date, with the rest two weeks later.
+- **L:** Putting the costs side by side turned an argument about whose work mattered more into a decision the stakeholders made together.
+
+**What the interviewer is looking for:**
+A clear basis for the decision (cost of delay, risk, commitments), stakeholders brought into the trade-off rather than told afterwards, creative ways to reduce the loss, and a written outcome.
+
+**Follow-ups:**
+- What if the product manager had refused the reduced launch?
+- How did you decide the security fix couldn't wait?
+
+**Red flags:**
+- "We worked weekends and did all three."
+- Deciding alone and letting stakeholders find out when things slipped.
+
+### "Tell me about a time you stopped a project or reversed your own decision." {#stopping-a-project}
+
+**Level:** Architect
+
+**Model answer:**
+At senior levels, stopping things is as important as starting them. This question tests whether you can **see sunk cost for what it is** and change course publicly.
+
+*Example:*
+- **S:** I had proposed and championed moving our search from Elasticsearch to a newer managed vector-and-keyword search service. Six months in, two of four teams had migrated.
+- **T:** As the principal engineer who'd made the case, I was also responsible for checking it was still the right call.
+- **A:** I had set three success criteria in the original proposal: relevance at least as good, cost down 30%, and less operational work. At the six-month review, relevance had improved, but cost was **up 20%** at our real query volume, because the pricing model punished our traffic pattern, and the remaining two teams' use cases needed features the service didn't have. I wrote an honest update showing the data against the criteria, and recommended stopping: keep the two migrated teams, whose use cases worked well, and leave the others on Elasticsearch. I presented it at the architecture forum myself, rather than letting the project quietly fade away.
+- **R:** We stopped the migration, saving roughly two engineer-quarters of remaining work and avoiding a cost increase across the whole estate. The two-system setup was documented as a deliberate decision, with criteria for revisiting it.
+- **L:** Writing success criteria into the original proposal is what made stopping easy: we argued about the data, not about my judgement. I now put kill criteria into every large proposal.
+
+**What the interviewer is looking for:**
+Pre-agreed success or kill criteria, honest reporting against them, resisting sunk cost and ego, a clean stop that keeps what worked, and leading the communication personally.
+
+**Follow-ups:**
+- How did the teams who had already migrated react?
+- How did it affect your credibility?
+
+**Red flags:**
+- Never having stopped or reversed anything.
+- Letting a failing project drift on without a decision.
+
+### How do you adjust your stories for a staff, principal or engineering manager interview? {#calibrating-stories-to-level}
+
+**Level:** Architect
+
+**Model answer:**
+The questions often sound the same at every level. What changes is **the evidence the interviewer needs**, so the same experience has to be told with a different emphasis.
+
+| Level | What the stories must show | Typical scope |
+|---|---|---|
+| Senior engineer | Owning a significant piece of work end to end, technical judgement, raising the team's quality | A team |
+| Staff engineer | Finding problems nobody owns, setting technical direction, influence across teams without authority | Several teams |
+| Principal engineer | Organisation-wide direction, multi-year bets, shaping strategy with executives | An organisation or company |
+| Engineering manager | Building and growing a team, performance and hiring, delivery through others, managing up | The team's people and outcomes |
+
+How to prepare:
+- **Read the company's level guide** if it's published, and the job description's language. Map each story to the expectations of the level you're applying for.
+- **Re-tell rather than re-pick.** A cross-team migration story at senior level emphasises your design and delivery. At staff, it emphasises how you got four teams to agree and what standard outlasted the project. At manager level, it emphasises how you staffed it and grew the person who led it.
+- **Check that your actions match the level.** If, in a staff story, most of your actions are writing code, the interviewer will hear a senior engineer. Your actions should be framing the problem, aligning people, deciding and making others effective.
+- **Show the level's trade-offs.** Staff and principal stories should include business and organisational trade-offs, not just technical ones. Manager stories should include people decisions that were hard.
+- **For manager loops,** expect probing on underperformance, hiring decisions, and how you balanced team health with delivery. "We" is more natural here, but the interviewer still needs to hear what you did as the manager.
+- **Be honest about your current scope.** If you're applying a level up, use your strongest stretch examples and say plainly where you operated beyond your role. Inflation collapses under follow-up questions.
+
+**What the interviewer is looking for:**
+An understanding of how expectations differ by level and track, re-framing the same experience for the target level, actions that match the level, and honesty about scope.
+
+**Follow-ups:**
+- Which of your stories would you use to show staff-level scope, and why?
+- How would you answer "Why haven't you been promoted to staff already?"
+
+**Red flags:**
+- The same story, told the same way, for every level.
+- Staff-level claims where every action is individual coding.
+
 ## Cheat Sheet
 
 - **STAR** — Situation, Task, Action, Result; most time on your actions and the result.
@@ -487,6 +669,16 @@ Level-appropriate scope, clear personal contribution, business impact with evide
 - **Senior+ signals** — scope, judgement, influence, growing others, self-awareness.
 - **Map to company values** — research published values or leadership principles and tag stories.
 - **Tell me about yourself** — present, past highlights with impact, why this role; ~90 seconds.
+
+### Revisit
+
+- **Weak vs strong answer** — the strong version has a headline, a short situation, "I" with specific decisions, numbers in the result and a lesson. It's usually shorter.
+- **Interviewer probes** — "What did you personally do?" and "How did you know it worked?" are normal. Prepare the answers in advance.
+- **Evidence, not impressions** — interviewers note what you said and did, then score each competency against rubric anchors.
+- **Questions at the end** — ask about the first six months, how decisions get made and "what happened the last time…".
+- **Difficult feedback** — real criticism, a brief honest reaction, specific changes in behaviour and evidence they lasted.
+- **Competing priorities** — compare cost of delay, involve the people who lose out before deciding, and write the decision down.
+- **Stopping a project** — pre-agreed kill criteria, honest data, keep what worked, and announce the stop yourself.
 
 ## Further Reading
 
