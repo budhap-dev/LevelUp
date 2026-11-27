@@ -7951,5 +7951,136 @@
       "behavioural-interviews-star",
       "technical-strategy"
     ]
+  },
+  {
+    "id": "influence-currencies",
+    "term": "Influence currencies",
+    "aka": [
+      "Cohen–Bradford model"
+    ],
+    "group": "leadership-people",
+    "definition": "Allan Cohen and David Bradford's model of influence as exchange: people cooperate when they receive things they value, grouped as inspiration, task, position, relationship and personal currencies.",
+    "details": [
+      "Different people value different currencies; offer what they value, not what you value.",
+      "Build relationships and goodwill before you need them."
+    ],
+    "useCases": [
+      "Offering a busy team lead engineering help rather than arguments about technical elegance."
+    ],
+    "related": [
+      "influence-without-authority",
+      "stakeholder-management"
+    ]
+  },
+  {
+    "id": "trust-equation",
+    "term": "Trust equation",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "David Maister's formula from The Trusted Advisor: trust = (credibility + reliability + intimacy) ÷ self-orientation, so self-interest lowers trust however capable you are.",
+    "details": [
+      "Reliability is built through small promises kept over time.",
+      "Self-orientation includes taking credit and steering every conversation to your own agenda."
+    ],
+    "useCases": [
+      "Diagnosing why a technically strong lead struggles to get cross-team support."
+    ],
+    "related": [
+      "leadership",
+      "influence-without-authority"
+    ]
+  },
+  {
+    "id": "commanders-intent",
+    "term": "Commander's intent",
+    "aka": [
+      "mission command",
+      "context, not control"
+    ],
+    "group": "leadership-people",
+    "definition": "A military leadership practice, widely adopted in organisations, of communicating the goal, the reasons and the constraints of a task so that people can make good decisions themselves when circumstances change.",
+    "details": [
+      "Pairs with explicit decision principles and decision rights.",
+      "Teams play the intent back before starting, to catch misunderstandings."
+    ],
+    "useCases": [
+      "Briefing a migration so the team can handle an unexpected provider limit without escalating."
+    ],
+    "related": [
+      "leadership"
+    ]
+  },
+  {
+    "id": "just-culture",
+    "term": "Just culture",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "An approach to accountability, from safety-critical industries, that distinguishes honest mistakes (console and fix the system), at-risk behaviour (coach) and reckless behaviour (sanction), rather than blaming people for outcomes.",
+    "details": [
+      "Compatible with blameless postmortems: it focuses on behaviour and choices, not results.",
+      "Makes it safe to report errors and near misses."
+    ],
+    "useCases": [
+      "Deciding how to respond when an engineer skipped a known safety step."
+    ],
+    "related": [
+      "leadership",
+      "incident-management"
+    ]
+  },
+  {
+    "id": "glue-work",
+    "term": "Glue work",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "Essential but less visible work that keeps a team effective, such as onboarding, documentation, coordinating across teams and unblocking others, named by Tanya Reilly's talk 'Being Glue'.",
+    "details": [
+      "Often falls disproportionately on some people, and is under-credited in promotions.",
+      "Share it deliberately and recognise it in reviews."
+    ],
+    "useCases": [
+      "Auditing who does onboarding and meeting notes across a team before promotion season."
+    ],
+    "related": [
+      "mentorship",
+      "people-management"
+    ]
+  },
+  {
+    "id": "grow-model",
+    "term": "GROW model",
+    "aka": [
+      "GROW coaching"
+    ],
+    "group": "leadership-people",
+    "definition": "A coaching conversation structure, popularised by John Whitmore, that moves through Goal, Reality, Options and Will (or Way forward) so the person being coached reaches their own plan.",
+    "details": [
+      "Not a script: conversations often loop back to the goal.",
+      "A low commitment score in the Will stage usually means the plan needs to change."
+    ],
+    "useCases": [
+      "Helping a mentee decide how to regain control of their design reviews."
+    ],
+    "related": [
+      "mentorship",
+      "people-management"
+    ]
+  },
+  {
+    "id": "reverse-mentoring",
+    "term": "Reverse mentoring",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A mentoring arrangement in which a more junior person mentors a more senior one, typically on new technology, the ground-level view of the organisation, or the experience of under-represented groups.",
+    "details": [
+      "Popularised by Jack Welch at General Electric in 1999.",
+      "The junior mentor must be protected from any effect on their reviews."
+    ],
+    "useCases": [
+      "A graduate showing a director how AI coding assistants change everyday development."
+    ],
+    "related": [
+      "mentorship"
+    ]
   }
 ]
