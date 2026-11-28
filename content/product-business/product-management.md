@@ -6,7 +6,7 @@ tags: [product, discovery]
 level: Senior
 estimatedMinutes: 60
 related: [prioritisation, stakeholder-management]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -66,6 +66,36 @@ A/B tests compare variants with randomised assignment: define a hypothesis and p
 
 Customers "hire" products to make progress in a situation: "When I'm onboarding a new engineer, I want them productive in their first week, so the team doesn't slow down." JTBD framing focuses on the underlying progress, not demographics or feature requests, and helps find non-obvious competitors and solutions.
 
+### Worked example: sizing and reading an A/B test
+
+A team changes the checkout page and wants to know whether it lifts conversion. The baseline conversion rate is **4%**.
+
+**Before starting, decide the minimum detectable effect:** the smallest lift worth detecting. The team chooses a 10% relative lift, from 4.0% to 4.4% (0.4 percentage points).
+
+**Sample size:** a common rule of thumb for a two-sided test at 5% significance and 80% power is n ≈ 16 × p(1 − p) ÷ δ² per variant:
+- 16 × 0.04 × 0.96 ÷ 0.004² = 0.6144 ÷ 0.000016 ≈ **38,400 users per variant**.
+- 20,000 eligible users a day, split 50/50, gives 10,000 per variant per day. That's about 4 days, but the team runs **a full 7 days** to cover weekday and weekend behaviour.
+
+**Results after 7 days:**
+
+| Variant | Users | Conversions | Rate |
+|---|---|---|---|
+| Control | 70,000 | 2,800 | 4.00% |
+| New checkout | 70,000 | 3,010 | 4.30% |
+
+- Difference: 0.30 percentage points, a 7.5% relative lift.
+- Standard error: √(0.04 × 0.96 ÷ 70,000 + 0.043 × 0.957 ÷ 70,000) ≈ 0.107 percentage points.
+- z ≈ 0.30 ÷ 0.107 ≈ 2.8, so p ≈ 0.005. 95% confidence interval: 0.30 ± 1.96 × 0.107, or about **0.09 to 0.51 percentage points**.
+
+The lift is smaller than the 10% planned, but still significant, because running a full week collected more users than the minimum.
+
+**Checks before shipping:**
+- **Sample ratio:** the split was 50/50 as designed. A noticeably uneven split would mean a bug in assignment or logging, and the result couldn't be trusted.
+- **Guardrails:** page load time, payment errors and refund rates didn't get worse.
+- **No peeking:** the team decided the duration up front and didn't stop when the result first looked good.
+
+**Decision:** ship it. The likely lift is anywhere from about 2% to 13% relative, so the team reports a range, not "7.5%".
+
 ## How It Works
 
 ```mermaid
@@ -79,6 +109,32 @@ flowchart LR
   F -->|"invalidated"| E
   G --> H["Release and measure outcomes (A/B, cohorts)"]
   H -->|"learn"| D
+```
+
+### From customer insight to a measured release
+
+```mermaid
+sequenceDiagram
+  participant P as Product manager
+  participant D as Designer
+  participant T as Tech lead
+  participant C as Customers
+  %% step: In weekly customer interviews, the trio hears the same story several times: customers export data to spreadsheets to show their boards a return on investment.
+  %% step: The product manager adds this opportunity to the team's opportunity solution tree, and the trio generates three different solutions rather than settling on the first.
+  %% step: The tech lead runs a two-day feasibility spike and finds the data already exists in the analytics pipeline. The cheapest solution is now also feasible.
+  %% step: The designer tests a clickable prototype of a one-page ROI summary with five customers, checking value and usability before any production code.
+  %% step: Four of five customers complete the task without help. One asks to export the summary to slides, which is added to the design.
+  %% step: The product manager checks viability: which pricing plan includes the feature, and whether showing benchmark data raises contractual or privacy questions.
+  %% step: The team builds it and releases it behind a feature flag to 10% of accounts, with the events needed to measure activation already instrumented.
+  %% step: Activation and 60-day retention for those accounts are compared with the rest. The results support a full rollout, and the next opportunity is chosen.
+  P->>C: Weekly interviews
+  P->>D: Add opportunity, generate three solutions
+  T->>T: Two-day feasibility spike
+  D->>C: Prototype test with five customers
+  C-->>D: 4 of 5 succeed, one asks for slides export
+  P->>P: Viability: pricing plan, contracts, privacy
+  T->>C: Release behind a flag to 10% of accounts
+  C-->>P: Activation and retention measured
 ```
 
 ## When to Use / Trade-offs
@@ -470,6 +526,194 @@ Integrated roadmap, outcome framing for technical work, joint planning, capacity
 **Red flags:**
 - A separate "tech roadmap" competing for time with no business framing.
 
+### How do you run a good customer interview? {#customer-interviews}
+
+**Level:** Foundation
+
+**Model answer:**
+A good interview uncovers **what customers actually do and struggle with**, not what they say they'd like. People are polite and poor at predicting their own behaviour, so the technique matters.
+
+**Ask about the past, not the future:**
+- "Tell me about the last time you had to prepare the monthly report. What did you do?" is better than "Would you use a reporting feature?"
+- Specific stories reveal real workflows, workarounds and costs.
+
+**Talk about their problem, not your idea.** Rob Fitzpatrick's *The Mom Test* puts it simply: even your mother will tell you your idea is great. Compliments and hypothetical promises ("I'd definitely pay for that") are weak evidence.
+
+**Techniques:**
+- **Open questions,** then dig with "Why?", "What happened next?", "How did you solve it?"
+- **Look for workarounds,** such as spreadsheets, copy-paste or manual checks. They show a problem worth solving.
+- **Listen more than you talk.** Silence often brings out the most useful detail.
+- **Two people:** one leads, one takes notes. Engineers make excellent note-takers and hear feasibility clues.
+
+**Afterwards:**
+- Write up a short summary the same day: quotes, behaviours, problems and surprises.
+- **Look for patterns across interviews,** not single anecdotes. Five to eight interviews per question often reveal the main themes.
+
+**What the interviewer is looking for:**
+Past behaviour over future intent, the customer's problem over your solution, open questions, workarounds as signals, careful notes and patterns across interviews.
+
+**Follow-ups:**
+- How do you recruit the right people to interview?
+- How do you interview customers of a B2B product when sales owns the relationship?
+
+**Red flags:**
+- "Would you use this feature?" as the main question.
+- Pitching the solution during the interview.
+
+### A feature shipped three months ago, and very few people use it. What do you do? {#feature-adoption}
+
+**Level:** Senior
+
+**Model answer:**
+Low adoption has several possible causes, and each needs a different fix. **Diagnose before reacting.**
+
+**Break adoption into a funnel:**
+1. **Awareness:** do eligible users know it exists? Check how many saw the entry point.
+2. **First use:** of those who saw it, how many tried it?
+3. **Success:** of those who tried, how many completed the task?
+4. **Repeat use:** did they come back?
+
+The step where users drop out tells you where to look:
+
+| Drop-off | Likely cause | Response |
+|---|---|---|
+| Few see it | Hidden entry point, wrong placement | Better placement, in-context prompts, release notes |
+| They see it but don't try | Unclear value, or the wrong audience | Clearer messaging; check you targeted the right users |
+| They try but fail | Usability problems, bugs, slow performance | Session recordings, usability tests, error logs |
+| They succeed once but don't return | The problem isn't frequent or painful enough | Re-examine the opportunity itself |
+
+**Combine data with conversations:** interview a few people at each drop-off point. Data shows *where*; conversations show *why*.
+
+**Decide:**
+- **Improve it** if the problem is real and the fix is clear.
+- **Reposition it** if it serves a narrower group well.
+- **Remove it** if the underlying need is weak. Unused features still cost maintenance and complexity.
+
+**Learn for next time:** define the adoption metric and target *before* launch, and test value earlier in discovery.
+
+**What the interviewer is looking for:**
+A funnel diagnosis, matching causes to responses, combining analytics with interviews, willingness to remove the feature, and setting adoption targets before launch.
+
+**Follow-ups:**
+- The feature was promised to one large customer. Does that change anything?
+- What adoption target would you have set before launch?
+
+**Red flags:**
+- Adding more features to the feature.
+- Declaring success because it shipped on time.
+
+### How do you instrument a product so the team can answer its product questions? {#product-instrumentation}
+
+**Level:** Senior
+
+**Model answer:**
+Instrumentation should start from **the questions the team needs to answer**, not from "track everything". Untargeted tracking produces noisy, inconsistent data nobody trusts.
+
+**Start with a tracking plan:**
+- List the decisions and metrics: the north star, activation, adoption of key features, and guardrails.
+- Define the **events** needed to calculate them, each with a clear name, trigger and properties. For example, `report_exported` with `format` and `report_type`, fired when the export succeeds.
+- Agree **naming conventions** (object + past-tense action), so events stay consistent across teams.
+
+**Implement it well:**
+- **Server-side events** for anything that matters commercially (orders, sign-ups, payments). Browser events are lost to ad blockers and network failures.
+- **Client-side events** for interaction detail, such as which entry point was used.
+- **Identity:** connect anonymous and signed-in activity, and record the account as well as the user for B2B products.
+- **Schemas and validation:** treat events as a contract, version them, and test them in CI so a refactor doesn't silently break a metric.
+
+**Respect privacy:**
+- Collect only what you need, avoid personal data in event properties, and honour consent rules such as GDPR and the ePrivacy rules for cookies.
+- Set retention periods for raw events.
+
+**Keep it trustworthy:** monitor event volumes for sudden drops, document each metric's definition in one place, and assign an owner to the tracking plan.
+
+**What the interviewer is looking for:**
+Starting from questions and metrics, a tracking plan with naming conventions, server-side events for important actions, identity, schema validation, privacy and data-quality monitoring.
+
+**Follow-ups:**
+- A key metric dropped 30% overnight. How do you tell a real change from a tracking bug?
+- Who should own the tracking plan?
+
+**Red flags:**
+- "Track every click and figure it out later."
+- Commercial metrics based only on browser events.
+
+### How does product management differ for an enterprise B2B product and a consumer product, and what does that mean for engineering? {#b2b-vs-b2c}
+
+**Level:** Architect
+
+**Model answer:**
+The principles (outcomes, discovery, the four risks) are the same, but the context changes nearly every practice.
+
+| | Consumer (B2C) | Enterprise (B2B) |
+|---|---|---|
+| Customers | Millions of individuals | Tens to thousands of organisations |
+| Buyer and user | Usually the same person | Often different: the buyer signs, users live with it |
+| Evidence | Analytics and A/B tests at scale | Few accounts, so interviews, advisory boards and usage by account |
+| Sales motion | Self-serve | Sales-led or product-led with sales assistance; contracts and procurement |
+| Roadmap pressure | Aggregate behaviour | Large customers, deals and renewals |
+| Release expectations | Continuous, often unannounced | Predictable, communicated, sometimes opt-in or scheduled |
+
+**Engineering consequences for B2B:**
+- **Enterprise features are table stakes:** SSO, SCIM provisioning, roles and permissions, audit logs, data residency and data export.
+- **Configuration over customisation:** many customers want variations. Build configurable behaviour and extension points, not customer-specific forks that become unmaintainable.
+- **Multi-tenancy, entitlements and limits** per account and plan.
+- **Change management:** release notes, admin controls for new features, and sometimes advance notice for changes that affect workflows.
+- **Experimentation is harder:** too few accounts for many A/B tests, so use staged rollouts, betas and qualitative evidence.
+
+**Engineering consequences for B2C:** scale and performance, experimentation platforms, growth instrumentation, abuse and fraud prevention, and app-store release cycles for mobile.
+
+**Danger zone for B2B:** the roadmap turning into a list of promises made to individual customers. Look for patterns across accounts and build general solutions.
+
+**What the interviewer is looking for:**
+Buyer versus user, sources of evidence, sales and release differences, concrete engineering consequences (enterprise features, configuration over customisation, tenancy, change management), and the risk of sales-driven roadmaps.
+
+**Follow-ups:**
+- A customer worth 20% of revenue wants a custom workflow. How do you handle it?
+- How do you run experiments with only 200 customer accounts?
+
+**Red flags:**
+- Applying consumer growth tactics unchanged to enterprise customers.
+- Customer-specific code branches.
+
+### How would you move an organisation from a "feature factory" to empowered product teams? {#empowered-teams-transition}
+
+**Level:** Architect
+
+**Model answer:**
+In a **feature factory,** teams receive features to build and success means shipping them. **Empowered product teams** are given problems and outcomes, and they discover the solutions. The change is mostly about leadership behaviour and trust, not process.
+
+**Prerequisites:**
+- **A clear product strategy and outcomes** for each team. Teams can't be empowered without knowing what matters.
+- **Capable product trios:** product managers with real decision authority, designers, and engineers involved in discovery.
+- **Data:** teams need to see the effect of their work.
+
+**Steps:**
+1. **Start with one or two pilot teams** with supportive stakeholders and a measurable outcome, such as "raise activation from 30% to 40%".
+2. **Change what leaders ask for:** from "Build feature X by June" to "Improve activation; show us your bets and progress monthly".
+3. **Make roadmaps outcome-based:** Now, Next, Later problems with target metrics. Specific dates only where genuinely committed.
+4. **Teach discovery:** customer interviews, assumption testing and experiments, with coaching.
+5. **Build trust through transparency:** regular reviews where teams show what they learned and the evidence, not just what they shipped.
+6. **Expand** once the pilots show results, adjusting funding towards persistent teams.
+
+**What gets in the way:**
+- Sales commitments made without the team.
+- Annual plans that fix the features up front.
+- Leaders who say "empowered" but still dictate solutions. Teams notice within a month.
+- Product managers acting as backlog administrators.
+
+**Measure the change:** outcomes achieved, the proportion of roadmap items with an outcome attached, time spent on discovery, and team engagement.
+
+**What the interviewer is looking for:**
+Strategy and outcomes as prerequisites, pilot teams, changing what leaders ask for, outcome roadmaps, discovery skills, transparency to build trust, and awareness of what blocks the change.
+
+**Follow-ups:**
+- The sales organisation depends on promising features to close deals. What do you do?
+- How do you keep accountability when teams choose their own solutions?
+
+**Red flags:**
+- Renaming teams "empowered" without changing how leaders behave.
+- Removing all dates and commitments overnight.
+
 ## Cheat Sheet
 
 - **PM owns what and why** — value and viability; engineering owns how; the trio decides together.
@@ -486,6 +730,16 @@ Integrated roadmap, outcome framing for technical work, joint planning, capacity
 - **Feature factory** — measuring output instead of outcomes.
 - **Platform as a product** — internal customers, PM ownership, adoption and experience metrics.
 - **PLG architecture** — instant tenant provisioning, entitlements, metering, analytics, abuse controls.
+
+### Revisit
+
+- **Minimum detectable effect** — the smallest lift worth detecting; choose it before the test, as it drives the sample size.
+- **Sample size rule of thumb** — about 16 × p(1 − p) ÷ δ² users per variant, for 5% significance and 80% power.
+- **Customer interviews** — ask about specific past behaviour, not future intentions; workarounds reveal real problems.
+- **Adoption funnel** — awareness, first use, success and repeat use; the drop-off point shows the cause.
+- **Tracking plan** — events derived from the questions and metrics, named consistently, validated like a contract.
+- **B2B vs B2C** — buyer and user differ, evidence comes from few accounts, and enterprise features are table stakes.
+- **Feature factory to empowered teams** — give teams outcomes, change what leaders ask for, and build trust with evidence.
 
 ## Further Reading
 

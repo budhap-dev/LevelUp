@@ -784,43 +784,46 @@ Leading and lagging signals, separating execution, action and diagnosis failures
 - Pushing harder on a failing strategy to save face.
 - Quietly dropping it without telling anyone.
 
-### How do you decide how to split engineering capacity across new features, platform, technical debt and reliability? {#investment-allocation}
+### You're asked to review a technical strategy written by another division. What do you look for? {#reviewing-a-strategy}
 
 **Level:** Architect
 
 **Model answer:**
-The split is one of the most important strategic decisions, because it's where strategy turns into people's time. Make it **explicit, tied to the diagnosis, and reviewed each planning cycle**.
+A good review tests whether the document is **a real strategy, whether it's right, and whether it can be executed**. It's also a relationship: the aim is a better strategy, not a list of objections.
 
-**Make the current split visible first:** most organisations don't know it. Tag work by investment category for a quarter or two. The result often surprises leaders, for example that 35% of capacity goes on unplanned work and keeping the lights on.
+**Is it a strategy at all?**
+- **Diagnosis:** is there a clear critical challenge, backed by evidence such as metrics, incidents or cost data? Or does it jump straight to solutions?
+- **Guiding policies:** do they rule things out? A useful test is whether a sensible team could disagree with each policy.
+- **Coherent actions:** do the actions follow from the policies and reinforce each other, or are they an unrelated wishlist?
 
-**Use categories leaders understand:**
+**Is it right?**
+- **Fit with the business strategy** and the company-wide technical strategy. Where it diverges, is the reason stated?
+- **Assumptions:** what must be true for this to work? Are the riskiest ones tested or at least named?
+- **Alternatives:** were other options considered, and why were they rejected?
+- **Second-order effects:** what does this do to other divisions, shared platforms, hiring, security and cost?
 
-| Category | Examples |
-|---|---|
-| New value | Features, new products, experiments |
-| Enablement | Platform, developer experience, paved roads |
-| Sustain | Upgrades, debt paydown, reliability and security work |
-| Unplanned | Incidents, support escalations, urgent fixes |
+**Can it be executed?**
+- **Funding and capacity:** is it in the planning cycle, or does it compete with features every sprint?
+- **Ownership:** who is accountable for each action?
+- **Measures:** leading indicators and outcomes, with a review date.
+- **Signposts:** what evidence would show it's wrong?
 
-**Set the target from the diagnosis, not a template:** a company whose diagnosis is "slow delivery because of a fragile platform" might move from 75/5/10/10 to 60/15/20/5 for a year. A young product chasing product-market fit might deliberately run 85% on new value and accept the debt.
-
-**Decide the mechanism:**
-- **Percentages per team,** which teams spend on work they choose within the category.
-- **Funded initiatives** for large, cross-team work, such as a migration.
-- **Dedicated teams,** such as a platform team, where the work is continuous.
-
-**Review it:** compare the actual split with the target each quarter, and check whether the outcomes (lead time, incidents, unplanned work) are improving. If unplanned work falls, more capacity becomes available for new value, which is the business case for the investment.
+**How to give the review:**
+- Start by **restating the strategy in your own words,** so the authors can confirm you've understood it.
+- Separate **must-fix issues** (a missing diagnosis, a conflict with a company-wide policy) from suggestions.
+- Prefer questions to verdicts: "What happens to the shared data platform if you move to a second cloud?"
+- Offer to help close the gaps, and follow up.
 
 **What the interviewer is looking for:**
-Measuring the actual split first, categories the business understands, targets derived from the diagnosis, a clear funding mechanism, and outcome-based review.
+Testing diagnosis, policies and actions; fit, assumptions, alternatives and second-order effects; funding, ownership and measures; and a constructive way of giving the review.
 
 **Follow-ups:**
-- Product leadership wants 100% on features for the next two quarters. How do you respond?
-- How do you stop the "sustain" bucket being raided when deadlines loom?
+- The strategy is weak, but its author is senior to you. How do you handle it?
+- What would make you recommend not approving it?
 
 **Red flags:**
-- A fixed "20% for tech debt" with no link to a diagnosis.
-- No visibility of where capacity actually goes.
+- Reviewing only the technology choices.
+- A list of objections with no suggestions or offer of help.
 
 ### How does technical strategy differ between a 15-engineer startup and a 1,500-engineer enterprise? {#strategy-by-stage}
 
@@ -886,7 +889,7 @@ The same kernel applied to different critical challenges, different forms of the
 - **No-regret moves** — investments that pay off in every plausible scenario, such as deployment speed and observability.
 - **Signposts** — observable signals, written into the strategy, that would trigger a change of course.
 - **Changing course** — work out whether execution, actions or diagnosis failed; ignore sunk cost and explain the change openly.
-- **Investment allocation** — measure the actual split first, then set new value, enablement, sustain and unplanned targets from the diagnosis.
+- **Reviewing a strategy** — test the evidence behind the diagnosis, whether policies rule things out, whether actions are funded, and what would prove it wrong.
 - **Strategy by stage** — the same kernel, but startups fear over-engineering, scale-ups sprawl and enterprises inertia.
 
 ## Further Reading

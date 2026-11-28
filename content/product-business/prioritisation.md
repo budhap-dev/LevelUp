@@ -6,7 +6,7 @@ tags: [rice, wsjf, moscow]
 level: Senior
 estimatedMinutes: 45
 related: [product-management, estimation, technical-strategy]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -75,6 +75,37 @@ Common allocation models: a **capacity split** (e.g. 70% product / 20% tech heal
 - Communicate the **"no" and "not now"** list as clearly as the "yes" list.
 - Revisit on a cadence; new information should change priorities.
 
+### Worked example: RICE and Cost of Delay disagree
+
+One team can work on one item at a time. Four candidates:
+
+| Item | Reach / quarter | Impact | Confidence | Effort (person-months) | RICE |
+|---|---|---|---|---|---|
+| A: Bulk import | 2,000 | 1 | 80% | 2 | 800 |
+| B: Enterprise SSO | 300 | 3 | 100% | 3 | 300 |
+| C: Onboarding checklist | 4,000 | 0.5 | 50% | 1 | **1,000** |
+| D: Audit log (regulatory deadline in week 10) | 150 | 2 | 100% | 2 | 150 |
+
+RICE says **C, A, B, D**. Now add Cost of Delay per week and duration:
+
+| Item | Cost of Delay per week | Duration | CD3 |
+|---|---|---|---|
+| A | £3,000 (support time, retention) | 4 weeks | 0.75 |
+| B | £15,000 (three blocked enterprise deals) | 6 weeks | **2.5** |
+| C | £2,000 (already risk-adjusted for low confidence) | 2 weeks | 1.0 |
+| D | £0 until week 10, then £25,000 a week (fines and contract risk) | 4 weeks | Fixed date: must start by week 6 |
+
+Total delay cost for each order (each item costs its weekly rate until it ships):
+
+| Order | Calculation | Total |
+|---|---|---|
+| RICE order: C, A, B, D | C 2×2 + A 6×3 + B 12×15 + D 6 weeks late × 25 | **£352,000** |
+| CD3 with the deadline: B, D, C, A | B 6×15 + D on time + C 12×2 + A 16×3 | **£162,000** |
+
+**Why they differ:** RICE has no notion of **urgency**. It ranks B low because few users benefit, although each week of delay costs the most. It also has no way to represent D's deadline, so D ends up six weeks late.
+
+**What the team does:** B first, D second so it lands by week 10, then C and A. RICE was still useful: its confidence score is why C's Cost of Delay was discounted.
+
 ## How It Works
 
 ```mermaid
@@ -94,6 +125,31 @@ quadrantChart
 ```
 
 A 2×2 is a conversation starter; follow it with Cost of Delay for anything contested.
+
+### An urgent request arrives mid-quarter
+
+```mermaid
+sequenceDiagram
+  participant V as Sales VP
+  participant P as Product manager
+  participant T as Tech lead
+  %% step: Halfway through the quarter, the Sales VP asks for an integration needed to close a large deal. "Urgent" alone isn't enough to change the plan.
+  %% step: The product manager asks for the Cost of Delay inputs: what the deal is worth, when the customer must decide, and what happens if the feature is late.
+  %% step: The product manager asks the tech lead for a rough size, and which planned item it would displace.
+  %% step: The tech lead answers: about two weeks, displacing the bulk export work, plus a few days of switching cost to bring in-flight work to a safe stopping point.
+  %% step: The product manager compares CD3 for the request and the displaced item. The deal's Cost of Delay per week is far higher, and the work is short, so the request wins.
+  %% step: The product manager proposes a swap, not an addition. Bulk export moves to next quarter, and its stakeholders are told directly, with the reason.
+  %% step: The team reaches a safe stopping point before starting, so work in progress doesn't grow to three items at once.
+  %% step: At the quarter review, they check whether the deal closed. The answer calibrates how much weight future "urgent deal" requests get.
+  V->>P: Urgent integration for a deal
+  P->>V: Deal value, decision date, cost if late?
+  P->>T: Rough size, and what it displaces?
+  T-->>P: About 2 weeks, displaces bulk export
+  P->>P: Compare CD3
+  P->>V: Propose a swap, not an addition
+  T->>T: Reach a safe stopping point, then start
+  P->>V: Quarter review: did the deal close?
+```
 
 ## When to Use / Trade-offs
 
@@ -524,6 +580,181 @@ Deciding priorities before planning, outcome-level commitments, explicit depende
 - More detailed estimation to "improve accuracy".
 - Planning bottom-up with no strategic guidance.
 
+### How do you prioritise your own work as an engineer or tech lead? {#personal-prioritisation}
+
+**Level:** Foundation
+
+**Model answer:**
+The same ideas that prioritise a backlog apply to your own day: **importance, urgency and the cost of switching**.
+
+**Separate urgent from important** (the Eisenhower matrix):
+- **Important and urgent:** production incidents, a blocker for the whole team. Do now.
+- **Important, not urgent:** design work, mentoring, reducing toil, learning. Schedule it, or it never happens.
+- **Urgent, not important:** many interruptions and pings. Delegate, batch or decline.
+- **Neither:** drop.
+
+**Protect focus:** deep work needs long uninterrupted blocks. Block 2–3 hours in your calendar, batch messages, and agree team norms such as a rotating "interrupt handler" who takes support questions for the week.
+
+**Finish before starting:** limit your own work in progress. Two half-finished tasks deliver nothing; one finished task delivers value.
+
+**For tech leads,** unblocking others often comes first. A review that unblocks three people beats an hour of your own coding. Keep a short list of the team's blockers and clear it daily.
+
+**Make trade-offs visible:** when someone asks for something new, ask "What should I stop or delay to do this?" rather than silently absorbing it.
+
+**What the interviewer is looking for:**
+Urgent versus important, protected focus time, limiting work in progress, unblocking others first as a lead, and making trade-offs visible.
+
+**Follow-ups:**
+- Your manager and your tech lead give you conflicting priorities. What do you do?
+- How do you handle constant Slack interruptions?
+
+**Red flags:**
+- Working on whatever arrived most recently.
+- "I just work longer hours."
+
+### How do you estimate Cost of Delay when the value is hard to put a number on? {#estimating-cost-of-delay}
+
+**Level:** Senior
+
+**Model answer:**
+Cost of Delay doesn't need precision to be useful. Most of its value comes from **making assumptions explicit** and from recognising **urgency**. A rough range beats a confident guess hidden in someone's head.
+
+**Start with the type of value:**
+- **Increase revenue:** new deals, conversion, upsell.
+- **Protect revenue:** churn prevented, renewals at risk.
+- **Reduce cost:** support hours, cloud spend, manual work.
+- **Avoid cost or risk:** fines, outages, security incidents, measured as probability × impact.
+
+**Then the urgency profile** (how value changes with time; these match Kanban's classes of service):
+- **Standard:** value is lost steadily for every week of delay.
+- **Expedite:** value decays fast, such as a competitive window or a seasonal peak.
+- **Fixed date:** little cost until a deadline, then a large one, such as a regulation or a contract.
+- **Intangible:** little cost now, rising later, such as end-of-support software or ageing skills.
+
+**When numbers are genuinely unavailable:**
+- Use **ranges** ("£5,000–£20,000 a week") and check whether the decision changes across the range. Often it doesn't.
+- Use **relative scoring** (as in WSJF) within one session, calibrated against one item everyone understands.
+- Ask the people who own the value: sales for deals, finance for costs, security for risk.
+
+**Calibrate:** after delivery, compare the estimated value with what happened, and use the lessons next time.
+
+**What the interviewer is looking for:**
+Value types, urgency profiles, ranges and sensitivity checks, relative scoring as a fallback, involving value owners, and calibration.
+
+**Follow-ups:**
+- How do you put a Cost of Delay on technical debt?
+- What's the Cost of Delay of a security fix?
+
+**Red flags:**
+- Refusing to use Cost of Delay because "we can't know the numbers".
+- Treating a guessed figure as fact.
+
+### An urgent request arrives mid-quarter. How do you decide whether to change the plan? {#mid-quarter-changes}
+
+**Level:** Senior
+
+**Model answer:**
+Plans should change when new information justifies it, but not every time someone says "urgent". The aim is a **quick, explicit trade-off**, not silent absorption.
+
+**Ask for the inputs:**
+- What happens if we do it next quarter instead? What's the Cost of Delay?
+- Is there a real deadline, and who set it?
+- Is there a smaller version that meets the urgent need?
+
+**Make the trade-off explicit:**
+- Size it roughly and name **what it would displace**. Compare CD3 (Cost of Delay ÷ duration) for the request and the displaced work.
+- Include the **switching cost:** stopping in-flight work, context switching and re-planning.
+- Propose a **swap, not an addition.** Adding work without removing any is how plans quietly fail.
+
+**Decide at the right level:** the team's product manager can swap within the team's goals. If it affects company objectives or other teams, escalate with the numbers, so the person accountable for both outcomes chooses.
+
+**Communicate:** tell the owners of the displaced work directly, with the reason and a new expected date. Record the decision.
+
+**Watch the pattern:** if urgent requests arrive every week, the problem is upstream, in planning or strategy. Keep a buffer for unplanned work based on history, or shorten the planning cycle.
+
+**What the interviewer is looking for:**
+Asking for Cost of Delay inputs, smaller options, explicit displacement and switching cost, swaps rather than additions, the right decision-maker, and noticing patterns.
+
+**Follow-ups:**
+- The CEO asks for it directly. Does anything change?
+- How much buffer for unplanned work do you keep, and how do you size it?
+
+**Red flags:**
+- Saying yes and hoping the team absorbs it.
+- Refusing all change because "the plan is locked".
+
+### How do you prioritise and sequence a roadmap with many dependencies between teams? {#dependency-sequencing}
+
+**Level:** Architect
+
+**Model answer:**
+When work depends on other work, ranking items independently gives the wrong answer. An item with little value of its own can be the most urgent thing in the portfolio because it **unblocks** valuable work.
+
+**Map the dependencies first:** for each initiative, which teams and which enabling work does it need? Visualise it as a dependency graph across the planning horizon.
+
+**Sequence by the critical path:**
+- Find the longest chain of dependent work. Delays anywhere on it delay the outcome.
+- **Enablers inherit urgency:** an identity API needed by three high-value initiatives gets the combined Cost of Delay of what it unblocks.
+- Start critical-path work first, and give the teams on it protected capacity.
+
+**Find the constraint** (Theory of Constraints): if one team, such as platform or data, appears in most dependency chains, its capacity limits the whole portfolio. Options:
+- Prioritise that team's work by portfolio value, not by who shouts loudest.
+- Reduce demand on it: self-service, documentation, or letting other teams contribute through inner source.
+- Add capacity there before adding it anywhere else.
+
+**Reduce dependencies structurally:** recurring dependencies are a signal that team boundaries or architecture are wrong. Stable interfaces, X-as-a-service platforms and redrawing team boundaries cut them for good.
+
+**Plan for slippage:** build in checkpoints where dependent teams confirm readiness, and have fallbacks such as a temporary workaround if an enabler slips.
+
+**What the interviewer is looking for:**
+Mapping dependencies, critical-path sequencing, enablers inheriting Cost of Delay, finding and managing the constraint, structural reduction of dependencies, and planning for slippage.
+
+**Follow-ups:**
+- The constrained team is overwhelmed and morale is falling. What do you do?
+- How do you show executives that an "invisible" enabler is the top priority?
+
+**Red flags:**
+- Ranking every item on its own value, ignoring what it unblocks.
+- Treating the bottleneck team as the problem rather than the system.
+
+### How would you know whether your organisation's prioritisation is actually working? {#prioritisation-health}
+
+**Level:** Architect
+
+**Model answer:**
+Good prioritisation shows up in **outcomes and flow**, not in how sophisticated the scoring model is. Look for evidence across four areas.
+
+**Outcomes:**
+- What share of roadmap items achieved their **intended outcome** (not just shipped)?
+- Do the highest-ranked items turn out to be the most valuable in hindsight? Compare estimated and actual value.
+
+**Flow and focus:**
+- **Work in progress:** how many initiatives are active per team? More than one or two suggests nothing is really being prioritised.
+- **Started vs finished:** are initiatives finished, or abandoned halfway?
+- **Unplanned work** as a share of capacity, and whether mid-quarter changes are swaps or additions.
+
+**Decision quality and speed:**
+- **Decision latency:** how long do contested decisions take, and how often are they reopened?
+- Are decisions recorded with their reasoning?
+- Do teams know the top priorities? Ask them and compare the answers.
+
+**Trust:**
+- Stakeholder surveys: do they understand why their request is or isn't scheduled?
+- Escalations that go around the process are a symptom of low trust in it.
+
+**Act on what you find:** if outcomes rarely match intentions, invest in discovery before prioritising. If WIP is high, limit the number of active initiatives. If decisions keep reopening, clarify who decides.
+
+**What the interviewer is looking for:**
+Outcome-based evidence, flow and WIP signals, decision latency and reopening, shared understanding, stakeholder trust, and acting on the findings.
+
+**Follow-ups:**
+- Your leadership says prioritisation is fine because the roadmap is always full. How do you respond?
+- How often should you review the prioritisation process itself?
+
+**Red flags:**
+- Judging prioritisation by the elegance of the scoring spreadsheet.
+- Counting features shipped as the measure of success.
+
 ## Cheat Sheet
 
 - **MoSCoW** — Must / Should / Could / Won't (this time); scope a fixed-date release; cap Musts at ~60%.
@@ -539,6 +770,16 @@ Deciding priorities before planning, outcome-level commitments, explicit depende
 - **Severity vs priority** — severity is technical impact; priority is how soon to fix, given reach, revenue and workarounds.
 - **Outcome roadmap** — Now / Next / Later problems with target metrics; solutions held loosely.
 - **Opportunity solution tree** — outcome → customer opportunities → solutions → experiments (Teresa Torres).
+
+### Revisit
+
+- **RICE vs Cost of Delay** — RICE ranks by value per effort but ignores urgency and deadlines; CD3 sequences by urgency.
+- **Eisenhower matrix** — urgent and important: do; important only: schedule; urgent only: delegate or batch; neither: drop.
+- **Urgency profiles** — standard, expedite, fixed date and intangible (Kanban classes of service); each shapes how value is lost over time.
+- **Estimating Cost of Delay** — use value types, ranges and sensitivity checks; calibrate after delivery.
+- **Mid-quarter requests** — ask for Cost of Delay, name what's displaced plus switching cost, and swap rather than add.
+- **Enablers inherit urgency** — work that unblocks others carries the combined Cost of Delay of what it unblocks.
+- **Prioritisation health** — outcomes achieved, WIP, started vs finished, decision latency and stakeholder trust.
 
 ## Further Reading
 
