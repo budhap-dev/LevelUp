@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createSessionToken, verifySessionToken } from '../../api/_lib/auth.ts';
-import { gate, verifySessionTokenEdge } from '../../api/_lib/gate.ts';
+import { gate, PUBLIC_PATHS, verifySessionTokenEdge } from '../../api/_lib/gate.ts';
 
 const SECRET = 'test-secret';
 const req = (path: string, init: { cookie?: string; accept?: string; method?: string } = {}) =>
@@ -45,6 +47,21 @@ describe('gate', () => {
   it('always lets the API and the unlock page’s own files through', async () => {
     expect(await gate(req('/api/session'), SECRET)).toBeNull();
     expect(await gate(req('/favicon.svg'), SECRET)).toBeNull();
+  });
+
+  it('serves the web app manifest and its icons without a session, so the app can be installed', async () => {
+    for (const path of ['/manifest.webmanifest', '/pwa-192x192.png', '/pwa-512x512.png', '/maskable-512x512.png']) {
+      expect(await gate(req(path, { accept: '*/*' }), SECRET)).toBeNull();
+    }
+    // The service worker and app files stay locked.
+    expect((await gate(req('/sw.js', { accept: '*/*' }), SECRET))?.status).toBe(401);
+  });
+
+  it('lists every manifest icon as public', () => {
+    const config = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+    const iconPaths = [...config.matchAll(/src: '(\/[^']+\.png)'/g)].map((m) => m[1] ?? '');
+    expect(iconPaths.length).toBeGreaterThan(0);
+    for (const path of iconPaths) expect(PUBLIC_PATHS.has(path), path).toBe(true);
   });
 
   it('fails closed when the secret is not configured', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { APP_COMMIT, APP_VERSION, builtAtLabel } from '@/lib/version';
+import { promptInstall, useInstallState } from './installPrompt';
 import { usePwa } from './PwaStatus';
 
 type CheckState = 'idle' | 'checking' | 'latest' | 'error';
@@ -36,6 +37,7 @@ export function VersionFooter() {
 
   return (
     <div className="space-y-1.5 px-2.5 pt-1.5 pb-0.5">
+      <InstallApp />
       {needRefresh && (
         <button
           type="button"
@@ -68,6 +70,54 @@ export function VersionFooter() {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Matches the sidebar's nav rows (Sidebar rowClass and RowIcon), so it lines up with Settings above it. */
+const ROW =
+  'group/link flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left text-sm text-fg-soft transition-[scale,background-color,color] duration-200 ease-(--ease-out-expo) hover:bg-subtle hover:text-fg active:scale-[0.98]';
+
+function PhoneIcon() {
+  return (
+    <span className="flex size-5 shrink-0 items-center justify-center text-muted transition-[color,scale] duration-300 ease-(--ease-out-expo) group-hover/link:scale-110 group-hover/link:text-fg-soft">
+      <Icon name="phone" className="size-4.5" />
+    </span>
+  );
+}
+
+/**
+ * "Install app": the native prompt where the browser offers one (Android, desktop Chromium), Share-menu
+ * instructions on iOS, and nothing once installed or where installing isn't possible.
+ */
+export function InstallApp() {
+  const state = useInstallState();
+  const [showHelp, setShowHelp] = useState(false);
+
+  if (state === 'prompt') {
+    return (
+      <div className="-mx-2.5 animate-pop-in">
+        <button type="button" onClick={() => void promptInstall()} className={ROW}>
+          <PhoneIcon />
+          <span className="flex-1">Install app</span>
+        </button>
+      </div>
+    );
+  }
+  if (state !== 'ios') return null;
+  return (
+    <div className="-mx-2.5">
+      <button type="button" onClick={() => setShowHelp((v) => !v)} aria-expanded={showHelp} aria-controls="install-help" className={ROW}>
+        <PhoneIcon />
+        <span className="flex-1">Install app</span>
+        <Icon name="chevron" className={`size-3.5 transition-transform duration-200 ${showHelp ? 'rotate-90' : ''}`} />
+      </button>
+      {showHelp && (
+        <p id="install-help" className="mx-2.5 mt-1 mb-1.5 animate-pop-in rounded-lg bg-subtle px-3 py-2 text-xs leading-relaxed text-fg-soft">
+          Tap <Icon name="share" className="inline size-3.5 align-[-2px]" /> <strong className="text-fg">Share</strong>, then{' '}
+          <strong className="text-fg">Add to Home Screen</strong>. You'll enter the passphrase once in the installed app.
+        </p>
+      )}
     </div>
   );
 }

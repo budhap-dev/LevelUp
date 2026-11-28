@@ -35,8 +35,21 @@ function readCookie(request: Request, name: string): string | undefined {
   return undefined;
 }
 
-/** Files the unlock page itself uses, served without a session. Everything else needs one. */
-const PUBLIC_PATHS = new Set(['/favicon.svg', '/apple-touch-icon.png', '/robots.txt']);
+/**
+ * Files served without a session: those the unlock page itself uses, plus the web app manifest and its icons.
+ * Browsers fetch the manifest without cookies (a `<link rel="manifest">` has no credentials unless it sets
+ * crossorigin="use-credentials"), so a locked manifest makes the app uninstallable. They hold only the app's
+ * name, description and icons. Everything else, including sw.js (fetched with cookies), needs a session.
+ */
+export const PUBLIC_PATHS = new Set([
+  '/favicon.svg',
+  '/apple-touch-icon.png',
+  '/robots.txt',
+  '/manifest.webmanifest',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/maskable-512x512.png',
+]);
 
 /**
  * `null` lets the request through; otherwise the response to send instead.
