@@ -45,7 +45,7 @@
     "id": "delivery",
     "title": "Delivery",
     "shortTitle": "Delivery",
-    "description": "Agile ways of working, estimation and measuring delivery performance."
+    "description": "Agile and Git ways of working, estimation, releases, go-lives and measuring delivery performance."
   },
   {
     "id": "product-business",
