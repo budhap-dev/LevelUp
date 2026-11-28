@@ -6,7 +6,7 @@ tags: [strategy, roadmap, staff-engineer]
 level: Architect
 estimatedMinutes: 75
 related: [adrs-nfrs, influence-without-authority, prioritisation]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -101,6 +101,27 @@ Simon Wardley's maps plot the components of a value chain (y-axis: visibility to
 - Spot components ready to move to products or services.
 - Anticipate where competitors will commoditise.
 
+### Worked example: build or buy feature flags, over 3 and 5 years
+
+A 60-engineer company needs feature flags and experimentation. A team estimates it can build a good-enough service in 5 months with 3 engineers. A vendor quotes £40,000 a year, rising with usage by about 20% a year. Assume a loaded cost of £10,000 per engineer-month (£120,000 a year).
+
+| Cost | Build | Buy |
+|---|---|---|
+| Up-front | 15 engineer-months = £150,000 | Integration, 2 engineer-months = £20,000 |
+| Maintenance | 20% of build cost a year = £30,000 a year | Included in the licence |
+| Operations and ownership | 0.3 of an engineer on call and upkeep = £36,000 a year | 0.1 of an engineer as internal owner = £12,000 a year |
+| Licence | none | £40,000, £48,000, £57,600 in years 1–3 |
+| **3-year total** | 150 + 3 × 66 = **£348,000** | 20 + 145.6 + 36 = **about £202,000** |
+
+**Buy wins clearly over 3 years.** It also arrives months sooner, and the 15 engineer-months stay on the product.
+
+**Over 5 years the gap narrows.** The licence reaches about £83,000 in year 5, so buying totals about £378,000 against £480,000 for building. Buy still wins, but by year 3 the *annual* running cost of buying (£57,600 + £12,000 = £69,600) already exceeds building's (£66,000).
+
+**What goes in the ADR:**
+- **Decision:** buy, because flags are a commodity for this company and buying is cheaper and faster.
+- **Exit plan:** wrap the vendor SDK behind a thin internal interface, so leaving costs about 3 engineer-months rather than touching every service.
+- **Revisit trigger:** if usage-based pricing grows faster than 20% a year, or the licence passes £80,000 a year, re-run the comparison.
+
 ## How It Works
 
 ```mermaid
@@ -123,6 +144,32 @@ The process, socially:
 4. **Publish** a short document, an executive one-pager and a talk, with FAQs.
 5. **Embed** it in paved roads, review criteria, ADR templates and planning.
 6. **Review** it with measures and adjust.
+
+### A strategy from first draft to first revision
+
+```mermaid
+sequenceDiagram
+  participant S as Staff engineer
+  participant T as Teams
+  participant D as Directors
+  participant C as CTO
+  %% step: The staff engineer interviews teams and gathers data (lead time, incident causes, cost trends) before proposing anything. The aim is a diagnosis, not a solution.
+  %% step: They play the draft diagnosis back to the teams: "Does this ring true?" Corrections at this stage are cheap, and teams start to own the problem statement.
+  %% step: The guiding policies are pre-wired with each director one to one, so objections surface privately instead of in the launch meeting.
+  %% step: One director pushes back: their ML team needs Python, which the "no new languages" policy would block. Rather than weakening the policy, an explicit exception process is added.
+  %% step: The CTO is asked to sponsor the strategy and fund its coherent actions. Without capacity in the planning cycle, a strategy is only a wish.
+  %% step: Capacity is allocated in planning, and the strategy is published. Teams see it in changed defaults: paved roads, ADR templates and review criteria.
+  %% step: Each quarter, teams report the measures: leading indicators such as golden-path adoption, and outcomes such as lead time and cost per order.
+  %% step: The data shows one action isn't working. The actions are revised and the reason is recorded. The diagnosis is revisited only annually or after a major business change.
+  S->>T: Interviews and data
+  S->>T: Does this diagnosis ring true?
+  S->>D: Pre-wire guiding policies one to one
+  D-->>S: Push back: exception for ML work
+  S->>C: Ask for sponsorship and funding
+  C->>T: Capacity allocated, strategy published
+  T-->>S: Quarterly measures
+  S->>S: Revise actions, record why
+```
 
 ## When to Use / Trade-offs
 
@@ -642,6 +689,173 @@ A balanced approach of enablement and guardrails, platform thinking, risk-tiered
 - A blanket ban, or uncontrolled adoption.
 - Measuring success by lines of AI-generated code.
 
+### What are engineering principles, and how do you write useful ones? {#engineering-principles}
+
+**Level:** Foundation
+
+**Model answer:**
+**Engineering principles** are short statements of how an organisation prefers to make technical decisions. They let teams make consistent choices without asking for permission each time. They sit between a strategy's guiding policies and individual ADRs.
+
+**Useful principles:**
+- **Take a side in a real trade-off.** "Prefer managed services over self-hosting, unless an ADR shows a cost or control need" is useful. "We value quality" isn't, because nobody would argue the opposite.
+- **Are few:** 5–10, so people can remember them.
+- **Explain why,** with the reasoning and an example of the principle applied.
+- **Say how to deviate,** for example through an ADR, so they guide rather than block.
+
+**Examples:**
+- "Buy commodities, build differentiators."
+- "Each domain owns its data; integrate through APIs or events, never another team's tables."
+- "Optimise for change: small, reversible steps over big-bang releases."
+- "Secure by default: the paved road is the secure road."
+
+**Keep them alive:** reference them in design review templates, ADRs and onboarding, and review them yearly. A principle that is never cited in a decision should be deleted or rewritten.
+
+**What the interviewer is looking for:**
+Principles as decision aids that take sides on real trade-offs, few in number, with reasoning and a way to deviate, used in real reviews.
+
+**Follow-ups:**
+- Two principles conflict in a specific decision. What do you do?
+- How are principles different from standards?
+
+**Red flags:**
+- Platitudes nobody could disagree with.
+- Thirty principles that nobody remembers.
+
+### How do you shape a technical strategy when the future is highly uncertain? {#strategy-under-uncertainty}
+
+**Level:** Senior
+
+**Model answer:**
+Uncertainty isn't a reason to have no strategy. It changes what a good strategy looks like: **commit firmly where you're confident, keep options open where you're not, and say what would change your mind.**
+
+**Techniques:**
+- **Separate one-way and two-way doors.** Hard-to-reverse choices (data model, tenancy model, identity, a primary cloud) get careful analysis. Easily reversed ones get a quick default.
+- **Scenario planning:** describe 2–4 plausible futures, such as "growth through enterprise customers" against "growth through self-serve", and look for **no-regret moves** that help in all of them. Investing in observability and deployment speed usually pays off whatever happens.
+- **Buy options cheaply:** keep a seam where a future change is likely, such as an interface around a vendor, or data that can be exported. Don't build the full flexibility until it's needed.
+- **Run small bets:** spikes, pilots with one team, or a time-boxed trial with explicit **kill criteria**, before committing the organisation.
+- **Define signposts:** observable signals that would trigger a change of course. "If more than 30% of new revenue comes from regulated customers, we invest in data residency."
+
+**Write it down honestly:** state the assumptions and the signposts in the strategy, and review them each quarter. A strategy that says what would change it earns more trust than one that pretends to certainty.
+
+**What the interviewer is looking for:**
+Distinguishing reversible from irreversible decisions, scenario planning and no-regret moves, cheap options, small bets with kill criteria, and explicit signposts.
+
+**Follow-ups:**
+- Give an example of a no-regret move in your current organisation.
+- How do you stop "keeping options open" from becoming over-engineering?
+
+**Red flags:**
+- Refusing to decide until things are clear.
+- Building maximum flexibility everywhere "just in case".
+
+### How do you tell that a technical strategy is failing, and how do you change course? {#changing-course}
+
+**Level:** Senior
+
+**Model answer:**
+Strategies are hypotheses, so some will be wrong. The skill is noticing early and changing course **without losing credibility or momentum**.
+
+**Warning signs:**
+- **Leading indicators stall:** adoption of the golden path flattens, or migrations keep slipping.
+- **Outcomes don't move** even though the actions are done. This suggests the diagnosis was wrong.
+- **The context changed:** a new business direction, an acquisition, a regulation, or a technology shift such as AI changing build-versus-buy decisions.
+- **Teams route around it:** exceptions become the norm, or shadow tooling appears.
+- **Nobody refers to it** in planning or design reviews.
+
+**Diagnose which part failed:**
+- **Execution:** the right policy, but under-funded or poorly supported. Fix the support, not the strategy.
+- **Actions:** the policy is right but these steps don't deliver it. Change the actions.
+- **Diagnosis:** the problem was misread. Revisit the strategy itself.
+
+**Change course well:**
+- Avoid the **sunk cost** trap: judge on future costs and benefits, not what's been spent.
+- **Say it openly:** what you learned, what changes and what stays. Hiding a reversal costs far more trust than admitting it.
+- Record it in the strategy's change log and the relevant ADRs, so future readers understand why.
+- Help teams that invested in the old direction, for example by funding the move back.
+
+**What the interviewer is looking for:**
+Leading and lagging signals, separating execution, action and diagnosis failures, resisting sunk cost, and open communication.
+
+**Follow-ups:**
+- Your strategy was announced by the CTO six months ago. How do you raise that it's failing?
+- How do you tell "it needs more time" from "it's wrong"?
+
+**Red flags:**
+- Pushing harder on a failing strategy to save face.
+- Quietly dropping it without telling anyone.
+
+### How do you decide how to split engineering capacity across new features, platform, technical debt and reliability? {#investment-allocation}
+
+**Level:** Architect
+
+**Model answer:**
+The split is one of the most important strategic decisions, because it's where strategy turns into people's time. Make it **explicit, tied to the diagnosis, and reviewed each planning cycle**.
+
+**Make the current split visible first:** most organisations don't know it. Tag work by investment category for a quarter or two. The result often surprises leaders, for example that 35% of capacity goes on unplanned work and keeping the lights on.
+
+**Use categories leaders understand:**
+
+| Category | Examples |
+|---|---|
+| New value | Features, new products, experiments |
+| Enablement | Platform, developer experience, paved roads |
+| Sustain | Upgrades, debt paydown, reliability and security work |
+| Unplanned | Incidents, support escalations, urgent fixes |
+
+**Set the target from the diagnosis, not a template:** a company whose diagnosis is "slow delivery because of a fragile platform" might move from 75/5/10/10 to 60/15/20/5 for a year. A young product chasing product-market fit might deliberately run 85% on new value and accept the debt.
+
+**Decide the mechanism:**
+- **Percentages per team,** which teams spend on work they choose within the category.
+- **Funded initiatives** for large, cross-team work, such as a migration.
+- **Dedicated teams,** such as a platform team, where the work is continuous.
+
+**Review it:** compare the actual split with the target each quarter, and check whether the outcomes (lead time, incidents, unplanned work) are improving. If unplanned work falls, more capacity becomes available for new value, which is the business case for the investment.
+
+**What the interviewer is looking for:**
+Measuring the actual split first, categories the business understands, targets derived from the diagnosis, a clear funding mechanism, and outcome-based review.
+
+**Follow-ups:**
+- Product leadership wants 100% on features for the next two quarters. How do you respond?
+- How do you stop the "sustain" bucket being raided when deadlines loom?
+
+**Red flags:**
+- A fixed "20% for tech debt" with no link to a diagnosis.
+- No visibility of where capacity actually goes.
+
+### How does technical strategy differ between a 15-engineer startup and a 1,500-engineer enterprise? {#strategy-by-stage}
+
+**Level:** Architect
+
+**Model answer:**
+The kernel (diagnosis, guiding policy, coherent actions) is the same. What changes is **the critical challenge, how the strategy is written, and how it spreads**.
+
+| | Startup (about 15 engineers) | Scale-up (about 150) | Enterprise (about 1,500) |
+|---|---|---|---|
+| Typical critical challenge | Finding product-market fit before money runs out | Keeping delivery fast as teams multiply | Coordination, legacy estate, risk and cost |
+| Strategy looks like | A few explicit bets and "won't do" items, often in the CTO's head | A written strategy, the first platform team, principles and ADRs | Layered strategies (company, division, domain), portfolios and funding processes |
+| Main risk | Over-engineering: building for scale you may never need | Accidental complexity: each team choosing differently | Inertia: strategies that never reach the teams |
+| Build versus buy | Buy almost everything; build only the product | Start building where scale or differentiation justifies it | Consolidate overlapping buys and builds after acquisitions |
+| How it spreads | Conversations | Paved roads, design reviews, guilds | Funding, governance, architecture forums, platform products |
+
+**Startups:** the most important strategic choice is often to **choose boring technology** and keep the system simple, so the team can change direction quickly. Debt is taken deliberately, with notes on what to revisit after product-market fit.
+
+**Scale-ups:** the moment to write things down, before diversity of stacks and practices sets in. The first platform team and the first engineering principles usually come here.
+
+**Enterprises:** the challenge is alignment and execution through many layers. Strategy needs funding mechanisms, clear decision rights and measures. Local strategies in divisions must fit the company one.
+
+**Watch the transitions:** practices that worked at one stage become the problem at the next, such as the startup's lack of written decisions at 150 engineers.
+
+**What the interviewer is looking for:**
+The same kernel applied to different critical challenges, different forms of the strategy and ways of spreading it, and awareness of the risks at each transition.
+
+**Follow-ups:**
+- You join a 40-engineer startup as its first staff engineer. What do you do in your first quarter?
+- When should a startup start its first platform team?
+
+**Red flags:**
+- Bringing big-company process into a startup.
+- Treating an enterprise strategy as one document written by one person.
+
 ## Cheat Sheet
 
 ### Foundations
@@ -664,6 +878,16 @@ A balanced approach of enablement and guardrails, platform thinking, risk-tiered
 - **Measure** — outcomes (lead time, cost per transaction), leading indicators (adoption), health (DevEx).
 - **Rewrite bias** — default to incremental evolution; rewrites overrun and lose implicit behaviour.
 - **Strategy cadence** — quarterly progress review, annual revisit or on major business change.
+
+### Revisit
+
+- **Build vs buy TCO** — count up-front, maintenance, operations and ownership on both sides over 3–5 years; record an exit plan and revisit triggers.
+- **Engineering principles** — 5–10 decision aids that take sides on real trade-offs, with reasoning and a way to deviate.
+- **No-regret moves** — investments that pay off in every plausible scenario, such as deployment speed and observability.
+- **Signposts** — observable signals, written into the strategy, that would trigger a change of course.
+- **Changing course** — work out whether execution, actions or diagnosis failed; ignore sunk cost and explain the change openly.
+- **Investment allocation** — measure the actual split first, then set new value, enablement, sustain and unplanned targets from the diagnosis.
+- **Strategy by stage** — the same kernel, but startups fear over-engineering, scale-ups sprawl and enterprises inertia.
 
 ## Further Reading
 

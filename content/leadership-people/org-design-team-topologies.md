@@ -6,7 +6,7 @@ tags: [org-design, team-topologies, conways-law, leadership]
 level: Architect
 estimatedMinutes: 75
 related: [architecture-patterns, domain-driven-design, people-management, platform-engineering]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -138,6 +138,37 @@ export function orgHealth(components: Component[]) {
 }
 ```
 
+### Worked example: splitting a team that has grown to 14
+
+The Orders team has grown to 14 engineers owning 9 services. Stand-ups take 30 minutes, nobody understands all 9 services, and on-call is a lottery. Communication paths have grown from 21 (at 7 people) to 91.
+
+Instead of splitting by headcount ("first seven, second seven"), the manager looks at **change coupling** in version control for the past six months: which services changed together in the same pull request or ticket.
+
+| Service | Changes | Most often changed with |
+|---|---|---|
+| cart-api | 210 | cart-ui, promotions |
+| cart-ui | 185 | cart-api |
+| promotions | 120 | cart-api |
+| checkout-api | 160 | payments-adapter, order-history |
+| payments-adapter | 95 | checkout-api |
+| order-history | 80 | checkout-api, returns |
+| returns | 70 | order-history |
+| order-emails | 40 | (mostly alone) |
+| legacy-export | 10 | (mostly alone) |
+
+Two clusters stand out. **Basket** (cart-api, cart-ui, promotions) changes together and is about what customers buy. **Order lifecycle** (checkout-api, payments-adapter, order-history, returns) changes together and is about what happens after they buy. Only about 8% of changes crossed the two clusters, so this fracture plane follows the **business domain**, and both halves match how product managers already talk about the work.
+
+**The split:**
+- **Basket team** (6 engineers): cart-api, cart-ui, promotions.
+- **Order lifecycle team** (7 engineers): checkout-api, payments-adapter, order-history, returns, order-emails.
+- **legacy-export** goes to the Data Platform team, which consumes it, with a plan to retire it. One engineer moves with it.
+
+**Checks before announcing:**
+- Each team can deliver its usual work alone: about 92% of past changes would have stayed within one team.
+- Each new team has at least two people who know each service, and enough people for an on-call rota.
+- The 8% of cross-cluster changes are mostly checkout reading the basket. That becomes an explicit API owned by Basket, with an X-as-a-service interaction.
+- Engineers were asked their preferences first. Eleven of 14 got their first choice.
+
 ## How It Works
 
 ### Team types and interaction modes
@@ -174,6 +205,31 @@ flowchart TB
   MERGE --> REVIEW
   CSS --> REVIEW
   REVIEW --> SENSE
+```
+
+### From collaboration to X-as-a-service
+
+```mermaid
+sequenceDiagram
+  participant P as Payments team
+  participant L as Platform team
+  participant O as Other stream-aligned teams
+  %% step: Payments needs a ledger event stream that doesn't exist yet. The two teams agree to collaborate for one quarter, with a shared goal and an explicit end date, recorded in both team APIs.
+  %% step: Platform engineers pair with Payments on the real use case. The capability is shaped by an actual consumer, not by guesses.
+  %% step: Payments gives feedback from production traffic: the event schema needs versioning, and replay is essential for their reconciliation jobs.
+  %% step: Before the end date, Platform turns what they learned into a product: documentation, a self-service onboarding path, an SLO and a versioned schema registry.
+  %% step: The interaction mode switches to X-as-a-service. Payments now consumes the capability through its interface, with no meetings needed for routine use.
+  %% step: Other teams onboard themselves using the documentation. This is the test of whether the collaboration produced a real service.
+  %% step: One team hits a gap the docs don't cover and raises it through Platform's request channel. A short facilitating engagement fixes the docs, instead of reopening collaboration.
+  %% step: At the quarterly review, Platform checks how many teams onboarded without help and what they asked for. That data shapes the next improvement.
+  P->>L: Agree to collaborate for one quarter
+  L->>P: Pair on the real ledger use case
+  P-->>L: Needs schema versioning and replay
+  L->>L: Docs, self-service onboarding, SLO, schema registry
+  P->>L: Consume as X-as-a-service
+  O->>L: Onboard through the docs alone
+  O->>L: Gap found, raised through the request channel
+  L->>L: Review onboarding data and requests
 ```
 
 ## When to Use / Trade-offs
@@ -616,6 +672,174 @@ Sensing mechanisms, small reversible changes, stable teams with movable ownershi
 - Annual reorgs as normal practice.
 - Org changes decided entirely by leadership without data or team input.
 
+### What are communities of practice, and how do you make them work? {#communities-of-practice}
+
+**Level:** Foundation
+
+**Model answer:**
+A **community of practice** (Etienne Wenger's term) is a group of people who share a craft or concern and learn together, across team boundaries. In engineering, examples are a frontend guild, a testing community or an SRE chapter. Spotify's model called them **chapters** (same skill, often with a line manager) and **guilds** (voluntary interest groups).
+
+**Why they matter in a stream-aligned organisation:** product teams optimise for flow, which spreads specialists thin. Communities keep the craft strong: consistent practices, shared learning, career growth for specialists, and a place to agree conventions that cross teams.
+
+**What makes them work:**
+- **A clear purpose:** "agree and maintain our frontend conventions and component library", not "talk about frontend".
+- **Real outputs and some authority:** owning a style guide, a reference implementation, the radar entries for their area, or internal training.
+- **A coordinator with protected time:** a few hours a week, recognised in their review. Volunteer-only communities fade within months.
+- **A rhythm:** a regular session with demos, problem clinics and short talks, plus an active channel.
+- **Leadership support,** shown by attending occasionally and acting on recommendations.
+
+**What breaks them:**
+- Making membership mandatory, or turning sessions into status meetings.
+- Communities that only talk, with no influence on how work is done.
+- Chapter leads who manage people they never see working, as in some copied Spotify setups.
+
+**What the interviewer is looking for:**
+What communities of practice are, why stream-aligned organisations need them, the conditions for success (purpose, outputs, time, recognition) and common failure modes.
+
+**Follow-ups:**
+- Should a chapter lead be someone's line manager?
+- How would you revive a guild that has stopped meeting?
+
+**Red flags:**
+- "We have a guild channel" as the whole answer.
+- Mandatory attendance with no outputs.
+
+### How would you run a team self-selection exercise? {#team-self-selection}
+
+**Level:** Senior
+
+**Model answer:**
+In **self-selection**, engineers choose which team to join, within constraints, instead of managers assigning them. Organisations such as Trade Me in New Zealand have used it at scale. People who choose their team tend to be more committed to it, and the exercise surfaces preferences managers rarely know.
+
+**Prepare (the most important part):**
+- **Design the teams first:** missions, ownership, team types and the skills each needs, based on the strategy and fracture planes. People choose among teams; they don't design the structure in the room.
+- **Set explicit constraints:** team size limits, the skills mix each team needs (for example at least one senior backend engineer and someone with on-call experience for the services), and any people who must stay for continuity.
+- **Explain it well in advance,** with each team's mission written up, and let product managers and leads answer questions.
+
+**On the day:**
+- Each person places their name on their first-choice team, with second and third choices.
+- In rounds, each team checks itself against the constraints, and the group resolves gaps and overfilled teams together, through conversation, not managers' decisions.
+- Facilitators make sure quieter people aren't squeezed out.
+
+**Afterwards:**
+- Managers resolve the remaining conflicts privately and kindly, including for anyone who didn't get a choice that works for them.
+- Agree a transition plan for ownership and on-call, and review in 3 months.
+
+**When not to use it:** when there's very little real choice (it then feels fake), when trust is low after layoffs, or when people's legal or contractual roles constrain moves.
+
+**What the interviewer is looking for:**
+Design teams before people choose, explicit constraints, transparency, a facilitated process, care for edge cases, and knowing when it doesn't fit.
+
+**Follow-ups:**
+- What if nobody chooses the legacy platform team?
+- How do you handle two people who don't want to work together?
+
+**Red flags:**
+- Letting people design the org structure on the day.
+- No constraints, leaving teams without critical skills.
+
+### How do you run an enabling team engagement so it ends well? {#enabling-team-engagement}
+
+**Level:** Senior
+
+**Model answer:**
+An enabling team's success is measured by **the other team no longer needing it**. Without a clear structure, engagements drift into the enabling team doing the work permanently.
+
+**Before starting:**
+- **Agree the capability to build,** with observable outcomes. For example: "The Claims team writes and maintains its own contract tests, and its change failure rate drops below 10%."
+- **Agree a time box,** typically 6–12 weeks, and what each side commits: the receiving team's time, not just goodwill.
+- **Confirm the mode is facilitating:** the enabling team coaches and pairs; the receiving team owns the work and its results.
+
+**During:**
+- Start by **pairing on the team's real work,** not training courses.
+- **Shift responsibility week by week:** the enabling engineers drive at first, then navigate, then review, then step back.
+- **Leave artefacts behind:** templates, a short guide written with the team, and examples in their own code.
+- **Check progress against the outcome** halfway, and adjust.
+
+**Ending:**
+- **Step away on the agreed date,** with a final review against the outcome.
+- Offer a short **follow-up check** a month later, through office hours rather than continued embedding.
+- **Capture what you learned** so the next engagement with a different team is faster, and so common gaps can become platform improvements.
+
+**Warning signs:** the receiving team stops attending, the enabling engineers are the only ones writing the tests, or the engagement keeps being extended. These mean the capability isn't transferring, and the scope or approach should change.
+
+**What the interviewer is looking for:**
+Outcome-based goals, a time box with commitments on both sides, facilitating rather than doing, gradual handover, leaving artefacts, and stepping away on time.
+
+**Follow-ups:**
+- The receiving team says they're too busy to take part. What do you do?
+- How do you measure an enabling team's success overall?
+
+**Red flags:**
+- The enabling team writing the code itself, indefinitely.
+- Engagements with no end date or outcome.
+
+### Should specialists such as SRE, security, data and design be centralised or embedded in product teams? {#centralised-vs-embedded-specialists}
+
+**Level:** Architect
+
+**Model answer:**
+Neither extreme works well. **Fully centralised** specialists become a queue and lose product context. **Fully embedded** specialists become isolated, inconsistent and hard to grow, and there are rarely enough of them for every team. The answer depends on **scarcity, the type of work and how much context it needs**.
+
+| Model | How it works | Fits when | Risks |
+|---|---|---|---|
+| Central team as a service | Specialists own a platform or capability others consume | The capability can be productised (SRE tooling, data platform, security scanning) | Ticket queues; distance from product needs |
+| Embedded with a home community | Specialists sit in product teams, with a chapter or community for craft and consistency | Work needs deep, daily product context (design, data analysis) and there are enough people | Isolation; inconsistent practices; two bosses |
+| Enabling team | Specialists build capability in teams for a period, then move on | The goal is for teams to own it themselves (testing, accessibility, observability practices) | Never-ending engagements |
+| Pooled with rotation | A central group assigned to product areas for a quarter or more | Scarce skills, demand that shifts | Context loss at every rotation |
+
+**A common combination:**
+- **SRE:** a platform team owns reliability tooling and standards; stream-aligned teams own their own on-call and SLOs; an enabling SRE group helps teams that are struggling.
+- **Security:** a central team owns policy, tooling and incident response; **security champions** in each team handle day-to-day practice.
+- **Data:** a data platform team; analysts or data engineers embedded in product areas with a data community.
+- **Design:** embedded in product teams, with a design system team and a design community.
+
+**Decide with evidence:** where are teams waiting on specialists? Where do practices diverge harmfully? Revisit as the organisation grows. A model that suits 50 engineers rarely suits 500.
+
+**What the interviewer is looking for:**
+Trade-offs of each model, matching the model to scarcity and context needs, realistic combinations per discipline, and evidence-driven review.
+
+**Follow-ups:**
+- Who should manage an embedded data analyst?
+- How do security champions avoid becoming a token role?
+
+**Red flags:**
+- One model applied to every specialism.
+- Central teams that every change must queue for.
+
+### How do you design teams in a heavily regulated environment? {#org-design-regulated}
+
+**Level:** Architect
+
+**Model answer:**
+Regulation (financial services, healthcare, payments) adds constraints, but it doesn't change the goal: **fast flow with clear ownership**. Badly designed compliance creates hand-offs at every step; well-designed compliance is built into the teams and the platform.
+
+**Use regulation as a fracture plane where it reduces scope:**
+- Isolate regulated parts, such as card data in PCI DSS scope or patient records, in **as few services and teams as possible**. Every team that touches card data adds audit scope, training and controls.
+- Give that team a clear service interface (tokenisation, a records API), so other teams build on it without coming into scope.
+
+**Build controls into the flow instead of adding approval gates:**
+- **Segregation of duties** (the person who writes a change shouldn't be the only person who approves its release to production) can be met with **mandatory peer review and automated pipeline controls**, rather than a separate release team. Audit evidence comes from the pipeline: who reviewed, which checks passed and who approved the deployment.
+- A **platform** provides compliant defaults: encryption, access logging, retention, approved infrastructure modules. Teams that use them inherit the controls.
+- **Policy as code** checks the controls automatically, so compliance doesn't depend on manual reviews.
+
+**Organise the specialists:**
+- Risk and compliance experts work with teams early, in design reviews and as an enabling function, not only at a final approval gate.
+- Name clear **accountable owners** where regulation requires them, such as the senior managers named under the UK's Senior Managers and Certification Regime, and make sure the team structure gives them real visibility.
+
+**Make evidence continuous:** dashboards and automated reports for auditors, so audits become extracting evidence that already exists rather than a quarterly scramble.
+
+**What the interviewer is looking for:**
+Regulation as a fracture plane to minimise scope, segregation of duties met through review and pipeline controls, compliant platform defaults, policy as code, early involvement of specialists and continuous evidence.
+
+**Follow-ups:**
+- An auditor insists a separate team must deploy to production. How do you respond?
+- How do you keep the PCI-scoped team from becoming a bottleneck?
+
+**Red flags:**
+- Adding a manual approval board for every change.
+- Letting regulated data spread across many teams.
+
 ## Cheat Sheet
 
 ### Principles
@@ -641,6 +865,16 @@ Sensing mechanisms, small reversible changes, stable teams with movable ownershi
 - **Fracture planes** — domain, regulation, change cadence, risk, performance, persona, location. Rarely technology layer.
 - **Span of control** — about 5–8 reports for first-line engineering managers, depending on context.
 - **Ownership rule** — every service and data store has exactly one owning team.
+
+### Revisit
+
+- **Change coupling** — split along clusters of services that change together; measure how many past changes would cross the new boundary.
+- **Splitting checks** — each team can deliver alone, has two people per service and an on-call rota, and remaining cross-team needs become explicit APIs.
+- **Collaboration to X-as-a-service** — collaborate with an end date, turn what you learned into docs, self-service and an SLO, then switch mode.
+- **Communities of practice** — a clear purpose, real outputs, a coordinator with protected time and leadership support.
+- **Team self-selection** — design the teams and constraints first, let people choose in facilitated rounds, and resolve edge cases kindly.
+- **Enabling engagement** — an outcome, a 6–12 week time box, coaching rather than doing, handover week by week, then step away.
+- **Regulated org design** — keep regulated scope in few teams, and meet segregation of duties with reviews and pipeline controls rather than release boards.
 
 ## Further Reading
 
