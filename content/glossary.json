@@ -8082,5 +8082,284 @@
     "related": [
       "mentorship"
     ]
+  },
+  {
+    "id": "community-of-practice",
+    "term": "Community of practice",
+    "aka": [
+      "guild",
+      "chapter"
+    ],
+    "group": "leadership-people",
+    "definition": "A group of people who share a craft or concern and learn together across team boundaries, a term from Jean Lave and Etienne Wenger. In engineering, examples include a frontend guild or a testing community.",
+    "details": [
+      "Works best with a clear purpose, real outputs such as a style guide, and a coordinator with protected time.",
+      "Keeps specialist craft strong in organisations built around stream-aligned teams."
+    ],
+    "useCases": [
+      "Agreeing and maintaining frontend conventions and a shared component library across ten product teams."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "mentorship"
+    ]
+  },
+  {
+    "id": "change-coupling",
+    "term": "Change coupling",
+    "aka": [
+      "temporal coupling",
+      "logical coupling"
+    ],
+    "group": "architecture-design",
+    "definition": "A measure of which files, modules or services tend to change together in the same commits or tickets, mined from version control history. Strong change coupling across a boundary suggests the boundary is in the wrong place.",
+    "details": [
+      "Popularised by Adam Tornhill's behavioural code analysis.",
+      "Useful for choosing team boundaries and service splits along clusters that change together."
+    ],
+    "useCases": [
+      "Splitting a 14-person team so that over 90% of past changes would have stayed within one team."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "technical-debt",
+      "domain-driven-design"
+    ]
+  },
+  {
+    "id": "team-self-selection",
+    "term": "Team self-selection",
+    "aka": [
+      "self-selection"
+    ],
+    "group": "leadership-people",
+    "definition": "A reorganisation technique in which engineers choose which team to join, within explicit constraints such as team size and required skills, instead of managers assigning them.",
+    "details": [
+      "Team missions and constraints are designed first; people choose among them in facilitated rounds.",
+      "Used at scale by Trade Me in New Zealand, and described in Sandy Mamoli and David Mole's book Creating Great Teams."
+    ],
+    "useCases": [
+      "Forming four new product teams after a strategy change, with each team checking its own skills mix."
+    ],
+    "related": [
+      "org-design-team-topologies",
+      "people-management"
+    ]
+  },
+  {
+    "id": "security-champion",
+    "term": "Security champion",
+    "aka": [
+      "security champions programme"
+    ],
+    "group": "quality-security",
+    "definition": "An engineer in a product team who takes on extra security responsibility, acting as the first point of contact for security practice and as a link to the central security team.",
+    "details": [
+      "Needs training, protected time and recognition, or the role becomes a token title.",
+      "Scales a small security team across many product teams."
+    ],
+    "useCases": [
+      "Having one trained champion per team review threat models and triage dependency alerts."
+    ],
+    "related": [
+      "devsecops",
+      "owasp-threat-modelling",
+      "org-design-team-topologies"
+    ]
+  },
+  {
+    "id": "situational-leadership",
+    "term": "Situational leadership",
+    "aka": [
+      "SLII",
+      "Hersey–Blanchard model"
+    ],
+    "group": "leadership-people",
+    "definition": "A model by Paul Hersey and Ken Blanchard in which a leader adapts their style to a person's competence and commitment for a specific task: directing, coaching, supporting or delegating.",
+    "details": [
+      "The same person may need direction on one task and full delegation on another.",
+      "Explains why one fixed management style fails across a varied team."
+    ],
+    "useCases": [
+      "Giving step-by-step direction to an experienced engineer who is new to on-call, while fully delegating their usual design work."
+    ],
+    "related": [
+      "people-management",
+      "leadership"
+    ]
+  },
+  {
+    "id": "performance-improvement-plan",
+    "term": "Performance improvement plan",
+    "aka": [
+      "PIP"
+    ],
+    "group": "leadership-people",
+    "definition": "A formal, documented process, usually run with HR, that sets specific goals, support and a timeline for someone whose performance hasn't improved through informal feedback and support.",
+    "details": [
+      "Should follow informal support, never come first or as a surprise.",
+      "A fair plan is genuinely aimed at success, with achievable goals and real help."
+    ],
+    "useCases": [
+      "Moving to a formal six-week plan after two months of informal coaching produced no change."
+    ],
+    "related": [
+      "people-management"
+    ]
+  },
+  {
+    "id": "performance-calibration",
+    "term": "Performance calibration",
+    "aka": [
+      "calibration"
+    ],
+    "group": "leadership-people",
+    "definition": "A meeting in which managers compare proposed ratings or promotions across teams against a shared framework, so that outcomes are consistent and fair.",
+    "details": [
+      "Watch for recency, halo, similarity and visibility bias, and for double standards in language.",
+      "Managers advocate with evidence and accept challenge."
+    ],
+    "useCases": [
+      "Checking that 'exceeds expectations' means the same thing in every team of an engineering department."
+    ],
+    "related": [
+      "people-management",
+      "hiring-interviewing"
+    ]
+  },
+  {
+    "id": "stay-interview",
+    "term": "Stay interview",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A conversation with a current employee about what keeps them at the company, what might make them leave, and what would make their work better, held before they think of resigning.",
+    "details": [
+      "Asks questions such as 'What would tempt you away?' and 'What should I change?'.",
+      "Only builds trust if the manager acts on what they hear."
+    ],
+    "useCases": [
+      "Learning that a strong engineer is bored and finding them a new challenge before a recruiter does."
+    ],
+    "related": [
+      "people-management",
+      "mentorship"
+    ]
+  },
+  {
+    "id": "compa-ratio",
+    "term": "Compa-ratio",
+    "aka": [
+      "comparative ratio"
+    ],
+    "group": "leadership-people",
+    "definition": "An employee's salary divided by the midpoint of the pay band for their role and level. A compa-ratio of 1.0 means paid exactly at the midpoint; 0.85 means 15% below it.",
+    "details": [
+      "Used to spot underpayment and pay equity gaps among people at the same level.",
+      "Every gap should have a documented, legitimate reason."
+    ],
+    "useCases": [
+      "Finding that long-tenured engineers sit at 0.88 while recent hires sit at 1.05, and correcting it before people leave."
+    ],
+    "related": [
+      "people-management"
+    ]
+  },
+  {
+    "id": "team-health-check",
+    "term": "Team health check",
+    "aka": [
+      "squad health check"
+    ],
+    "group": "leadership-people",
+    "definition": "A regular self-assessment in which a team rates itself on areas such as mission clarity, speed, technical quality, fun and support, and discusses the trend. Popularised by Spotify's squad health check model.",
+    "details": [
+      "The conversation matters more than the scores.",
+      "Used to start conversations and spot trends, never to rank teams."
+    ],
+    "useCases": [
+      "Noticing that a team's 'pawns or players' score has fallen for two quarters as priorities kept changing."
+    ],
+    "related": [
+      "people-management",
+      "org-design-team-topologies",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "technology-radar",
+    "term": "Technology radar",
+    "aka": [
+      "tech radar"
+    ],
+    "group": "leadership-people",
+    "definition": "A regularly updated, published view of technologies and techniques grouped into rings such as Adopt, Trial, Assess and Hold, with the reasoning for each. The format comes from Thoughtworks.",
+    "details": [
+      "Guides choices without mandating them, curbing sprawl across many teams.",
+      "Needs curation and an owner, or it goes stale."
+    ],
+    "useCases": [
+      "Putting a second message broker on Hold so teams converge on the one the platform supports."
+    ],
+    "related": [
+      "technical-strategy",
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "total-cost-of-ownership",
+    "term": "Total cost of ownership",
+    "aka": [
+      "TCO"
+    ],
+    "group": "leadership-people",
+    "definition": "The full cost of a capability over its life: purchase or build cost plus integration, maintenance, operations, licences, people, and the cost of leaving, compared over the same period, typically 3–5 years.",
+    "details": [
+      "Building's hidden costs are maintenance and on-call; buying's are usage growth and exit.",
+      "Record revisit triggers, because the answer changes as usage grows."
+    ],
+    "useCases": [
+      "Showing that buying feature flags costs about £202,000 over 3 years against £348,000 to build."
+    ],
+    "related": [
+      "technical-strategy",
+      "finops"
+    ]
+  },
+  {
+    "id": "scenario-planning",
+    "term": "Scenario planning",
+    "aka": [],
+    "group": "leadership-people",
+    "definition": "A strategy technique that describes several plausible futures and looks for decisions that work across all of them, known as no-regret moves, plus signposts that show which future is unfolding.",
+    "details": [
+      "Popularised by Shell in the 1970s.",
+      "Pairs well with cheap options and small, reversible bets."
+    ],
+    "useCases": [
+      "Investing in deployment speed and observability, which pay off whether growth comes from enterprise or self-serve customers."
+    ],
+    "related": [
+      "technical-strategy"
+    ]
+  },
+  {
+    "id": "engineering-principles",
+    "term": "Engineering principles",
+    "aka": [
+      "architecture principles"
+    ],
+    "group": "leadership-people",
+    "definition": "A short list of statements describing how an organisation prefers to make technical decisions, each taking a side on a real trade-off, so teams can decide consistently without asking permission.",
+    "details": [
+      "Useful principles are few, explain why, and say how to deviate, for example through an ADR.",
+      "A principle nobody cites in decisions should be rewritten or deleted."
+    ],
+    "useCases": [
+      "'Each domain owns its data; integrate through APIs or events, never another team's tables.'"
+    ],
+    "related": [
+      "technical-strategy",
+      "adrs-nfrs"
+    ]
   }
 ]

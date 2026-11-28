@@ -6,7 +6,7 @@ tags: [management, 1-1s, performance]
 level: Senior
 estimatedMinutes: 60
 related: [leadership, mentorship, hiring-interviewing]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -63,7 +63,25 @@ Delegate outcomes, not just tasks; match the level of support to the person's ex
 
 ### Wellbeing and sustainability
 
-Watch for burnout signs: cynicism, withdrawal, quality dropping, long hours, irritability. Causes are usually systemic — workload, lack of control, unfair treatment, values conflict, lack of recognition. Fix the system (scope, on-call load, priorities), not just "take a holiday".
+Watch for burnout signs: cynicism, withdrawal, quality dropping, long hours, irritability. Causes are usually systemic. Christina Maslach's research names six areas: workload, lack of control, insufficient recognition or reward, breakdown of community, unfairness, and values conflict. Fix the system (scope, on-call load, priorities), not just "take a holiday".
+
+### Worked example: an informal support plan
+
+A mid-level backend engineer moved to the team three months ago. Their pull requests stay open a median of 6 days (the team's median is 1.5), they have missed two sprint commitments, and reviewers keep leaving the same comments about error handling and event idempotency.
+
+**Diagnose first.** In a private conversation the manager shares the specific observations and asks open questions. It turns out the engineer came from a Java monolith, the team works in Go with an event-driven design, and they don't know who to ask, so they polish large pull requests alone before showing anyone. That is a **skill gap plus unclear expectations**, not low motivation, so the response is support, not a formal process.
+
+**The plan**, agreed together and written up in their shared 1:1 document:
+
+| Weeks | Expectation | Support | Evidence |
+|---|---|---|---|
+| 1–2 | Pull requests under about 300 lines; first one open within 2 days of starting a ticket | Pairing twice a week with a senior Go engineer; a short guide to the event model | Pull request size, time to first pull request |
+| 3–4 | Own one small feature end to end, starting with a one-page design note | Design note reviewed by the tech lead before coding | Review rounds, design note quality |
+| 5–6 | Deliver a medium ticket with no more than two review rounds | Pairing drops to once a week | Cycle time, review rounds |
+
+**Check-ins** happen weekly in the 1:1, recording progress honestly, including what went well.
+
+**At week 6:** median pull request time is 1.8 days, review rounds have fallen from about 5 to 2, and the repeated comments have stopped. The plan closes and normal 1:1s continue. Had there been no movement despite real support, the next step would have been a conversation with HR about a formal process, never a surprise.
 
 ## How It Works
 
@@ -81,6 +99,32 @@ flowchart TD
   I -->|"no"| J["Formal process with HR, or respectful exit"]
   F --> K["Performance review: no surprises, calibrated"]
   K --> B
+```
+
+### A promotion case, from gap to outcome
+
+```mermaid
+sequenceDiagram
+  participant E as Engineer
+  participant M as Manager
+  participant P as Peers and partner teams
+  participant C as Calibration panel
+  %% step: Six months before the cycle, the manager and engineer compare recent work with the next level's expectations and agree the gaps. The question is scope and impact, not time in role.
+  %% step: The manager finds work that exercises the gap: leading the design of a cross-team refund flow, with a senior engineer available as a safety net.
+  %% step: Throughout the period, the engineer keeps a brag document recording outcomes, decisions, and who they helped and how.
+  %% step: Before writing the case, the manager asks peers and a partner team's lead for specific examples of the engineer working at the next level.
+  %% step: The manager writes the case against the framework: each expectation with evidence and impact. Effort and long hours are not evidence.
+  %% step: The calibration panel compares the case with others at the same level across teams, and challenges thin evidence.
+  %% step: The panel asks whether the engineer has influenced beyond their own team. The manager answers with the partner team's example, or accepts a deferral with a clear gap.
+  %% step: The manager tells the engineer the outcome in person first, with the reasons and, if needed, what would close the remaining gap.
+  M->>E: Compare work with next level, agree gaps
+  M->>E: Stretch work: lead the refund design
+  E->>E: Keep a brag document
+  M->>P: Ask for specific examples
+  M->>C: Submit an evidence-based case
+  C->>C: Compare across teams
+  C-->>M: Challenge: influence beyond the team?
+  M->>E: Outcome, reasons and next steps
 ```
 
 ## When to Use / Trade-offs
@@ -306,6 +350,7 @@ Evidence-based, framework-anchored reviews, bias awareness in calibration and tr
 - **On-call load:** noisy alerts, too few people in rotation; fix alerts, compensate time.
 - **Lack of control or clarity:** constant priority changes; stabilise priorities with product.
 - **Unfairness or lack of recognition.**
+- **Breakdown of community:** isolation, unresolved conflict or no support from colleagues.
 - **Values conflict:** asked to ship things they believe are wrong or unsafe.
 
 **Model sustainable behaviour:** don't send midnight messages that imply expectations, take leave yourself, and celebrate prevention over heroics.
@@ -494,6 +539,179 @@ Async practices, fair meeting rotation, end-to-end ownership per location, equit
 - A "hub and satellites" model where remote people get second-class work.
 - Meetings always scheduled for HQ convenience.
 
+### How do you onboard a new engineer onto your team? {#onboarding-engineers}
+
+**Level:** Foundation
+
+**Model answer:**
+Good onboarding gets someone **productive, connected and confident** quickly. A common measure is time to first production change, alongside how the person feels after 30 and 90 days.
+
+**Before day one:**
+- Accounts, hardware and access ready, so the first day isn't spent waiting for permissions.
+- A **buddy** chosen: a peer, not the manager, who answers the "silly" questions.
+- A first task chosen: small, real and shippable in the first week, such as a bug fix or a small improvement.
+
+**First weeks:**
+- **Context before code:** the team's mission, users, architecture overview, how work flows from idea to production, and who the key people are in other teams.
+- **Ship something in week one,** pairing with the buddy, so they go through the whole path: branch, review, pipeline, deploy and monitoring.
+- **Schedule introductions** with stakeholders and partner teams, rather than leaving them to chance.
+- **Weekly 1:1s from day one,** with explicit permission to ask questions and say what's confusing.
+
+**A 30-60-90 plan,** agreed together:
+- **30 days:** knows the domain and tools, has shipped several changes, has joined on-call shadowing.
+- **60 days:** owns a small feature end to end.
+- **90 days:** works independently at their level, takes a full on-call shift, and contributes to planning.
+
+**Improve the process:** the new joiner fixes anything wrong in the onboarding docs as they go, and at 30 days the manager asks what was confusing and what helped. Fresh eyes spot the gaps everyone else has stopped seeing.
+
+**What the interviewer is looking for:**
+Preparation before day one, a buddy, context alongside a real first change, early 1:1s, a shared 30-60-90 plan and feedback that improves onboarding for the next person.
+
+**Follow-ups:**
+- How does onboarding differ for a senior or staff engineer?
+- How do you onboard someone fully remotely?
+
+**Red flags:**
+- "Read the wiki for two weeks."
+- No first task, no buddy, and no check-ins until the probation review.
+
+### How do you build a promotion case for someone on your team? {#promotion-cases}
+
+**Level:** Senior
+
+**Model answer:**
+A promotion recognises that someone is **already working at the next level**, consistently. It isn't a reward for tenure or effort. The work starts months before the cycle.
+
+**Months before:**
+- Compare their recent work with the **next level's expectations** in the career framework, and agree the specific gaps together.
+- **Create opportunities** that exercise those gaps, such as leading a design, owning a cross-team project or mentoring others, with enough support that the stretch is fair.
+- Encourage them to keep a **brag document:** outcomes, decisions, influence and help given, with links.
+
+**Writing the case:**
+- Structure it **against the framework,** expectation by expectation: scope, impact, technical depth, collaboration and leadership.
+- Use **specific evidence and impact:** "Led the refund redesign across three teams; incidents in that area fell from 4 a quarter to none" rather than "worked very hard".
+- Include **peer and partner-team feedback** from people who saw the work directly.
+- Be honest about remaining gaps, and how they're being closed. Panels trust balanced cases.
+
+**In calibration:** advocate with evidence, answer challenges directly, and watch for bias against quieter people, part-time staff or those whose impact was glue work.
+
+**Afterwards:** tell them in person first. If it didn't happen, explain why, agree what would change the outcome, and support them to the next cycle. A second "no" without clear reasons erodes trust fast.
+
+**What the interviewer is looking for:**
+Already performing at the next level, early gap analysis, deliberate opportunities, an evidence-based case structured on the framework, honest gaps, fair advocacy and careful communication.
+
+**Follow-ups:**
+- Your report expects a promotion you don't think they're ready for. What do you say?
+- How do you promote someone whose biggest contribution was invisible glue work?
+
+**Red flags:**
+- "They've been here three years."
+- Cases built on effort, hours or likeability.
+
+### How do you manage someone who is more experienced than you? {#managing-more-experienced}
+
+**Level:** Senior
+
+**Model answer:**
+This is common: a manager with six years' experience might manage a principal engineer with twenty. The manager's job isn't to be the best engineer. It's to make the team, and that person, effective.
+
+**Respect their expertise openly:**
+- Ask for their view on technical direction and defer to it where it's their area. Don't compete on technical depth.
+- Be clear about **roles:** they lead on technical decisions within agreed boundaries; you own priorities, people matters and the team's health.
+
+**Still manage them:**
+- **Understand what they want:** influence, interesting problems, mentoring others, less process, or a path to a broader role. Experienced people leave when their manager stops investing in them.
+- **Give feedback anyway,** about collaboration and impact as well as delivery. Senior people often get less feedback than anyone, and need it as much.
+- **Represent their work** to leadership and in calibration, and find stretch opportunities beyond the team.
+
+**Ask for help explicitly:** "You've seen more reorganisations than I have. What would you watch out for?" Most experienced people respect a manager who learns openly.
+
+**If they challenge your decisions:** discuss it privately, explain your reasoning, listen properly, and change your mind when they're right. If you still disagree, decide, explain why and commit. Undermining in front of the team is a behaviour to address directly.
+
+**What the interviewer is looking for:**
+Security without needing to be the expert, clear division of roles, still giving feedback and growth, using their experience, and handling challenge maturely.
+
+**Follow-ups:**
+- They used to have your job. How does that change things?
+- They're disengaged and coasting. What do you do?
+
+**Red flags:**
+- Avoiding them, or deferring on everything, including people decisions.
+- Trying to win technical arguments to prove authority.
+
+### How do you approach compensation conversations and pay equity for your team? {#pay-equity}
+
+**Level:** Architect
+
+**Model answer:**
+Managers rarely set pay alone, but they strongly influence it, and they're the people reports ask. Unfair pay is one of the fastest ways to lose good people.
+
+**Know the system:**
+- **Pay bands per level,** based on market data. The **compa-ratio** (salary ÷ the band's midpoint) shows where each person sits.
+- How increases are decided (merit budgets, promotion uplifts, market adjustments) and what you can influence.
+
+**Review your team for equity every cycle:**
+- Compare people at the **same level** doing comparable work. Gaps by gender, ethnicity, part-time status, or by people hired in a hot market versus long-tenured staff, are common and compound over time.
+- Each gap needs a **legitimate, documented reason** (such as performance or a recent promotion), not "they negotiated harder". Escalate gaps you can't explain to HR and leadership, with data.
+- The law increasingly expects this. The UK requires gender pay gap reporting from employers with 250 or more staff. The EU Pay Transparency Directive brings pay ranges in job ads, a right for employees to ask about pay levels, and a joint pay assessment where an unexplained gender gap of 5% or more appears in a category. Several US states require salary ranges in job ads.
+
+**In conversations:**
+- Be **transparent about the process:** how bands work, where they sit and what moves pay. Never share other people's salaries.
+- When someone asks for a raise, listen to the reasoning, check the facts against the band and market data, and give an honest answer with a timeline, rather than a vague "I'll see".
+- Don't promise what you can't deliver. Do follow through on what you said you'd raise.
+
+**Counter-offers:** they fix the symptom, not the cause, and can be unfair to people who didn't threaten to leave. Fix underpayment proactively, so that a resignation isn't the only way to get a raise.
+
+**What the interviewer is looking for:**
+Understanding bands and compa-ratios, proactive equity reviews with documented reasons, awareness of transparency legislation, honest conversations and fixing pay before resignations force it.
+
+**Follow-ups:**
+- A new hire's offer is higher than an existing senior engineer's salary. What do you do?
+- Should salaries be fully transparent inside a company?
+
+**Red flags:**
+- "Pay is HR's problem."
+- Rewarding negotiation skill rather than level and performance.
+
+### You manage eight teams through their managers. How do you know which teams are healthy? {#team-health-signals}
+
+**Level:** Architect
+
+**Model answer:**
+No single number shows team health. Use **several signals, compared over time**, and combine data with conversations. Use them to start conversations, not to rank teams.
+
+**Signals to watch:**
+
+| Area | Signals |
+|---|---|
+| People | Engagement survey trends and comments, regretted attrition, absence, internal transfers away from the team |
+| Delivery | DORA metrics, predictability of commitments, work item age |
+| Sustainability | On-call pages per shift and out-of-hours pages, overtime patterns, leave taken |
+| Ownership and load | Services per engineer, cognitive load survey, dependency waits on other teams |
+| Growth | Promotions, people taking on new responsibilities, hiring and onboarding success |
+
+**Ask the team itself:** a regular **team health check** (a format popularised by Spotify), in which each team rates areas such as fun, speed, mission clarity, technical quality and support, and discusses the trend. The conversation matters more than the score.
+
+**Direct signal:**
+- **Skip-level 1:1s** and small group conversations, without undermining the managers.
+- Attend demos, retros and incident reviews occasionally.
+- Ask each manager: "What's worrying you about your team?" and check whether their view matches the data.
+
+**Read signals together:** strong delivery with falling engagement and rising out-of-hours pages is an early burnout warning. Low attrition with low engagement can mean people have quietly stopped trying.
+
+**Avoid Goodhart's law:** if metrics become targets or rankings, teams game them. Share the trends with managers as a coaching tool, and act on systemic causes such as unclear priorities, under-staffed on-call or a team owning too much.
+
+**What the interviewer is looking for:**
+Multiple signals across people, delivery, sustainability and load; team self-assessment; direct signals through skip-levels; interpreting combinations; and avoiding metrics as rankings.
+
+**Follow-ups:**
+- One manager's team looks healthy on every metric, but you hear rumours of problems. What do you do?
+- How do you avoid survey fatigue?
+
+**Red flags:**
+- Ranking teams on velocity or story points.
+- Relying only on managers' reports, or only on dashboards.
+
 ## Cheat Sheet
 
 - **Manager output** — the output of the team and of the teams they influence (Grove).
@@ -505,11 +723,21 @@ Async practices, fair meeting rotation, end-to-end ownership per location, equit
 - **Situational leadership** — direct, coach, support, delegate depending on the person's competence and commitment for the task.
 - **Underperformance** — act early; diagnose clarity, skill, motivation, circumstance or fit; support then formalise.
 - **Calibration bias** — recency, halo, similarity and visibility bias; language double standards.
-- **Burnout** — mostly systemic (workload, control, fairness, values); fix the system, not just the person.
+- **Burnout** — mostly systemic (Maslach's six areas: workload, control, reward, community, fairness, values); fix the system, not just the person.
 - **Retention** — stay interviews, growth, fair pay, fair opportunity; act on early signals.
 - **Managing managers** — leverage through systems, coaching, skip-levels without bypassing.
 - **Reorg** — strategy and architecture first, inclusive design, careful sequenced communication.
 - **Distributed teams** — async by default, rotate meeting pain, fair opportunity, end-to-end ownership per location.
+
+### Revisit
+
+- **Informal support plan** — diagnose first, then agree weekly expectations, support and evidence for about six weeks, recorded together.
+- **Onboarding** — access ready on day one, a buddy, a real change shipped in week one and a shared 30-60-90 plan.
+- **Promotion case** — evidence of already working at the next level, structured against the framework, with peer examples and honest gaps.
+- **Managing more experienced people** — don't compete on depth; split roles clearly and still give feedback and growth.
+- **Compa-ratio** — salary divided by the midpoint of the pay band for the role's level.
+- **Pay equity review** — compare people at the same level each cycle; every gap needs a documented, legitimate reason.
+- **Team health signals** — combine people, delivery, sustainability and load signals with health checks and skip-levels; never rank teams on them.
 
 ## Further Reading
 
