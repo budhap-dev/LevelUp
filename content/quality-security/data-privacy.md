@@ -6,7 +6,7 @@ tags: [privacy, gdpr, compliance, pii]
 level: Senior
 estimatedMinutes: 70
 related: [data-modelling, data-engineering-basics, responsible-ai, owasp-threat-modelling]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -111,6 +111,34 @@ Personal data leaving the EU/EEA needs a transfer mechanism: an **adequacy decis
 - **CCPA/CPRA** (California): rights to know, delete, correct and opt out of "sale" or "sharing" for advertising, plus honouring Global Privacy Control signals.
 - Many others (Brazil's LGPD, India's DPDP Act 2023, and a growing set of US state laws). Design for the strictest common denominator where practical, with configuration for regional differences.
 
+### Worked example: why removing names isn't anonymisation
+
+A hospital team wants to share a research extract. Names and patient numbers are removed, leaving postcode, birth date, gender and condition:
+
+| Postcode | Birth date | Gender | Condition |
+|---|---|---|---|
+| SW1A 1AA | 1987-03-14 | F | Asthma |
+| SW1A 2BB | 1986-07-02 | F | Diabetes |
+| SW1A 0PW | 1989-01-30 | F | Asthma |
+| SW1A 1AA | 1988-11-23 | M | Migraine |
+| SW1A 2AB | 1985-05-09 | M | Migraine |
+| SW1A 0AA | 1987-09-17 | M | Migraine |
+
+**Every row is unique** on postcode, birth date and gender. These are **quasi-identifiers**: not names, but enough to single someone out when combined with another source, such as an electoral roll or social media. Latanya Sweeney showed in 2000 that about 87% of the US population could likely be identified by ZIP code, gender and date of birth alone.
+
+**Step 1, generalise to reach k-anonymity:** report the postcode sector (SW1A) and a 5-year birth band (1985–1989). Now each combination of quasi-identifiers covers at least 3 people, so the extract is **3-anonymous** (k = 3).
+
+| Postcode | Birth band | Gender | Conditions in the group |
+|---|---|---|---|
+| SW1A | 1985–1989 | F | Asthma, Diabetes, Asthma |
+| SW1A | 1985–1989 | M | Migraine, Migraine, Migraine |
+
+**Step 2, check diversity:** the male group is k-anonymous but every member has migraine. Anyone who knows a man born in the late 1980s in SW1A is in the data learns his condition. This is a **homogeneity attack**, and k-anonymity alone doesn't stop it. **l-diversity** requires at least l different sensitive values in each group.
+
+**Step 3, generalise further:** dropping gender merges the groups into one group of 6 with 3 different conditions (k = 6, l = 3).
+
+**The lesson:** each step lost detail researchers may need, and a real dataset with more columns is far harder to protect. Unless anonymisation is designed and tested by specialists, treat the extract as **pseudonymised personal data**, still under GDPR, and protect it with access controls and agreements. Alternatively, publish only aggregates with techniques such as differential privacy.
+
 ## How It Works
 
 ### An erasure request across systems
@@ -123,6 +151,16 @@ sequenceDiagram
   participant S as Services (via erasure events)
   participant K as Key management
   participant V as Vendors (processors)
+  %% step: A user asks to delete their account and data. The request starts the legal deadline (one month under GDPR), so the privacy service records it and starts tracking.
+  %% step: The privacy service first checks that the requester owns the account. Deleting the wrong person's data, or handing data to an impostor, is itself a breach.
+  %% step: Verification succeeds, using a check as strong as signing in, not just a reply from an email address.
+  %% step: Before deleting anything, the service checks legal holds and retention exceptions. Invoices, for example, must be kept for tax reasons, so they're kept but restricted.
+  %% step: It publishes an ErasureRequested event carrying the internal subject id, never the email address, so every service that owns personal data can act.
+  %% step: Each service deletes or anonymises its records and confirms. Missing confirmations are chased automatically, because silence isn't proof of deletion.
+  %% step: The service deletes the subject's data key in key management. Copies in event logs and backups encrypted with that key become unreadable: crypto-shredding.
+  %% step: It calls the deletion APIs of vendors that process the data on the company's behalf, such as the email, CRM and analytics tools.
+  %% step: Vendors confirm deletion, and the confirmations are stored as evidence in the request's audit trail.
+  %% step: The user gets confirmation within the deadline, including which categories were kept and why.
   U->>P: Request deletion of my account and data
   P->>ID: Verify the requester owns the account
   ID-->>P: Verified
@@ -593,6 +631,175 @@ Purpose limitation and contracts first, a DPIA, de-identification with verificat
 - "It's our data, so we can use it however we like."
 - No consideration of B2B contracts.
 
+### What does privacy by design and by default mean in practice? {#privacy-by-design}
+
+**Level:** Foundation
+
+**Model answer:**
+GDPR Article 25 requires **data protection by design and by default**. It's a legal duty, not just good practice.
+
+**By design** means building privacy into systems from the start, considering the risks to people at each stage:
+- **Minimise:** collect only the fields the purpose needs, and question every "nice to have".
+- **Separate and protect:** encrypt sensitive fields, pseudonymise where identity isn't needed, and restrict access by purpose.
+- **Plan the lifecycle:** decide retention periods and deletion mechanisms when the data store is designed, not after a request arrives.
+- **Keep personal data out of logs, analytics and test environments** through shared libraries and defaults.
+- **Review risky processing** early with a DPIA.
+
+**By default** means the most privacy-friendly settings apply unless the person chooses otherwise:
+- Profiles private rather than public, optional tracking off, and marketing opt-in rather than pre-ticked.
+- Only the minimum data shared with other users or partners by default.
+
+**For engineers, it shows up in everyday work:** a privacy section in design document templates, field classifications in schemas, a review checklist, and platform features (log redaction, data retention jobs, deletion handlers) that make the right thing the easy thing.
+
+**What the interviewer is looking for:**
+Article 25 as a legal duty, concrete design measures (minimisation, protection, lifecycle, logs, DPIAs), privacy-friendly defaults, and how it appears in engineering processes.
+
+**Follow-ups:**
+- Give an example of a default you'd change in a product you know.
+- How do you make privacy by design work in a team that ships weekly?
+
+**Red flags:**
+- "We'll ask legal before launch."
+- Treating it as only a policy document.
+
+### A database containing customer personal data was exposed publicly. What has to happen in the next 72 hours? {#breach-notification}
+
+**Level:** Senior
+
+**Model answer:**
+Run it as a security incident **and** a personal data breach, with legal and privacy specialists involved from the start. Under GDPR Article 33, the controller must notify the supervisory authority **without undue delay and, where feasible, within 72 hours of becoming aware** of the breach, unless it's unlikely to result in a risk to people.
+
+**Hours 0–4: contain and preserve**
+- Close the exposure: remove public access, rotate any exposed credentials and keys.
+- **Preserve evidence:** access logs, configuration history and snapshots, before anything is overwritten.
+- Open an incident with an incident commander, and bring in the data protection officer and legal.
+
+**Hours 4–48: assess**
+- **What data and whose:** categories of data, number of people and records, any special category or financial data.
+- **Was it accessed?** Check access logs for downloads, and search for the data being offered or published.
+- **How long** was it exposed, and how did it happen?
+- **Risk to people:** identity theft, fraud, discrimination, distress. Encryption with keys that weren't exposed greatly reduces the risk.
+
+**By 72 hours: notify**
+- **The regulator:** the nature of the breach, categories and approximate numbers, likely consequences, measures taken, and a contact point. If facts are still missing, notify on time and provide the rest in phases.
+- **Affected people** (Article 34), without undue delay, if the risk to them is **high**: what happened, the likely consequences, and what they can do, such as resetting passwords or watching for phishing.
+- **Others as required:** processors must tell their controllers without undue delay; contracts, sector regulators, card schemes or other countries' laws may add obligations.
+
+**Afterwards:** record the breach in the internal breach register (required even when it isn't reported), run a blameless review, and fix the systemic cause, such as automated checks for publicly exposed storage.
+
+**What the interviewer is looking for:**
+Containment and evidence, involving legal and the DPO early, a structured risk assessment, the 72-hour regulator notification with phased detail, notifying people when the risk is high, other obligations, and a breach register.
+
+**Follow-ups:**
+- Logs show no downloads during the exposure. Do you still notify?
+- The exposed data was encrypted, but the key was in the same bucket. What changes?
+
+**Red flags:**
+- Waiting until the investigation is complete before notifying.
+- Fixing it quietly because "nobody noticed".
+
+### How do you implement cookie consent correctly? {#cookie-consent}
+
+**Level:** Senior
+
+**Model answer:**
+In the EU and UK, the rules for storing or reading information on a device come from the **ePrivacy rules** (the ePrivacy Directive, and PECR in the UK), with GDPR defining what valid consent means.
+
+**The core rules:**
+- **Strictly necessary** storage, such as session cookies, security tokens and a shopping basket, needs no consent.
+- **Everything else,** such as analytics, advertising and most third-party tags, needs **consent before** it's set or read.
+- Consent must be **freely given, specific, informed and unambiguous:** no pre-ticked boxes (the Court of Justice confirmed this in *Planet49*, 2019), and no access walls for non-essential tracking in most cases.
+- **Rejecting must be as easy as accepting:** a "Reject all" button at the same level as "Accept all". Regulators such as France's CNIL have fined large companies for making refusal harder.
+- People can **withdraw** consent as easily as they gave it, at any time.
+
+**Engineering it properly:**
+- **Block non-essential tags until consent:** load them through a tag manager or consent-aware loader that checks the user's choice first. A banner alone doesn't stop scripts running.
+- **Store the consent record:** the choice, the version of the banner and policy, and the time, as evidence.
+- **Pass consent to vendors,** for example through Google's Consent Mode or the IAB Transparency and Consent Framework, and check what they do with it.
+- **Audit regularly:** scan pages to confirm no unexpected cookies or network calls happen before consent.
+
+**Regional differences:** in California, people can opt out of the "sale" or "sharing" of personal data, and businesses must honour **Global Privacy Control** signals. In the UK, the Data (Use and Access) Act 2025 adds consent exemptions for some low-risk purposes, such as certain analytics, provided users get clear information and a simple way to object. Check exactly when and how each exemption applies before relying on it.
+
+**What the interviewer is looking for:**
+ePrivacy as the source of the rules, necessary versus non-essential storage, valid consent with an easy reject and withdrawal, technical blocking before consent, consent records, passing signals to vendors, audits, and regional differences such as GPC.
+
+**Follow-ups:**
+- Marketing says the reject button cuts analytics data by 40%. What do you do?
+- Is server-side tracking a way around consent?
+
+**Red flags:**
+- A banner that doesn't actually block anything.
+- "Accept" as a big button and "Manage options" hidden behind several clicks.
+
+### Design a consent and preference management system for a company with web and mobile apps and email marketing. {#consent-management-design}
+
+**Level:** Architect
+
+**Model answer:**
+Consent is scattered by default: a cookie banner on the web, OS prompts on mobile, a marketing tool's subscription list and a CRM checkbox. Users then see inconsistent behaviour and the company can't prove what anyone agreed to. The design goal is **one source of truth, enforced at the point of use, with evidence**.
+
+**Data model:**
+- A **consent record** per person (or per device for anonymous visitors): purpose (such as marketing email, personalisation, analytics, advertising), status (granted or withdrawn), the **notice version** shown, the channel and method, and timestamps.
+- **Append-only history,** so you can show what was true at any past date.
+- Link anonymous device consent to the account when the user signs in, applying the more restrictive choice where they conflict.
+
+**Architecture:**
+- A **consent service** with an API to record and query choices, owned by a platform team.
+- **Capture points** everywhere people make choices: web banner, mobile settings, account preferences, email unsubscribe links, support tools. All call the same service.
+- **Propagation:** publish `ConsentChanged` events so downstream systems (email platform, CDP, ad integrations, data warehouse) update quickly, with a target time such as minutes, and reconcile nightly.
+- **Enforcement at the point of use:** the email sender checks consent at send time, not only when the list was built; analytics pipelines filter by purpose; ad audiences are rebuilt from current consent.
+
+**Other requirements:**
+- Honour **Global Privacy Control** and the OS-level controls on mobile, such as Apple's App Tracking Transparency.
+- **Legal bases differ by purpose:** some processing relies on contract or legitimate interests with an opt-out, not consent, so model "objection" as well as consent.
+- **Availability:** if the consent service is down, **fail closed** for non-essential purposes.
+- **Audit and reporting:** evidence for regulators, and dashboards for consent rates by purpose.
+
+**What the interviewer is looking for:**
+A purpose-based consent record with notice versions and history, one service with every capture point using it, event propagation plus reconciliation, enforcement at use time, GPC and mobile OS controls, consent versus other lawful bases, and failing closed.
+
+**Follow-ups:**
+- How do you handle a user who unsubscribes by replying to an email?
+- What happens to data collected before consent was withdrawn?
+
+**Red flags:**
+- Each tool keeping its own unconnected opt-out list.
+- Checking consent only when data is collected, not when it's used.
+
+### Your product is starting to attract users under 18. What changes for privacy and safety? {#children-data}
+
+**Level:** Architect
+
+**Model answer:**
+Children get stronger protection in most privacy laws, and regulators expect services **likely to be used by children** to account for that, even if they're not aimed at them.
+
+**Know the main rules:**
+- **GDPR Article 8:** for online services offered directly to children that rely on consent, parental consent is needed below 16, or a lower age set by each country, down to 13. The UK uses 13.
+- **The UK Age Appropriate Design Code** (the Children's Code) applies to online services likely to be accessed by under-18s, with 15 standards including the child's best interests, high-privacy defaults, geolocation off by default, no nudging towards weaker privacy settings, and DPIAs.
+- **In the US, COPPA** requires verifiable parental consent before collecting personal information from children under 13, and the FTC updated its rule in 2025.
+- **Online safety laws,** such as the UK Online Safety Act, add duties around harmful content and age assurance.
+
+**What changes in the product and platform:**
+- **Assess whether children use it:** analytics, research and app store categories. "Our terms say 18+" isn't enough if children clearly use it.
+- **Age assurance** proportionate to the risk: self-declaration for low risk, stronger estimation or verification where risks are high. Collect as little as possible for it.
+- **High-privacy defaults for young users:** private profiles, no precise location, limits on who can contact them, no targeted advertising or profiling by default.
+- **Data minimisation and shorter retention** for children's data, and no use for training models without careful assessment.
+- **Design reviews for harmful patterns:** autoplay, streaks, and dark patterns that push data sharing.
+- **Parental tools and clear explanations** written for children's understanding.
+
+**Governance:** a children's DPIA, a named owner, and regular reviews as features change.
+
+**What the interviewer is looking for:**
+Knowing the "likely to be accessed" test, GDPR Article 8 ages, the Children's Code standards, COPPA, proportionate age assurance, high-privacy defaults, minimisation, harmful design patterns and governance.
+
+**Follow-ups:**
+- How do you do age assurance without collecting more sensitive data?
+- A feature relies on precise location. How do you handle younger users?
+
+**Red flags:**
+- "Our terms of service say users must be 18."
+- Collecting identity documents from everyone by default.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -618,6 +825,16 @@ Purpose limitation and contracts first, a DPIA, de-identification with verificat
 - **Logs** — redact by default, no personal data in URLs, short retention.
 - **Test data** — synthetic first, masked subsets second, never raw production copies.
 - **International transfers** — adequacy (including the EU-US DPF), SCCs with impact assessments, or BCRs. Remote access counts.
+
+### Revisit
+
+- **Quasi-identifiers** — attributes such as postcode, birth date and gender that identify people in combination, even without names.
+- **k-anonymity and l-diversity** — each group shares quasi-identifiers with at least k − 1 others, and holds at least l different sensitive values.
+- **Privacy by design and default** — GDPR Article 25: build in minimisation, protection and lifecycle, and default to the most private settings.
+- **72-hour breach notice** — notify the regulator without undue delay and within 72 hours where feasible; tell people too if the risk is high.
+- **Cookie consent** — non-essential storage needs prior consent; reject as easy as accept; actually block tags until consent.
+- **Consent management** — one purpose-based record with history, propagated by events and enforced at the point of use.
+- **Children's data** — "likely to be accessed" triggers duties: high-privacy defaults, proportionate age assurance, no profiling by default.
 
 ## Further Reading
 

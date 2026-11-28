@@ -8689,5 +8689,299 @@
       "stakeholder-management",
       "leadership"
     ]
+  },
+  {
+    "id": "spidr",
+    "term": "SPIDR",
+    "aka": [
+      "story splitting"
+    ],
+    "group": "product-business",
+    "definition": "Mike Cohn's five techniques for splitting user stories while keeping each piece valuable end to end: Spikes, Paths, Interfaces, Data and Rules.",
+    "details": [
+      "Paths: happy path first. Interfaces: one channel first. Data: a subset of data first. Rules: core rules first.",
+      "A spike is a short time-boxed investigation when an unknown blocks splitting."
+    ],
+    "useCases": [
+      "Splitting 'manage my subscription' so that pausing a monthly plan on the web ships first."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "estimation"
+    ]
+  },
+  {
+    "id": "vertical-slicing",
+    "term": "Vertical slicing",
+    "aka": [
+      "thin slices"
+    ],
+    "group": "product-business",
+    "definition": "Splitting work into pieces that each cut through every layer needed (interface, logic, data) to deliver something a user can see and use, instead of splitting by technical layer.",
+    "details": [
+      "Each slice can be demonstrated, tested with users and released.",
+      "Layer-by-layer splits deliver nothing until all layers are done."
+    ],
+    "useCases": [
+      "Shipping 'submit an expense' end to end before building approval workflows."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "example-mapping",
+    "term": "Example mapping",
+    "aka": [
+      "three amigos session"
+    ],
+    "group": "product-business",
+    "definition": "Matt Wynne's short workshop technique in which a product owner, developer and tester explore a story with coloured cards: the story (yellow), its rules (blue), examples of each rule (green) and open questions (red).",
+    "details": [
+      "Time-boxed to about 25 minutes per story.",
+      "Many red cards mean the story isn't ready; many blue cards mean it should be split."
+    ],
+    "useCases": [
+      "Discovering that partial refunds are undefined before the refund story enters a sprint."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "specification-by-example",
+    "term": "Specification by example",
+    "aka": [
+      "BDD",
+      "Given/When/Then"
+    ],
+    "group": "product-business",
+    "definition": "Defining requirements through concrete, realistic examples agreed by business and technical people, which then become automated acceptance tests and living documentation.",
+    "details": [
+      "Often written as Given/When/Then scenarios in Gherkin.",
+      "Especially valuable for complex business rules and regulated calculations."
+    ],
+    "useCases": [
+      "Capturing interest calculations as worked examples signed off by actuaries and run in CI."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "effective-dating",
+    "term": "Effective dating",
+    "aka": [
+      "bitemporal rules",
+      "effective-dated rules"
+    ],
+    "group": "architecture-design",
+    "definition": "Storing rules, rates or reference data with the dates they apply from and to, so a calculation for any past period uses the rules that applied then, even if it's rerun later.",
+    "details": [
+      "A change creates a new version rather than overwriting the old one.",
+      "Essential for reproducing regulated calculations and resolving disputes."
+    ],
+    "useCases": [
+      "Recalculating a March invoice in June using March's tax rate."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "data-modelling"
+    ]
+  },
+  {
+    "id": "evaluation-set",
+    "term": "Evaluation set",
+    "aka": [
+      "eval set",
+      "golden set"
+    ],
+    "group": "ai",
+    "definition": "A versioned collection of realistic inputs with expected outputs or grading criteria, used to measure whether an ML or LLM feature meets its quality requirements and to catch regressions.",
+    "details": [
+      "Acts as the acceptance criteria for probabilistic features.",
+      "Grows over time with real failures found in production."
+    ],
+    "useCases": [
+      "Requiring at least 90% of summaries to be rated accurate on a 200-case set before each prompt change ships."
+    ],
+    "related": [
+      "business-requirement-gathering",
+      "llms-rag-agents"
+    ]
+  },
+  {
+    "id": "quasi-identifier",
+    "term": "Quasi-identifier",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "An attribute that doesn't identify someone on its own, such as postcode, birth date or gender, but can single them out when combined with other attributes or outside data.",
+    "details": [
+      "Removing names and ids leaves quasi-identifiers behind, so the data is usually still personal data.",
+      "Latanya Sweeney estimated in 2000 that ZIP code, gender and birth date identify most of the US population."
+    ],
+    "useCases": [
+      "Generalising birth dates to 5-year bands before sharing a research extract."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "k-anonymity",
+    "term": "k-anonymity",
+    "aka": [
+      "l-diversity"
+    ],
+    "group": "quality-security",
+    "definition": "A property of a dataset in which every combination of quasi-identifiers is shared by at least k records, so no one can be singled out among fewer than k people. l-diversity adds that each such group has at least l different sensitive values.",
+    "details": [
+      "Achieved by generalising or suppressing values.",
+      "k-anonymity alone is vulnerable to homogeneity attacks when a group shares the same sensitive value."
+    ],
+    "useCases": [
+      "Checking that a medical extract is 3-anonymous and that no group has only one diagnosis."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "privacy-by-design",
+    "term": "Privacy by design and by default",
+    "aka": [
+      "data protection by design"
+    ],
+    "group": "quality-security",
+    "definition": "The GDPR Article 25 duty to build data protection into systems from the start (minimisation, protection, lifecycle) and to apply the most privacy-friendly settings by default.",
+    "details": [
+      "A legal requirement, not only good practice.",
+      "Shows up as design templates, schema classifications, log redaction and retention defaults."
+    ],
+    "useCases": [
+      "Making new profiles private by default and adding a privacy section to every design document."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "breach-notification",
+    "term": "Breach notification",
+    "aka": [
+      "72-hour rule"
+    ],
+    "group": "quality-security",
+    "definition": "The GDPR requirement to notify the supervisory authority of a personal data breach without undue delay and, where feasible, within 72 hours of becoming aware, and to tell affected people without undue delay when the risk to them is high.",
+    "details": [
+      "Details can be provided in phases if not all facts are known.",
+      "All breaches must be recorded internally, even those not reported."
+    ],
+    "useCases": [
+      "Notifying the regulator within 72 hours of discovering a publicly exposed customer database."
+    ],
+    "related": [
+      "data-privacy",
+      "incident-management"
+    ]
+  },
+  {
+    "id": "global-privacy-control",
+    "term": "Global Privacy Control",
+    "aka": [
+      "GPC"
+    ],
+    "group": "quality-security",
+    "definition": "A browser signal (the Sec-GPC header and a JavaScript property) by which a user asks websites not to sell or share their personal data. Businesses covered by California's CCPA must honour it as an opt-out.",
+    "details": [
+      "Supported by several browsers and extensions.",
+      "Should propagate to the consent system like any other opt-out."
+    ],
+    "useCases": [
+      "Automatically suppressing advertising data sharing for visitors who send the GPC signal."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "age-appropriate-design-code",
+    "term": "Age Appropriate Design Code",
+    "aka": [
+      "Children's Code"
+    ],
+    "group": "quality-security",
+    "definition": "The UK Information Commissioner's statutory code, in force since 2021, setting 15 standards for online services likely to be accessed by under-18s, including the child's best interests, high-privacy defaults, geolocation off by default and no nudge techniques.",
+    "details": [
+      "Applies when children are likely to use the service, even if it isn't aimed at them.",
+      "Requires a DPIA for such services."
+    ],
+    "useCases": [
+      "Turning off precise location and profiling by default for younger users of a social app."
+    ],
+    "related": [
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "xs-leaks",
+    "term": "XS-Leaks",
+    "aka": [
+      "cross-site leaks"
+    ],
+    "group": "quality-security",
+    "definition": "Side-channel attacks in which a malicious site can't read another site's responses but infers information about the user from observable behaviour such as errors, timing, frame counts or navigation.",
+    "details": [
+      "Classic examples are detecting whether a user is logged in or whether a private search has results.",
+      "Defended with SameSite cookies, Fetch Metadata checks, COOP, CORP and frame-ancestors."
+    ],
+    "useCases": [
+      "Rejecting cross-site requests to a mailbox search endpoint so other sites can't probe its results."
+    ],
+    "related": [
+      "browser-security"
+    ]
+  },
+  {
+    "id": "fetch-metadata",
+    "term": "Fetch Metadata",
+    "aka": [
+      "Sec-Fetch-Site",
+      "resource isolation policy"
+    ],
+    "group": "quality-security",
+    "definition": "Request headers browsers send describing a request's context: Sec-Fetch-Site (same-origin, same-site, cross-site or none), Sec-Fetch-Mode, Sec-Fetch-Dest and Sec-Fetch-User. Servers use them to reject unexpected cross-site requests.",
+    "details": [
+      "A resource isolation policy allows same-site requests and top-level navigations, and blocks other cross-site requests.",
+      "Mitigates CSRF, XS-Leaks and cross-site script inclusion."
+    ],
+    "useCases": [
+      "Blocking cross-site subresource requests to authenticated API endpoints."
+    ],
+    "related": [
+      "browser-security"
+    ]
+  },
+  {
+    "id": "cross-site-websocket-hijacking",
+    "term": "Cross-site WebSocket hijacking",
+    "aka": [
+      "CSWSH"
+    ],
+    "group": "quality-security",
+    "definition": "An attack in which a malicious page opens a WebSocket to a site that authenticates the handshake with cookies, then reads and sends messages as the victim, because WebSockets aren't protected by the same-origin policy or CORS.",
+    "details": [
+      "Prevented by checking the Origin header on the handshake.",
+      "SameSite cookies and short-lived connection tickets add defence in depth."
+    ],
+    "useCases": [
+      "Adding an Origin allow-list to a trading app's WebSocket endpoint."
+    ],
+    "related": [
+      "browser-security"
+    ]
   }
 ]
