@@ -9327,5 +9327,443 @@
       "owasp-threat-modelling",
       "incident-management"
     ]
+  },
+  {
+    "id": "gitflow",
+    "term": "GitFlow",
+    "aka": [
+      "git-flow"
+    ],
+    "group": "delivery",
+    "definition": "Vincent Driessen's 2010 branching model with long-lived develop and main branches plus feature, release and hotfix branches. Its author noted in 2020 that it suits explicitly versioned software, not continuously delivered web apps.",
+    "details": [
+      "Delays integration because work collects on long-lived branches.",
+      "Still used for some installed or versioned products."
+    ],
+    "useCases": [
+      "An on-premise product with quarterly versioned releases."
+    ],
+    "related": [
+      "git-github-workflows",
+      "release-management"
+    ]
+  },
+  {
+    "id": "github-flow",
+    "term": "GitHub Flow",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A lightweight workflow: branch from main, open a pull request, review, merge and deploy. With short-lived branches it is effectively trunk-based development using pull requests.",
+    "details": [
+      "Described by Scott Chacon in 2011.",
+      "Needs discipline to keep branches short."
+    ],
+    "useCases": [
+      "A web team merging small pull requests to main several times a day."
+    ],
+    "related": [
+      "git-github-workflows",
+      "ci-cd-pipelines"
+    ]
+  },
+  {
+    "id": "squash-merge",
+    "term": "Squash merge",
+    "aka": [
+      "squash and merge"
+    ],
+    "group": "delivery",
+    "definition": "Merging a pull request as a single new commit on the target branch, combining all its commits, so main has one commit per pull request.",
+    "details": [
+      "Keeps history linear and makes one revert undo one change.",
+      "The pull request title usually becomes the commit message."
+    ],
+    "useCases": [
+      "Keeping main's history readable and bisect-friendly in an application repository."
+    ],
+    "related": [
+      "git-github-workflows"
+    ]
+  },
+  {
+    "id": "conventional-commits",
+    "term": "Conventional Commits",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A commit message convention (type(scope): description, with ! or a BREAKING CHANGE footer for breaking changes) that makes history machine-readable for changelogs and semantic version bumps.",
+    "details": [
+      "fix maps to a patch, feat to a minor and breaking changes to a major release.",
+      "Often checked on pull request titles when squash merging."
+    ],
+    "useCases": [
+      "Letting release-please work out that the next release is 3.0.0 because of a feat! commit."
+    ],
+    "related": [
+      "git-github-workflows",
+      "release-management"
+    ]
+  },
+  {
+    "id": "git-bisect",
+    "term": "git bisect",
+    "aka": [
+      "bisecting"
+    ],
+    "group": "delivery",
+    "definition": "A Git command that binary-searches history between a known good and a known bad commit to find the first commit that introduced a problem, optionally running a test script automatically at each step.",
+    "details": [
+      "n commits need about log2(n) steps: 120 commits take at most 7.",
+      "--first-parent finds the guilty merge; exit code 125 skips untestable commits."
+    ],
+    "useCases": [
+      "Finding which of 120 commits since the last release broke discount rounding."
+    ],
+    "related": [
+      "git-github-workflows"
+    ]
+  },
+  {
+    "id": "reflog",
+    "term": "Reflog",
+    "aka": [
+      "git reflog"
+    ],
+    "group": "delivery",
+    "definition": "Git's local record of where HEAD and branch references have pointed over time, used to recover commits that seem lost after a reset, rebase or deleted branch.",
+    "details": [
+      "Entries are kept for weeks by default before garbage collection.",
+      "Local only: it isn't shared through pushes."
+    ],
+    "useCases": [
+      "Recovering a day's work after an accidental git reset --hard."
+    ],
+    "related": [
+      "git-github-workflows"
+    ]
+  },
+  {
+    "id": "repository-ruleset",
+    "term": "Repository ruleset",
+    "aka": [
+      "GitHub rulesets",
+      "branch protection"
+    ],
+    "group": "delivery",
+    "definition": "A GitHub feature defining rules for branches and tags, such as required pull requests, code-owner reviews, status checks, signed commits and blocked force pushes, which can be layered and applied across an organisation.",
+    "details": [
+      "Can target repositories by name or custom properties.",
+      "Bypass lists should be small and audited."
+    ],
+    "useCases": [
+      "Protecting main and release tags in 300 repositories from a single organisation ruleset."
+    ],
+    "related": [
+      "git-github-workflows",
+      "code-review"
+    ]
+  },
+  {
+    "id": "branch-by-abstraction",
+    "term": "Branch by abstraction",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A technique for making large changes on the main branch without a long-lived feature branch: introduce an abstraction, move callers to it, build the new implementation behind it, switch over, then remove the old one.",
+    "details": [
+      "Each step is small, releasable and reversible.",
+      "Often combined with feature flags."
+    ],
+    "useCases": [
+      "Replacing an ORM across a service without a three-month branch."
+    ],
+    "related": [
+      "git-github-workflows",
+      "technical-debt"
+    ]
+  },
+  {
+    "id": "partial-clone",
+    "term": "Partial clone",
+    "aka": [
+      "blobless clone",
+      "sparse checkout"
+    ],
+    "group": "delivery",
+    "definition": "Cloning a Git repository without downloading all file contents up front (for example with --filter=blob:none), fetching them only when needed. Often combined with sparse checkout of selected directories in large monorepos.",
+    "details": [
+      "Scalar, included with Git since 2.38, configures these for large repositories.",
+      "Shallow clones suit CI jobs that don't need history."
+    ],
+    "useCases": [
+      "Cutting a monorepo clone from 40 minutes to 3 for new engineers."
+    ],
+    "related": [
+      "git-github-workflows"
+    ]
+  },
+  {
+    "id": "semantic-versioning",
+    "term": "Semantic versioning",
+    "aka": [
+      "SemVer"
+    ],
+    "group": "delivery",
+    "definition": "A versioning scheme, MAJOR.MINOR.PATCH, where major versions signal incompatible changes, minor versions backwards-compatible features and patch versions backwards-compatible fixes.",
+    "details": [
+      "Pre-releases such as 3.0.0-rc.1 sort before 3.0.0; build metadata is ignored for ordering.",
+      "Only meaningful with a defined public API and honest bumps."
+    ],
+    "useCases": [
+      "Letting thousands of projects accept a library's minor and patch updates automatically."
+    ],
+    "related": [
+      "release-management",
+      "api-styles"
+    ]
+  },
+  {
+    "id": "calendar-versioning",
+    "term": "Calendar versioning",
+    "aka": [
+      "CalVer"
+    ],
+    "group": "delivery",
+    "definition": "Versioning based on release dates, such as 2026.11.28 or Ubuntu's 24.04, which shows how recent a release is but says nothing about compatibility.",
+    "details": [
+      "Suits applications, services and operating systems.",
+      "Often shown alongside a commit hash."
+    ],
+    "useCases": [
+      "Showing support staff which build of a web app a customer is running."
+    ],
+    "related": [
+      "release-management"
+    ]
+  },
+  {
+    "id": "release-train",
+    "term": "Release train",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A release model in which releases leave on a fixed schedule with whatever work is ready; unfinished work waits for the next train behind feature flags.",
+    "details": [
+      "Suits mobile apps, installed software and customers with fixed change windows.",
+      "Works best with short intervals and continuous integration underneath."
+    ],
+    "useCases": [
+      "A weekly mobile app release cut from main every Tuesday."
+    ],
+    "related": [
+      "release-management",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "change-advisory-board",
+    "term": "Change advisory board",
+    "aka": [
+      "CAB"
+    ],
+    "group": "delivery",
+    "definition": "A group that reviews and approves proposed production changes. DORA's research found external approval of this kind slowed delivery without lowering change failure rates.",
+    "details": [
+      "Can be replaced for most changes by pre-approved standard changes with automated evidence.",
+      "Still useful for reviewing the process and genuinely high-risk changes."
+    ],
+    "useCases": [
+      "Turning a weekly CAB into a quarterly review of the standard change policy."
+    ],
+    "related": [
+      "release-management",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "standard-change",
+    "term": "Standard change",
+    "aka": [
+      "pre-approved change"
+    ],
+    "group": "delivery",
+    "definition": "In ITIL 4 change enablement, a low-risk, routine change that is pre-approved because the process for making it has been assessed, such as a change that passes peer review and an automated pipeline.",
+    "details": [
+      "Distinguished from normal changes, which are assessed individually, and emergency changes.",
+      "Evidence is captured automatically by the pipeline."
+    ],
+    "useCases": [
+      "Deploying 50 changes a day without individual approvals while satisfying auditors."
+    ],
+    "related": [
+      "release-management"
+    ]
+  },
+  {
+    "id": "long-term-support",
+    "term": "Long-term support",
+    "aka": [
+      "LTS"
+    ],
+    "group": "delivery",
+    "definition": "A release designated to receive security and critical fixes for an extended, published period, for customers who upgrade slowly.",
+    "details": [
+      "Part of a support policy that also defines end-of-life dates.",
+      "Every LTS release adds backport cost."
+    ],
+    "useCases": [
+      "An annual LTS release of an on-premise product supported for 24 months."
+    ],
+    "related": [
+      "release-management"
+    ]
+  },
+  {
+    "id": "trusted-publishing",
+    "term": "Trusted publishing",
+    "aka": [],
+    "group": "delivery",
+    "definition": "Publishing packages to a registry from a CI workflow using short-lived OIDC credentials instead of long-lived registry tokens. Supported by PyPI since 2023 and npm since 2025.",
+    "details": [
+      "Removes stealable publish tokens from maintainers' machines and CI secrets.",
+      "Often paired with build provenance."
+    ],
+    "useCases": [
+      "Publishing an open-source library only from its GitHub Actions release workflow."
+    ],
+    "related": [
+      "release-management",
+      "devsecops"
+    ]
+  },
+  {
+    "id": "cutover",
+    "term": "Cutover",
+    "aka": [
+      "switch-over",
+      "go-live"
+    ],
+    "group": "delivery",
+    "definition": "The planned transition of users, data and integrations from an old system to a new one, after which the new system becomes the system of record.",
+    "details": [
+      "Strategies include big bang, phased, parallel run, pilot and incremental.",
+      "Usually the highest-risk part of a migration."
+    ],
+    "useCases": [
+      "Moving 180,000 customers' billing to a new platform over one weekend."
+    ],
+    "related": [
+      "cutover-go-live-planning",
+      "zero-downtime-migrations"
+    ]
+  },
+  {
+    "id": "cutover-runbook",
+    "term": "Cutover runbook",
+    "aka": [
+      "cutover plan"
+    ],
+    "group": "delivery",
+    "definition": "A time-sequenced plan for a cutover listing every step with its owner, timing, dependencies and verification, plus go/no-go checkpoints, the point of no return, rollback steps and communications.",
+    "details": [
+      "Timings come from rehearsals.",
+      "Kept live during the cutover, with actual times and a decision log."
+    ],
+    "useCases": [
+      "Running a 12-hour billing migration window step by step."
+    ],
+    "related": [
+      "cutover-go-live-planning"
+    ]
+  },
+  {
+    "id": "point-of-no-return",
+    "term": "Point of no return",
+    "aka": [],
+    "group": "delivery",
+    "definition": "The step in a cutover after which going back would cost more or take longer than fixing forward, usually just before the first irreversible external effect such as payments sent to a bank.",
+    "details": [
+      "The final go/no-go decision belongs immediately before it.",
+      "Everything before it should be reversible by a rehearsed rollback."
+    ],
+    "useCases": [
+      "Holding bank integrations disabled until the final go/no-go at 01:30."
+    ],
+    "related": [
+      "cutover-go-live-planning"
+    ]
+  },
+  {
+    "id": "go-no-go",
+    "term": "Go/no-go decision",
+    "aka": [
+      "go/no-go criteria"
+    ],
+    "group": "delivery",
+    "definition": "A decision at a defined checkpoint on whether to proceed with a launch or cutover, made by an accountable owner against criteria agreed in advance.",
+    "details": [
+      "Criteria cover testing, data reconciliation, rehearsals, operations, business readiness and third parties.",
+      "Criteria invented on the night tend to bend under pressure."
+    ],
+    "useCases": [
+      "Deciding to proceed after 39 of 40 validation cases pass and the failure is non-critical."
+    ],
+    "related": [
+      "cutover-go-live-planning",
+      "release-management"
+    ]
+  },
+  {
+    "id": "dress-rehearsal",
+    "term": "Dress rehearsal",
+    "aka": [
+      "mock cutover"
+    ],
+    "group": "delivery",
+    "definition": "A full practice run of a cutover with production-sized data, the real runbook and the real people, used to measure timings, find problems and test rollback.",
+    "details": [
+      "Usually two or three for significant cutovers, until the last runs cleanly within the window.",
+      "Rollback should be rehearsed at least once."
+    ],
+    "useCases": [
+      "Discovering that reconciliation takes 3 hours on full data and adding indexes before go-live."
+    ],
+    "related": [
+      "cutover-go-live-planning"
+    ]
+  },
+  {
+    "id": "parallel-run",
+    "term": "Parallel run",
+    "aka": [
+      "parallel running"
+    ],
+    "group": "delivery",
+    "definition": "Running the old and new systems side by side on the same inputs and comparing their outputs before the new one becomes authoritative.",
+    "details": [
+      "Strong evidence for finance, payroll and other calculation-heavy systems.",
+      "Needs automated comparison, tolerances and full business cycles."
+    ],
+    "useCases": [
+      "Comparing interest calculations for two month-ends before switching lending systems."
+    ],
+    "related": [
+      "cutover-go-live-planning",
+      "business-requirement-gathering"
+    ]
+  },
+  {
+    "id": "hypercare",
+    "term": "Hypercare",
+    "aka": [],
+    "group": "delivery",
+    "definition": "A period of intensive support straight after go-live, typically 2–6 weeks, with extra support staff, fast fixes and close monitoring, ending against agreed exit criteria.",
+    "details": [
+      "Monitors business metrics as well as technical health.",
+      "Ends with handover to normal support."
+    ],
+    "useCases": [
+      "Floor-walkers in stores for three weeks after a new order system goes live."
+    ],
+    "related": [
+      "cutover-go-live-planning"
+    ]
   }
 ]
