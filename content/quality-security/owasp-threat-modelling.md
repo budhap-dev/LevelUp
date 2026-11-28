@@ -6,7 +6,7 @@ tags: [security, owasp, stride]
 level: Senior
 estimatedMinutes: 75
 related: [authentication-authorisation, devsecops]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -86,6 +86,21 @@ Other methods: **LINDDUN** (privacy threats), **PASTA** (risk-centric, attacker-
 
 Least privilege · defence in depth · secure by default · fail closed · minimise attack surface · separation of duties · don't trust input (validate at boundaries) · keep security simple and centralised (auth libraries, policy engines) · assume breach (detect and contain).
 
+### Worked example: STRIDE on a password reset flow
+
+The flow: a user enters their email, the service emails a reset link with a token, and the user follows it to set a new password. It crosses two trust boundaries: the internet into the API, and the API out to the email provider. A 40-minute session produced this:
+
+| STRIDE | Threat | Risk | Mitigation |
+|---|---|---|---|
+| **Spoofing** | An attacker requests a reset for the victim and guesses the token | High | At least 128 bits of randomness, single use, expiry within about 15–30 minutes, store only a hash of the token, rate-limit attempts |
+| **Tampering** | **Host header poisoning:** the attacker sets the `Host` header, so the emailed link points to their domain and leaks the token when clicked | High | Build links from a configured base URL, never from the request's `Host` header |
+| **Repudiation** | A user says they never changed their password | Low | Audit log of reset requests and completions, and an email to the account owner after any change |
+| **Information disclosure** | The response or its timing reveals whether an email address has an account | Medium | The same message and similar timing whether or not the account exists; send the email asynchronously |
+| **Denial of service** | Flooding a victim with reset emails, or running up email costs | Medium | Rate limits per account and per IP, and a challenge after repeated requests |
+| **Elevation of privilege** | Resetting the password doesn't end existing sessions, so an attacker who already has a session keeps it | High | Revoke all sessions and refresh tokens on reset; require the second factor if MFA is enrolled |
+
+**Outputs:** six backlog items, each with a test. The Host-header and session-revocation tests became regression tests in CI. The session took less time than fixing any one of these issues after launch.
+
 ## How It Works
 
 Threat modelling a feature: data-flow diagram with trust boundaries, then STRIDE on each crossing.
@@ -120,6 +135,33 @@ flowchart LR
 ```
 
 For each arrow crossing a boundary, ask STRIDE questions — e.g. *upload*: can someone upload as another user (S)? Swap the content type (T)? Upload 10 GB (D)? *Thumbnail worker*: can a crafted image exploit the image library (E)? Record threats, risk rating and mitigations; turn mitigations into stories and tests.
+
+### An SSRF attempt through a webhook feature
+
+```mermaid
+sequenceDiagram
+  participant A as Attacker
+  participant API as Webhooks API
+  participant W as Delivery worker
+  participant P as Egress proxy
+  participant S as Security monitoring
+  %% step: The attacker registers a webhook URL on a domain they control. Their DNS server answers with a public IP address the first time it's asked.
+  %% step: The API checks the URL uses HTTPS, resolves the host, sees a public address and accepts it. Validation at registration time alone isn't enough.
+  %% step: A delivery is queued. The worker has no direct internet access: every outbound request must go through the egress proxy.
+  %% step: The worker sends the delivery through the proxy, which resolves the host again at connection time.
+  %% step: This time the attacker's DNS answers 169.254.169.254, the cloud metadata address (DNS rebinding). The proxy blocks link-local and private ranges, so the request is refused.
+  %% step: The attacker switches to a URL that redirects to an internal address, 10.0.0.5. The worker doesn't follow redirects itself.
+  %% step: The redirect target goes back through the proxy and is checked again, so it's blocked too. Even a successful request to the metadata service would fail, because IMDSv2 requires a session token from a PUT request.
+  %% step: Repeated blocked attempts from one account raise an alert. The webhook is disabled and the account is reviewed.
+  A->>API: Register a webhook URL on attacker's domain
+  API->>API: Check HTTPS and resolve: public IP, accept
+  API->>W: Queue a delivery
+  W->>P: Send the delivery through the egress proxy
+  P-->>W: Blocked: host now resolves to 169.254.169.254
+  A->>API: Switch to a URL that redirects to 10.0.0.5
+  W->>P: Redirect target re-checked by the proxy, blocked
+  P->>S: Alert: repeated blocked destinations
+```
 
 ## When to Use / Trade-offs
 
@@ -552,6 +594,191 @@ Incident structure, inventory via SBOM, rapid compensating controls, compromise 
 - Waiting for patches before doing anything.
 - No inventory of dependencies in production.
 
+### Explain least privilege, defence in depth and failing closed, with examples. {#security-design-principles}
+
+**Level:** Foundation
+
+**Model answer:**
+These three principles prevent many vulnerabilities before any scanner runs.
+
+**Least privilege:** every user, service and component gets only the access it needs, for only as long as it needs it.
+- A reporting service gets a read-only database role on the tables it uses, not the application's admin account.
+- A CI job deploying to one environment gets credentials scoped to that environment, issued per run.
+- Engineers get production access just in time, with approval and expiry, not permanently.
+
+**Defence in depth:** several independent layers, so one failure doesn't mean a breach.
+- XSS: output encoding, plus a strict CSP, plus `HttpOnly` cookies.
+- SSRF: an allow-list in the application, plus an egress proxy blocking private ranges, plus IMDSv2 on the cloud metadata service.
+- Each layer should fail independently. Two checks in the same library aren't really two layers.
+
+**Fail closed (fail secure):** when something goes wrong, deny rather than allow.
+- If the authorisation service times out, the request is refused, not let through.
+- An exception in a permission check returns an error rather than skipping the check. The OWASP Top 10 2025 added **Mishandling of Exceptional Conditions** for exactly this.
+- Unknown input types or states are rejected rather than handled by a permissive default.
+
+**Balance with availability:** failing closed can hurt users during outages. Decide per control. Authentication and authorisation should fail closed; a recommendation widget can fail open.
+
+**What the interviewer is looking for:**
+Clear definitions with concrete examples, independent layers, exception paths that deny, and a sensible balance with availability.
+
+**Follow-ups:**
+- Give an example where failing open is the right choice.
+- How do you apply least privilege to a service account that's grown too powerful?
+
+**Red flags:**
+- Catch-all error handlers that continue as if nothing happened.
+- Shared admin credentials "because it's simpler".
+
+### How do you prevent broken access control, such as IDOR, systematically across an API? {#broken-access-control}
+
+**Level:** Senior
+
+**Model answer:**
+Broken access control is first in the OWASP Top 10, and **broken object-level authorisation (BOLA)** is first in the API Security Top 10. The classic case is an **IDOR (insecure direct object reference)**: changing `/invoices/123` to `/invoices/124` returns someone else's invoice. Fixing individual endpoints doesn't scale. Make the safe pattern the default.
+
+**Design rules:**
+- **Deny by default:** every endpoint requires an explicit authorisation decision. Endpoints without one fail a test or a lint rule.
+- **Authorise every object access,** not just the endpoint: "Can this user read *this* invoice?"
+- **Derive identity and tenant from the authenticated context,** never from the request body, path or query string.
+- **Scope queries:** load objects through repositories that always filter by tenant and owner (`WHERE tenant_id = $1 AND id = $2`), or use database **row-level security** as a second layer.
+- **Separate function-level checks** (can this user call the admin API?) from object-level checks (can they act on this object?).
+- Unguessable IDs such as UUIDs make enumeration harder, but they're **not** access control.
+
+**Centralise:** a shared authorisation library or policy engine (such as OPA or Cedar) with policies reviewed by security, so decisions are consistent and auditable.
+
+**Test it automatically:**
+- For each endpoint, tests that a **second user or tenant gets 403 or 404** on the first user's objects.
+- Tools and DAST scans that replay requests with another user's session.
+- Code review checklists for new endpoints.
+
+**Monitor:** log authorisation denials and alert on patterns, such as one user hitting many sequential IDs.
+
+**What the interviewer is looking for:**
+Deny by default, object-level checks, identity from context, scoped queries and row-level security, separating function and object checks, a centralised policy, automated cross-user tests, and monitoring.
+
+**Follow-ups:**
+- Should a forbidden object return 403 or 404?
+- How do you retrofit object-level checks into 200 existing endpoints?
+
+**Red flags:**
+- Relying on hidden buttons or unguessable IDs.
+- Taking the tenant ID from the request body.
+
+### How do you find and prevent business-logic vulnerabilities that scanners miss? {#business-logic-abuse}
+
+**Level:** Senior
+
+**Model answer:**
+Business-logic flaws use the application exactly as built, but in ways the designers didn't intend: stacking discount codes, refunding more than was paid, skipping a step in a checkout, or redeeming a gift card twice at the same time. Scanners can't find them, because the requests look legitimate.
+
+**Find them in design:**
+- Write **abuse cases** alongside user stories: "As a fraudster, I want to apply the same voucher twice."
+- During threat modelling, ask **what the business invariants are** and how they could be broken: "a refund never exceeds the amount captured", "a voucher is used at most once".
+- Map **workflows and their state transitions,** and check whether steps can be skipped, repeated or reordered.
+
+**Common classes and defences:**
+
+| Flaw | Defence |
+|---|---|
+| Race conditions (limit overruns, double spending) | Atomic database operations, unique constraints, row locks or optimistic concurrency, idempotency keys |
+| Skipping workflow steps | Server-side state machines; each step checks the previous state |
+| Trusting client-supplied values (prices, quantities, roles) | Recalculate on the server from trusted data |
+| Abusing limits (OTP guessing, free trials, referral fraud) | Rate limits, quotas per identity and device, fraud signals |
+| Negative or extreme values | Validate ranges and units on the server |
+
+**Test them:**
+- Tests for each invariant, including **concurrent requests** (send 20 redemptions in parallel and check only one succeeds).
+- Property-based tests for calculations such as refunds and discounts.
+- Manual exploratory testing and pen tests focused on business flows.
+
+**Monitor:** alert on anomalies such as unusual refund ratios, voucher usage spikes or accounts created in bursts.
+
+**What the interviewer is looking for:**
+Abuse cases and business invariants in design, workflow state analysis, concrete flaw classes with defences (especially races), invariant and concurrency testing, and anomaly monitoring.
+
+**Follow-ups:**
+- How would you test a gift card redemption endpoint for race conditions?
+- Who should own fraud and abuse prevention: security, product or a fraud team?
+
+**Red flags:**
+- "The scanner passed, so we're secure."
+- Checking a balance and updating it in two separate, non-atomic steps.
+
+### How would you secure an API platform of 200 APIs against the OWASP API Security Top 10? {#api-security-top-10}
+
+**Level:** Architect
+
+**Model answer:**
+The **OWASP API Security Top 10 (2023)** focuses on risks typical of APIs: broken object-level authorisation, broken authentication, broken object property-level authorisation, unrestricted resource consumption, broken function-level authorisation, unrestricted access to sensitive business flows, SSRF, security misconfiguration, improper inventory management and unsafe consumption of third-party APIs. With 200 APIs, you can't rely on each team getting everything right. **Build the controls into the platform** and verify continuously.
+
+**Inventory first (API9):** you can't protect APIs you don't know about.
+- Every API registered in a catalogue with an owner, an OpenAPI specification, data classification and exposure (internal, partner or public).
+- Detect unregistered or "shadow" APIs from gateway and traffic logs, and retire old versions on a schedule.
+
+**At the gateway (consistent for everyone):**
+- **Authentication** with standard tokens and validation (API2).
+- **Rate limits, quotas, payload size limits and timeouts** (API4).
+- Schema validation against the OpenAPI specification, rejecting unexpected fields.
+- TLS, security headers and standard error responses (API8).
+
+**In the services (with shared libraries):**
+- **Object-level and function-level authorisation** through a common policy library, deny by default (API1, API5).
+- **Property-level control (API3):** explicit response models that never return whole database objects, and explicit allow-lists of writable fields to prevent mass assignment.
+- **Protect sensitive business flows (API6)**, such as sign-up, checkout and booking, with bot detection and business-level limits.
+- **Egress controls** for any feature that fetches URLs (API7), and validation of data from third-party APIs as untrusted input (API10).
+
+**Verify continuously:**
+- Linting of OpenAPI specifications for security rules in CI.
+- Automated authorisation tests across users and tenants.
+- API-focused DAST and periodic pen tests on the riskiest APIs.
+- Runtime monitoring for enumeration, unusual data volumes and errors.
+
+**What the interviewer is looking for:**
+Knowing the API Top 10, inventory as the foundation, gateway controls, shared libraries for authorisation and property-level safety, protecting business flows, egress control, and continuous verification.
+
+**Follow-ups:**
+- How do you find shadow APIs?
+- What belongs in the gateway, and what must stay in the service?
+
+**Red flags:**
+- Assuming the gateway alone handles authorisation.
+- Returning full database entities and hiding fields in the frontend.
+
+### How would you run a red-team or assumed-breach exercise, and what do you do with the results? {#red-team-exercises}
+
+**Level:** Architect
+
+**Model answer:**
+A **red-team exercise** simulates a realistic attacker pursuing a goal, such as "transfer money" or "exfiltrate customer data", using any permitted technique. It tests **detection and response** as much as prevention. An **assumed-breach** exercise starts from a foothold an attacker could plausibly have, such as a compromised laptop or a leaked CI token, and asks how far they could get.
+
+**Plan it:**
+- **Goals and scope** agreed with leadership: target assets, permitted techniques, systems that are off limits, and safety rules such as no real data exfiltration and no disruption.
+- **Threat-led:** base the scenarios on realistic threat intelligence about who targets your sector and how. Regulated financial entities may be required to do this; the EU's DORA requires threat-led penetration testing for significant firms, following the TIBER-EU framework.
+- **A small "white team"** knows about the exercise and can stop it. The defenders (the blue team) usually don't know, so their real response is tested.
+- **Legal approval and written authorisation** for the testers.
+
+**Measure what matters:**
+- **Time to detect** each stage of the attack, if at all.
+- **Time to contain,** and whether the right people were involved.
+- **Which controls worked,** which were bypassed, and which alerts fired but were ignored.
+
+**Use the results:**
+- A **joint debrief** (purple teaming): attackers walk defenders through each step, and the teams build detections together.
+- Fix systemic weaknesses first: excessive privileges, flat networks, long-lived credentials, missing logging.
+- Turn the attack paths into **automated tests or detection rules,** so the same path is caught next time.
+- Track remediation like any other high-priority risk, and repeat the exercise to confirm improvement.
+
+**What the interviewer is looking for:**
+Goal-based, threat-led scenarios, clear scope and safety rules, a white team, measuring detection and response, purple-team debriefs, systemic fixes, and turning findings into lasting detections.
+
+**Follow-ups:**
+- How is a red-team exercise different from a penetration test?
+- The red team got domain admin in two hours. What do you fix first?
+
+**Red flags:**
+- Treating the report as a list of bugs to patch individually.
+- Measuring only whether the attackers got in, not whether anyone noticed.
+
 ## Cheat Sheet
 
 ### OWASP and vulnerability classes
@@ -574,6 +801,16 @@ Incident structure, inventory via SBOM, rapid compensating controls, compromise 
 - **Prioritise vulns** — exploited in the wild (KEV), EPSS, reachability, exposure — not CVSS alone.
 - **Supply chain** — lockfiles, SBOMs, SLSA provenance, signed artefacts, pinned CI actions.
 - **LLM threats** — prompt injection (incl. indirect), excessive agency, insecure output handling.
+
+### Revisit
+
+- **Password reset threats** — guessable tokens, Host header poisoning, account enumeration, email flooding and sessions not revoked.
+- **SSRF layers** — validate at registration, re-check at connection time through an egress proxy, don't follow redirects blindly, use IMDSv2.
+- **Fail closed** — when a security check errors or times out, deny; OWASP Top 10 2025 added Mishandling of Exceptional Conditions.
+- **BOLA / IDOR** — authorise every object access, take identity from the authenticated context, and test with a second user.
+- **Business-logic abuse** — define invariants and abuse cases; test races with concurrent requests.
+- **OWASP API Top 10** — start with an API inventory, then gateway controls, shared authorisation libraries and continuous tests.
+- **Red teaming** — goal-based, threat-led attacks that measure detection and response, followed by purple-team fixes.
 
 ## Further Reading
 

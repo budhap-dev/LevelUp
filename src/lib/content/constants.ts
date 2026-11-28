@@ -18,6 +18,6 @@ export const SECTIONS = [
 ] as const;
 export type SectionId = (typeof SECTIONS)[number]['id'];
 
-/** Interview-question mix a complete topic aims for (15 in total). */
-export const TARGET_QUESTION_MIX: Record<Level, number> = { Foundation: 4, Senior: 6, Architect: 5 };
+/** Interview-question mix a complete topic aims for (20 in total). */
+export const TARGET_QUESTION_MIX: Record<Level, number> = { Foundation: 5, Senior: 8, Architect: 7 };
 export const TARGET_QUESTIONS = Object.values(TARGET_QUESTION_MIX).reduce((a, b) => a + b, 0);

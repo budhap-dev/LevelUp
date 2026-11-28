@@ -37,7 +37,7 @@ CONTENT:
 - Real-world Scenario: context, decision, outcome, what you'd do differently.
 - Further Reading: official documentation only (or the canonical primary source for non-technical topics), as Markdown links with a one-line reason.
 
-INTERVIEW QUESTIONS — 15 in total: 4 Foundation, 6 Senior, 5 Architect; at least 3 scenario or system-design questions ("How would you design…", "Your team is facing…"). Each question uses exactly this shape:
+INTERVIEW QUESTIONS — 20 in total: 5 Foundation, 8 Senior, 7 Architect; at least 3 scenario or system-design questions ("How would you design…", "Your team is facing…"). Each question uses exactly this shape:
 
 ### <Question text>? {#short-kebab-case-id}
 

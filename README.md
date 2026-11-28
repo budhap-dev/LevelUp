@@ -50,7 +50,7 @@ src/
 **Statuses:**
 - `stub`: no content; shown as "coming soon".
 - `draft`: missing pieces are warnings.
-- `complete`: missing pieces are errors, and the question mix (4 Foundation / 6 Senior / 5 Architect) is checked.
+- `complete`: missing pieces are errors, and the question mix (5 Foundation / 8 Senior / 7 Architect) is checked.
 
 **The format rules the pipeline enforces:**
 - The nine `##` section headings from the template, and no others.

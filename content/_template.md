@@ -72,7 +72,7 @@ Fields are bold labels followed by a colon, in this order:
   **What the interviewer is looking for:**              (required)
   **Follow-ups:**  bullet list                          (required for complete)
   **Red flags:**   bullet list                          (required for complete)
-Target mix for a complete topic: 4 Foundation, 6 Senior, 5 Architect, at least 3 scenario/design questions.
+Target mix for a complete topic: 5 Foundation, 8 Senior, 7 Architect, at least 3 scenario/design questions.
 -->
 
 ### What problem does this solve? {#what-problem}

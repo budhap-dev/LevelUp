@@ -6,7 +6,7 @@ tags: [testing, quality]
 level: Senior
 estimatedMinutes: 75
 related: [ci-cd-pipelines, solid-clean-code, devsecops]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -100,6 +100,37 @@ Consumer-driven contracts (e.g. **Pact**): the consumer's tests record the reque
 
 Feature flags, canary releases, synthetic monitoring and SLO-based alerting are part of the strategy. Pre-production testing reduces risk; it never removes it.
 
+### Worked example: 100% coverage, 50% mutation score
+
+A pricing module has this rule and these tests:
+
+```ts
+export const qualifiesForFreeDelivery = (basketTotal: number) => basketTotal >= 50;
+
+it('gives free delivery on large baskets', () => expect(qualifiesForFreeDelivery(80)).toBe(true));
+it('charges delivery on small baskets', () => expect(qualifiesForFreeDelivery(20)).toBe(false));
+```
+
+**Line and branch coverage are both 100%.** A mutation testing tool such as Stryker now makes small changes ("mutants") and reruns the tests. A good test suite should fail for each one:
+
+| Mutant | Code | Tests fail? | Result |
+|---|---|---|---|
+| 1 | `basketTotal > 50` | No: 80 and 20 give the same answers | **Survived** |
+| 2 | `basketTotal <= 50` | Yes | Killed |
+| 3 | `true` | Yes: the 20 case fails | Killed |
+| 4 | `basketTotal >= 51` | No | **Survived** |
+
+**Mutation score: 2 of 4 = 50%.** The surviving mutants show that nothing tests the **boundary**: a customer spending exactly £50 could lose free delivery and no test would notice.
+
+**Adding two boundary tests kills both survivors:**
+
+```ts
+it('gives free delivery at exactly £50', () => expect(qualifiesForFreeDelivery(50)).toBe(true));
+it('charges delivery just below £50', () => expect(qualifiesForFreeDelivery(49.99)).toBe(false));
+```
+
+The mutation score rises to 100%, while coverage doesn't change at all. **Coverage shows what code ran; mutation testing shows whether the tests would notice it being wrong.**
+
 ## How It Works
 
 ```mermaid
@@ -117,6 +148,31 @@ flowchart LR
 ```
 
 Fast, cheap checks run first. Each stage gates the next, and production checks close the loop.
+
+### Consumer-driven contract testing with a broker
+
+```mermaid
+sequenceDiagram
+  participant C as Consumer CI (web BFF)
+  participant B as Pact Broker
+  participant P as Provider CI (orders API)
+  %% step: The consumer's tests run against a Pact mock of the orders API, recording each request it makes and the response fields it relies on.
+  %% step: The consumer publishes the resulting contract to the broker, tagged with its version and branch.
+  %% step: The broker sees a changed contract and triggers the provider's verification build through a webhook.
+  %% step: The provider replays every interaction in the contract against the real service, with provider states such as "order 42 exists" set up first.
+  %% step: One interaction fails: the provider recently renamed the field total to amount. The result is published to the broker.
+  %% step: The provider team adds amount while keeping total for now, an expand-and-contract change, and verification passes.
+  %% step: Before deploying, each side asks the broker can-i-deploy. Both versions are now verified against each other, so the answer is yes.
+  %% step: Each deployment is recorded in the broker, so it knows which versions are live in each environment for future checks.
+  C->>C: Tests against a Pact mock provider
+  C->>B: Publish the contract
+  B->>P: Webhook: verify the new contract
+  P->>P: Replay interactions against the real service
+  P->>B: Result: field total missing
+  P->>B: Expand: add amount, keep total, verified
+  C->>B: can-i-deploy to production?
+  P->>B: Record deployment
+```
 
 ## When to Use / Trade-offs
 
@@ -550,6 +606,189 @@ Organisation-level levers:
 - "We don't need testers anymore."
 - Quality measured by the number of bugs QA finds.
 
+### What is property-based testing, and when is it worth using? {#property-based-testing}
+
+**Level:** Foundation
+
+**Model answer:**
+In **example-based testing** you choose inputs and expected outputs. In **property-based testing** you state a rule that must hold **for all valid inputs**, and a library generates hundreds of random inputs to try to break it. When it finds a failing input, it **shrinks** it to the smallest example that still fails, which makes debugging easy.
+
+The idea comes from Haskell's QuickCheck. Common libraries are **fast-check** (JavaScript and TypeScript), **Hypothesis** (Python) and **jqwik** (Java).
+
+**Good properties to test:**
+- **Round trips:** `parse(serialise(x))` equals `x`.
+- **Invariants:** splitting a bill never loses or invents pennies; a sorted list has the same elements as the input.
+- **Equivalence with a simpler model:** an optimised implementation gives the same results as a slow, obviously correct one.
+- **Idempotence:** applying an operation twice gives the same result as once.
+- **No crashes:** a parser never throws an unexpected error on any input.
+
+**When it's worth it:** money and calculations, parsers and serialisation, data transformations, state machines, and anything with many edge cases people forget, such as empty lists, Unicode, very large numbers and time zones.
+
+**When it isn't:** simple CRUD code, or behaviour that's easier to specify with a few clear examples.
+
+**Practical tips:** keep generators realistic, fix the random seed when reproducing a failure, and add a failing case found by the tool as a permanent example test.
+
+**What the interviewer is looking for:**
+The difference from example-based tests, generation and shrinking, types of useful properties, where it pays off, and practical habits.
+
+**Follow-ups:**
+- What property would you test for a currency conversion function?
+- How do you stop property tests making CI slow?
+
+**Red flags:**
+- Properties that restate the implementation.
+- Using it everywhere instead of where edge cases matter.
+
+### How does mutation testing work, and how would you introduce it? {#mutation-testing}
+
+**Level:** Senior
+
+**Model answer:**
+**Mutation testing** measures how good tests are at catching bugs. A tool makes small changes ("mutants") to the code, such as swapping `>=` for `>`, removing a line, or replacing a condition with `true`, then runs the tests. If a test fails, the mutant is **killed**. If all tests still pass, it **survived**, which shows a gap in the assertions. The **mutation score** is the percentage of mutants killed.
+
+Coverage only shows that code *ran* during tests. Code can be 100% covered by tests that assert nothing useful. Mutation testing shows whether the tests would **notice the code being wrong**.
+
+**Tools:** Stryker (JavaScript, TypeScript, C# and Scala), PIT (Java) and mutmut (Python).
+
+**Introduce it carefully, because it's CPU-heavy:**
+- **Start with critical modules:** pricing, permissions, money calculations and core domain rules.
+- **Run incrementally:** only on changed files in pull requests, with full runs nightly or weekly.
+- **Review survivors, don't chase 100%:** some mutants are **equivalent** (they don't change behaviour) and can't be killed. Look at survivors to find missing boundary tests and weak assertions.
+- **Set thresholds per module,** and ratchet them up rather than imposing one number everywhere.
+
+**What it teaches teams:** survivors usually reveal the same patterns: missing boundary values, tests that assert only "no error was thrown", and assertions on mocks instead of results.
+
+**What the interviewer is looking for:**
+How mutants are killed or survive, why it complements coverage, tools, a focused and incremental rollout, handling equivalent mutants, and the patterns survivors reveal.
+
+**Follow-ups:**
+- What is an equivalent mutant, and how do you deal with it?
+- Would you make mutation score a pipeline gate?
+
+**Red flags:**
+- Running full mutation testing on every commit of a large codebase.
+- Treating the mutation score as a target to game.
+
+### How do you keep a large test suite maintainable? {#maintainable-test-suites}
+
+**Level:** Senior
+
+**Model answer:**
+Tests are code that changes as often as the product. A suite that's hard to read and update slows teams down, and they start deleting or skipping tests. Optimise for **clarity when a test fails** and **low cost when behaviour changes**.
+
+**Write readable tests:**
+- **One behaviour per test,** with a name that describes it: "rejects a refund larger than the captured amount".
+- **Arrange, act, assert,** clearly separated.
+- **DAMP rather than DRY:** "descriptive and meaningful phrases". Some repetition in tests is fine if it makes each test understandable on its own.
+- **Show only what matters:** hide irrelevant setup behind builders, so the test shows the one field that affects the outcome.
+
+```ts
+// A test data builder: sensible defaults, override only what the test is about.
+const anOrder = (overrides: Partial<Order> = {}): Order =>
+  ({ id: 'o1', status: 'PAID', total: 4_999, currency: 'GBP', items: [aLineItem()], ...overrides });
+
+it('refuses refunds on unpaid orders', () => {
+  expect(() => refund(anOrder({ status: 'PENDING' }), 1_000)).toThrow(NotRefundable);
+});
+```
+
+**Reduce coupling to implementation:**
+- Test through **public behaviour,** not private methods or internal calls.
+- Prefer **fakes and real dependencies** over deep mock setups that break on every refactor.
+- For UI and end-to-end tests, use **user-facing selectors** (roles and labels) and abstractions such as page objects, so a layout change touches one place.
+
+**Look after the suite:**
+- Track **duration, flakiness and failures per test,** and fix or delete the worst offenders.
+- **Delete redundant tests** covering the same behaviour at several levels.
+- Review tests in code review with the same care as production code.
+
+**What the interviewer is looking for:**
+Readable, behaviour-named tests, builders for setup, DAMP over DRY, testing behaviour not implementation, resilient UI selectors and page objects, and active suite maintenance.
+
+**Follow-ups:**
+- A small refactor broke 200 tests. What does that tell you?
+- When is it right to delete a test?
+
+**Red flags:**
+- Huge shared fixtures that every test depends on.
+- Tests that verify the exact sequence of internal method calls.
+
+### How do you test event-driven and asynchronous systems? {#testing-event-driven}
+
+**Level:** Architect
+
+**Model answer:**
+Asynchronous systems break the usual test assumptions: results appear **eventually**, messages can be **duplicated, delayed or reordered**, and behaviour emerges from several services reacting to events. A strategy needs tests at several levels.
+
+**Unit level, the handlers:**
+- Test each event handler as a function: given this event and this state, these changes happen and these events are emitted.
+- Cover **duplicates** (idempotency), **out-of-order** events and **unknown event versions**.
+
+**Integration level, with real infrastructure:**
+- Run the real broker (Kafka, RabbitMQ or a cloud emulator) in Testcontainers, and test serialisation, consumer configuration, retries and dead-letter behaviour.
+- Test the **transactional outbox** or equivalent: a database change and its event are published together or not at all.
+
+**Contracts for events:**
+- **Schemas in a registry** with compatibility rules checked in CI, and consumer-driven contract tests for message formats (Pact supports messages).
+
+**End-to-end, sparingly:**
+- A few critical flows across services, asserting on outcomes with **polling and timeouts** ("within 10 seconds, the order is CONFIRMED"), never fixed sleeps.
+- Use **correlation IDs** so a test can find its own messages and traces among others.
+
+**Failure and load behaviour:**
+- Inject failures: a consumer crashes mid-batch, the broker is unavailable, a poison message arrives. Check nothing is lost or processed twice in a harmful way.
+- Test **consumer lag and backpressure** under load.
+
+**In production:** monitor end-to-end flow health, such as the time from `OrderPlaced` to `OrderShipped`, and run synthetic transactions.
+
+**What the interviewer is looking for:**
+Handler unit tests including duplicates and ordering, integration tests with a real broker, outbox testing, event contracts and schema compatibility, polling-based end-to-end tests with correlation IDs, failure injection, lag testing, and production flow monitoring.
+
+**Follow-ups:**
+- How do you test a saga that spans four services?
+- Why are fixed sleeps in tests a problem?
+
+**Red flags:**
+- `sleep(5000)` before every assertion.
+- Only testing the happy path with exactly-once delivery assumed.
+
+### A shared staging environment is always broken and blocks ten teams. What's your environment strategy? {#test-environments}
+
+**Level:** Architect
+
+**Model answer:**
+A single shared staging environment becomes a bottleneck as teams grow: one team's broken deploy blocks everyone, test data is polluted, and nobody owns its health. The aim is to **need the shared environment less**, and to make what remains reliable.
+
+**Reduce what needs a shared environment:**
+- **Contract tests** catch most integration breakages between services without deploying them together.
+- **Component tests** run each service with its real database (Testcontainers) and stubs for its neighbours.
+- **Ephemeral environments** per pull request for the service being changed, with dependencies stubbed or pointed at stable shared versions.
+
+**Make the shared environment trustworthy:**
+- **Deploy to it only through the pipeline,** with the same checks as production, so it reflects real release candidates.
+- **Assign ownership:** a platform team owns its health, with an SLO and alerts, like any other service.
+- **Isolate test data:** each test creates its own data with unique identifiers, or each team has its own tenant, so tests don't collide.
+- **Automated smoke tests** after each deploy, with fast rollback of the change that broke it.
+
+**Test more in production, safely:**
+- Feature flags, canary releases and dark launches move the final verification to real conditions.
+- Synthetic monitoring of critical journeys in production.
+
+**Watch the cost:** ephemeral environments must be torn down automatically, and stubbed dependencies need a process to stay accurate.
+
+**Measure:** hours of staging downtime, the number of teams blocked, lead time, and how many defects the shared environment catches that earlier stages missed. If it catches very few, invest less in it.
+
+**What the interviewer is looking for:**
+Reducing dependence on shared environments with contract and component tests and ephemeral environments, owning and stabilising what remains, test data isolation, testing in production safely, cost control, and measuring the environment's value.
+
+**Follow-ups:**
+- How do you keep stubbed dependencies accurate?
+- Which tests genuinely need a fully integrated environment?
+
+**Red flags:**
+- Adding a second shared staging environment as the main fix.
+- Nobody owning the environment's health.
+
 ## Cheat Sheet
 
 - **Test behaviour, not implementation** — assert on outcomes via public interfaces.
@@ -566,6 +805,16 @@ Organisation-level levers:
 - **Characterisation test** — records what legacy code does today (bugs included) so you can refactor safely.
 - **Seam** — a place where behaviour can be substituted without editing the code there (Feathers).
 - **MSW** — Mock Service Worker; mocks the network so frontend data-loading code really runs in tests.
+
+### Revisit
+
+- **Mutation score** — the percentage of small code changes your tests catch; it exposes weak assertions that coverage hides.
+- **Boundary tests** — surviving `>=` to `>` mutants mean nothing tests the exact boundary value.
+- **can-i-deploy** — the Pact Broker checks a version is verified against the versions live in the target environment.
+- **Property-based testing** — state a rule for all inputs; the tool generates cases and shrinks failures to the smallest example.
+- **DAMP tests** — descriptive and meaningful phrases: readable, self-contained tests beat over-abstracted DRY ones.
+- **Async tests** — idempotency, ordering and failure cases, a real broker, event contracts, and polling instead of sleeps.
+- **Environment strategy** — contract and component tests plus ephemeral environments reduce dependence on shared staging.
 
 ## Further Reading
 
