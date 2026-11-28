@@ -6,7 +6,7 @@ tags: [performance, load-testing, capacity, k6]
 level: Senior
 estimatedMinutes: 70
 related: [testing-strategy, system-design, observability-sre, resilience-patterns]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -129,6 +129,32 @@ Full load tests are too slow for every pull request, but a few things can run co
 
 Schedule full load and soak tests (nightly or weekly) and before major launches.
 
+### Worked example: sizing instances and connection pools from a load test
+
+A checkout API expects a launch peak of **1,200 requests per second**, three times normal. The SLO is p95 under 300 ms.
+
+**Step 1, measure one instance:** a breakpoint test on a single instance shows p95 stays under 300 ms up to about 200 requests per second, then rises sharply. Planning at about 75% of that knee gives **150 requests per second per instance** of safe working capacity.
+
+**Step 2, instances for the peak:** 1,200 ÷ 150 = **8 instances**.
+
+**Step 3, survive losing a zone:** the service runs across 3 availability zones. If one zone fails, the other two must still carry the peak, so the fleet needs 8 ÷ (2/3) = **12 instances**, 4 per zone.
+
+**Step 4, database connections with Little's Law:** each request holds a database connection for about 20 ms on average.
+- Average connections in use = arrival rate × time held = 1,200 × 0.020 = **24**.
+- Bursts and slow queries need headroom. Allowing about 3× gives roughly 72 across the fleet, or 6 per instance. Round up to a pool of **8 per instance**.
+- Total: 12 × 8 = 96 connections, within the database's limit of 200, which other services also share.
+- After losing a zone: 8 instances × 8 = 64 connections, still more than 2.5 times the average need.
+
+**Step 5, verify the plan:** run a load test at 1,200 requests per second with **one zone's instances removed**, and check p95, error rate, pool wait time and database CPU. Arithmetic gives a starting point, but only the test shows hidden limits such as lock contention or a downstream rate limit.
+
+| Quantity | Value |
+|---|---|
+| Safe throughput per instance | 150 requests per second |
+| Instances (zone-loss tolerant) | 12 |
+| Pool size per instance | 8 |
+| Average connections in use at peak | 24 |
+| Total connections | 96 of 200 |
+
 ## How It Works
 
 ### A load test run
@@ -157,6 +183,32 @@ xychart-beta
 ```
 
 The knee of the curve, here around 500–600 requests per second, is where a resource approaches saturation. Plan capacity well below it.
+
+### Finding the bottleneck in a load test
+
+```mermaid
+sequenceDiagram
+  participant L as Load generator
+  participant A as API
+  participant D as Database
+  participant E as Engineer
+  %% step: The load generator ramps up with an open model, a fixed arrival rate, towards 600 requests per second.
+  %% step: At about 550 requests per second, p95 latency rises sharply while throughput flattens: the knee of the curve.
+  %% step: The engineer checks the API with the USE method. CPU is at 45% and event-loop lag is low, so the API itself isn't saturated.
+  %% step: The connection pool tells a different story: the time requests wait for a database connection is rising, and the pool of 10 is always fully used.
+  %% step: The database's statistics show why connections are held so long: one query scans a 40-million-row table, taking about 120 ms each time.
+  %% step: Adding the missing index brings the query down to about 4 ms, so each connection is released far sooner.
+  %% step: The rerun moves the knee to about 1,100 requests per second. The next limit is now CPU on the API, which can be scaled horizontally.
+  %% step: The engineer records the new capacity and adds a CI check that fails on full table scans of large tables, so this regression can't return silently.
+  L->>A: Ramp to 600 requests per second (open model)
+  A->>D: p95 rises sharply at about 550 rps
+  E->>A: USE check: CPU 45%, low event-loop lag
+  E->>A: Pool wait time rising, pool always full
+  E->>D: Slow query: full scan of 40 million rows
+  E->>D: Add the index, query now about 4 ms
+  L->>A: Rerun: knee moves to about 1,100 rps
+  E->>E: Record capacity, add a CI check for full scans
+```
 
 ## When to Use / Trade-offs
 
@@ -601,6 +653,173 @@ A broad, realistic list of gaps across workload, data, method, dependencies and 
 - "Load tests can't predict production, so they're not worth it."
 - Blaming the infrastructure without analysis.
 
+### What is a performance baseline, and how do you use one to catch regressions? {#performance-baseline}
+
+**Level:** Foundation
+
+**Model answer:**
+A **performance baseline** is a recorded measurement of how a system performs under a defined workload in a defined environment: latency percentiles, throughput, error rate and resource use. Without one, "is it slower?" has no answer.
+
+**Make it repeatable:**
+- **Fix the conditions:** the same environment size, configuration, data volume, workload model and test duration.
+- **Warm up** before measuring, so caches, connection pools and just-in-time compilers reach a steady state.
+- **Run it several times** to see the natural variation. If p95 normally varies by ±8% between runs, a 5% change means nothing.
+
+**Use it:**
+- **Compare every new version** against the baseline under the same conditions, looking at distributions and percentiles, not just averages.
+- **Set thresholds** from the measured variation: for example, fail if p95 is more than 15% worse than the baseline, or exceeds the SLO.
+- **Update the baseline deliberately** when a change is accepted, and record why, so the baseline doesn't drift upwards one small regression at a time.
+
+**Keep results comparable over time:** store results with the version, configuration and environment details. A chart of p95 per release shows gradual degradation that individual comparisons miss.
+
+**What the interviewer is looking for:**
+A defined workload and environment, warm-up, repeated runs to measure variation, comparisons and thresholds based on that variation, deliberate updates, and tracking over time.
+
+**Follow-ups:**
+- How do you get stable results in a shared cloud environment?
+- What would you do if results vary by 30% between identical runs?
+
+**Red flags:**
+- Comparing a single run against another single run.
+- Quietly updating the baseline every time a test fails.
+
+### How do you load test a database-heavy service realistically? {#database-load-testing}
+
+**Level:** Senior
+
+**Model answer:**
+Databases are where load tests most often give **false confidence**, because their performance depends heavily on data volume, data distribution and cache state.
+
+**Get the data right:**
+- **Production-like volume:** a query that's instant on 10,000 rows may scan 40 million in production, and the query planner may pick different plans at different sizes.
+- **Realistic distribution:** skewed data matters. Some customers have 10 orders and some have 100,000. Hot rows and hot partitions only appear with realistic skew.
+- **Masked or synthetic data** rather than copies of production personal data.
+
+**Get the cache state right:**
+- Decide whether you're testing a **cold or warm** cache, and make it deliberate. Repeating the same few IDs measures the cache, not the database.
+- Randomise access across a realistic set of keys.
+
+**Watch the database, not just the API:**
+- Query latency per statement, plans, locks and lock waits, deadlocks, connection counts, buffer cache hit ratio, I/O and replication lag.
+- **Connection pool wait time** in the application often shows saturation before the database looks busy.
+
+**Test the write path and contention:** concurrent updates to the same rows, long transactions, background jobs and batch processes running at the same time as user traffic, as they would in production.
+
+**Include maintenance and growth:** autovacuum or index maintenance during the test, and a run with data grown to next year's expected size.
+
+**What the interviewer is looking for:**
+Production-like volume and skew, deliberate cache state, database-level metrics including locks and pool waits, write contention and background work, and testing for future growth.
+
+**Follow-ups:**
+- How do you create 50 million realistic rows for a test?
+- Why might read replicas not help under your load test?
+
+**Red flags:**
+- Load testing against a near-empty database.
+- Hitting the same handful of records with every request.
+
+### How do you run a soak test, and what are you looking for? {#soak-testing}
+
+**Level:** Senior
+
+**Model answer:**
+A **soak (endurance) test** runs a realistic, steady load for a long time, typically 4–24 hours or more, to find problems that only appear over time. A system can pass a 30-minute load test and still fall over after six hours.
+
+**What it finds:**
+- **Memory leaks:** heap that grows and never returns to its previous level after garbage collection.
+- **Resource leaks:** file handles, sockets, threads or database connections that are never released.
+- **Growing queues and backlogs:** a consumer slightly slower than producers, so lag grows steadily.
+- **Storage growth:** logs, temporary files or tables that fill disks over time.
+- **Time-based events:** token and certificate refreshes, cache expiry waves, scheduled jobs, log rotation, and daily batch processes colliding with traffic.
+- **Gradual slowdowns:** fragmentation, longer garbage-collection pauses, or indexes that grow.
+
+**How to run it:**
+- Use a **realistic workload mix** at normal to high load (for example 70–80% of peak), not maximum stress.
+- **Run long enough to cover the cycles** you care about, such as a full day of scheduled jobs.
+- **Monitor trends, not just thresholds:** chart memory after garbage collection, open connections, queue depth and disk use over the whole run. A steady upward slope is the warning sign, even if nothing has failed yet.
+- Compare the first hour with the last hour for latency and errors.
+
+**What the interviewer is looking for:**
+The purpose of long runs, the classes of time-dependent problems, realistic sustained load, covering daily cycles, and analysing trends across the run.
+
+**Follow-ups:**
+- Memory rises steadily for 6 hours, then the process restarts. How do you investigate?
+- How do you fit soak tests into a weekly release cycle?
+
+**Red flags:**
+- Treating a soak test as a longer stress test at maximum load.
+- Looking only at whether the test "passed" at the end.
+
+### How do you load test an asynchronous, queue-based system? {#async-load-testing}
+
+**Level:** Architect
+
+**Model answer:**
+In an asynchronous system, the API often responds instantly ("202 Accepted") while the real work happens later. A load test that measures only the API response time can look perfect while **queues grow without limit** behind it.
+
+**Measure end-to-end, not just the front door:**
+- **Time from accepted to completed:** for example, from `OrderPlaced` to `OrderConfirmed`, using correlation IDs and timestamps.
+- **Consumer lag and queue depth** over time, per queue or partition.
+- **Throughput of each stage:** the slowest consumer sets the system's real capacity.
+
+**Know what "sustainable" means:** a system is keeping up only if **lag stays flat** under the test load. If lag grows steadily, the system is over capacity, even if no errors appear yet. Run long enough to see the trend.
+
+**Test the behaviours that matter for queues:**
+- **Bursts:** how long does a backlog from a spike take to drain, and does that meet the business need?
+- **Autoscaling on lag:** do consumers scale out fast enough, and does scaling hit limits such as partition counts or database connections?
+- **Backpressure:** what happens when queues fill? Producers should slow down, shed load or reject clearly, rather than run out of memory.
+- **Failures and retries:** poison messages, dead-letter queues, and retry storms when a downstream dependency slows down.
+- **Ordering and duplicates under load,** if the design depends on them.
+
+**Downstream effects:** consumers often hit databases and third-party APIs. Include their limits, or realistic stubs, in the test.
+
+**What the interviewer is looking for:**
+End-to-end timing with correlation, lag and queue depth as the main signals, flat lag as the definition of sustainable, burst and drain tests, autoscaling and backpressure, failure and retry behaviour, and downstream limits.
+
+**Follow-ups:**
+- Lag grows slowly at 70% of the target load. What do you check?
+- How do you generate realistic event traffic for a test?
+
+**Red flags:**
+- Declaring success because the API returned 202 quickly.
+- Short tests that never show the lag trend.
+
+### How do you include cost in performance and capacity decisions? {#cost-aware-capacity}
+
+**Level:** Architect
+
+**Model answer:**
+Meeting the SLO is necessary, but **how much it costs to meet it** matters as much at scale. Load testing is the best tool for finding the **cheapest configuration that meets the SLO with the headroom you need**.
+
+**Measure cost per unit of work:**
+- Convert test results into **cost per thousand requests** or per transaction: instance cost per hour ÷ sustainable throughput per hour.
+- Compare configurations: instance types and sizes, CPU architectures (such as Arm-based instances, often cheaper per request), memory settings, and the number of instances versus their size.
+
+**Test the options:**
+- Run the same workload on several configurations and plot **cost per request against p95 latency**. The best choice is often not the biggest instance, and sometimes not the smallest.
+- Check scaling efficiency: if doubling instances gives only 1.5 times the throughput, the extra instances are expensive.
+
+**Choose headroom deliberately:** headroom costs money, so base it on real risks: zone failure, traffic forecasts, and how quickly autoscaling responds. Fast, reliable autoscaling allows less standing headroom.
+
+**Optimise code where it pays:** profiling under load often finds hot spots, such as serialisation, logging or inefficient queries. Fixing them reduces cost on every request forever.
+
+**Make it continuous:**
+- Track **cost per request per release** alongside latency, so cost regressions are caught like performance regressions.
+- Share unit costs with product teams, so features with high per-request cost are visible.
+
+**Don't over-optimise:** engineering time is also a cost. Focus on the services where compute spend is large.
+
+**What the interviewer is looking for:**
+Cost per unit of work from test results, comparing configurations empirically, plotting cost against latency, deliberate headroom, code optimisation where it pays, tracking cost per release, and proportionality.
+
+**Follow-ups:**
+- Arm instances are 20% cheaper but your p99 is 10% worse. How do you decide?
+- How do you include managed database costs in the calculation?
+
+**Red flags:**
+- Choosing instance sizes by habit or by guesswork.
+- Ignoring cost until the monthly bill arrives.
+
 ## Cheat Sheet
 
 ### Test types and models
@@ -626,6 +845,16 @@ A broad, realistic list of gaps across workload, data, method, dependencies and 
 - **CI performance checks** — micro-benchmarks, N+1 checks and a short baseline load test on main.
 - **Launch capacity** — forecast, measure limits, fix non-scalable constraints, pre-scale, protect, rehearse.
 - **Production testing safety** — test tenants, tagged traffic, gradual ramp, automatic abort, no side effects.
+
+### Revisit
+
+- **Instances from a load test** — peak ÷ safe per-instance throughput, then divide by the share of zones that survive a zone loss.
+- **Pool sizing with Little's Law** — average connections = arrival rate × time each request holds one, plus headroom for bursts.
+- **Performance baseline** — fixed conditions, warm-up, repeated runs; set thresholds from the measured variation.
+- **Database load tests** — production-like volume and skew, deliberate cache state, and watching locks and pool waits.
+- **Soak tests** — hours of realistic load to reveal leaks, growing queues and time-based events; analyse the trends.
+- **Async capacity** — a queue-based system is keeping up only when consumer lag stays flat.
+- **Cost-aware capacity** — find the cheapest configuration that meets the SLO with deliberate headroom; track cost per request.
 
 ## Further Reading
 

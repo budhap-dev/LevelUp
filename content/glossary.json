@@ -8983,5 +8983,349 @@
     "related": [
       "browser-security"
     ]
+  },
+  {
+    "id": "mutation-testing",
+    "term": "Mutation testing",
+    "aka": [
+      "mutation score"
+    ],
+    "group": "quality-security",
+    "definition": "A way to measure test quality by making small changes (mutants) to the code, such as swapping >= for >, and checking whether the tests fail. The mutation score is the share of mutants the tests kill.",
+    "details": [
+      "Exposes weak assertions and missing boundary tests that coverage hides.",
+      "CPU-heavy, so usually run on changed code or critical modules."
+    ],
+    "useCases": [
+      "Finding that nothing tests the exact £50 free-delivery threshold despite 100% coverage."
+    ],
+    "related": [
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "property-based-testing",
+    "term": "Property-based testing",
+    "aka": [
+      "generative testing",
+      "QuickCheck-style testing"
+    ],
+    "group": "quality-security",
+    "definition": "Testing by stating a property that must hold for all valid inputs and letting a library generate many inputs to find one that breaks it, then shrink it to a minimal failing example.",
+    "details": [
+      "Originated with Haskell's QuickCheck; fast-check and Hypothesis are common today.",
+      "Strong for round trips, invariants and comparison with a simple reference model."
+    ],
+    "useCases": [
+      "Checking that splitting a bill never loses or invents pennies, for any total and number of people."
+    ],
+    "related": [
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "test-data-builder",
+    "term": "Test data builder",
+    "aka": [
+      "object mother"
+    ],
+    "group": "quality-security",
+    "definition": "A helper that creates valid test objects with sensible defaults, letting each test override only the fields that matter to it.",
+    "details": [
+      "Keeps tests short and focused on what they're about.",
+      "Reduces breakage when the object's shape changes, because only the builder changes."
+    ],
+    "useCases": [
+      "Writing anOrder({ status: 'PENDING' }) instead of constructing a full order in every test."
+    ],
+    "related": [
+      "testing-strategy"
+    ]
+  },
+  {
+    "id": "ephemeral-environment",
+    "term": "Ephemeral environment",
+    "aka": [
+      "preview environment",
+      "per-PR environment"
+    ],
+    "group": "cloud-devops",
+    "definition": "A short-lived environment created automatically for a pull request or test run, and destroyed afterwards, so changes can be tested in isolation without a shared staging environment.",
+    "details": [
+      "Usually deploys only the changed service, with stubs or stable shared versions of its dependencies.",
+      "Needs automatic teardown to control cost."
+    ],
+    "useCases": [
+      "Letting reviewers try a feature branch at its own URL before merge."
+    ],
+    "related": [
+      "testing-strategy",
+      "ci-cd-pipelines",
+      "platform-engineering"
+    ]
+  },
+  {
+    "id": "performance-baseline",
+    "term": "Performance baseline",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A recorded measurement of a system's latency, throughput, errors and resource use under a defined workload and environment, used as the reference to detect regressions.",
+    "details": [
+      "Needs fixed conditions, warm-up and several runs to understand normal variation.",
+      "Thresholds should be set from that variation."
+    ],
+    "useCases": [
+      "Failing a release candidate whose p95 is more than 15% worse than the baseline."
+    ],
+    "related": [
+      "performance-load-testing"
+    ]
+  },
+  {
+    "id": "soak-test",
+    "term": "Soak test",
+    "aka": [
+      "endurance test"
+    ],
+    "group": "quality-security",
+    "definition": "A long-running test at realistic, sustained load, typically 4–24 hours, to find problems that appear only over time, such as memory and connection leaks, growing queues and scheduled-job collisions.",
+    "details": [
+      "Analyse trends across the run, such as memory after garbage collection, not just pass or fail.",
+      "Run at normal to high load, not maximum stress."
+    ],
+    "useCases": [
+      "Discovering a connection leak that exhausts the database pool after six hours."
+    ],
+    "related": [
+      "performance-load-testing"
+    ]
+  },
+  {
+    "id": "vulnerability-disclosure-policy",
+    "term": "Vulnerability disclosure policy",
+    "aka": [
+      "VDP",
+      "security.txt"
+    ],
+    "group": "quality-security",
+    "definition": "A published policy telling outsiders how to report security vulnerabilities, what is in scope, what to expect in response, and that good-faith research won't face legal action. It's often advertised through a security.txt file (RFC 9116).",
+    "details": [
+      "Required for manufacturers under the EU Cyber Resilience Act.",
+      "A bug bounty adds payment on top of a disclosure policy."
+    ],
+    "useCases": [
+      "Publishing /.well-known/security.txt with a reporting address and a 90-day coordinated disclosure window."
+    ],
+    "related": [
+      "devsecops"
+    ]
+  },
+  {
+    "id": "asvs",
+    "term": "OWASP ASVS",
+    "aka": [
+      "Application Security Verification Standard"
+    ],
+    "group": "quality-security",
+    "definition": "OWASP's catalogue of testable security requirements for applications, organised by area and graded in three levels: a baseline for all apps, a standard for most apps with sensitive data, and an advanced level for critical systems.",
+    "details": [
+      "Version 5.0 was released in 2025.",
+      "Best met largely through shared platform defaults and libraries."
+    ],
+    "useCases": [
+      "Setting Level 2 as the security requirement baseline for customer-facing services."
+    ],
+    "related": [
+      "devsecops",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "epss",
+    "term": "EPSS",
+    "aka": [
+      "Exploit Prediction Scoring System"
+    ],
+    "group": "quality-security",
+    "definition": "A FIRST-maintained, data-driven score estimating the probability that a published vulnerability will be exploited in the wild in the next 30 days, used alongside severity to prioritise fixes.",
+    "details": [
+      "Complements CVSS, which measures severity rather than likelihood.",
+      "Often combined with CISA's KEV catalogue and reachability analysis."
+    ],
+    "useCases": [
+      "Fixing a medium-severity CVE with a high EPSS score before a critical one that's unlikely to be exploited."
+    ],
+    "related": [
+      "devsecops",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "cisa-kev",
+    "term": "CISA KEV catalogue",
+    "aka": [
+      "Known Exploited Vulnerabilities"
+    ],
+    "group": "quality-security",
+    "definition": "The US Cybersecurity and Infrastructure Security Agency's list of vulnerabilities with evidence of active exploitation, widely used as a signal that a vulnerability must be fixed urgently.",
+    "details": [
+      "US federal agencies must fix listed vulnerabilities by set deadlines; many companies adopt similar rules."
+    ],
+    "useCases": [
+      "Blocking a build that introduces a dependency with a KEV-listed vulnerability."
+    ],
+    "related": [
+      "devsecops"
+    ]
+  },
+  {
+    "id": "reachability-analysis",
+    "term": "Reachability analysis",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "Checking whether an application's code can actually call the vulnerable function in a dependency, so known vulnerabilities in unused code can be deprioritised.",
+    "details": [
+      "Can cut dependency-scanning noise dramatically.",
+      "Unreachable today doesn't mean safe forever; keep updating."
+    ],
+    "useCases": [
+      "Cutting 410 dependency findings to 160 that affect code paths the service actually uses."
+    ],
+    "related": [
+      "devsecops"
+    ]
+  },
+  {
+    "id": "dependency-cooldown",
+    "term": "Dependency cooldown",
+    "aka": [
+      "minimum release age"
+    ],
+    "group": "quality-security",
+    "definition": "A policy of waiting a short period, often a few days, before adopting newly published package versions, because most malicious or broken releases are detected and removed quickly.",
+    "details": [
+      "Supported by Renovate's minimumReleaseAge, Dependabot's cooldown and some package managers.",
+      "Urgent security fixes are usually exempt."
+    ],
+    "useCases": [
+      "Avoiding a compromised npm release that was removed within hours of publication."
+    ],
+    "related": [
+      "devsecops",
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "risk-acceptance",
+    "term": "Risk acceptance",
+    "aka": [
+      "security exception"
+    ],
+    "group": "quality-security",
+    "definition": "A recorded, time-limited decision by an accountable owner to accept a known security risk instead of fixing it now, usually with compensating controls and an expiry date.",
+    "details": [
+      "Approval level should match the size of the risk.",
+      "Scanner suppressions should link to the exception and expire with it."
+    ],
+    "useCases": [
+      "Accepting a vulnerable library for 60 days behind a WAF rule while a vendor patch is pending."
+    ],
+    "related": [
+      "devsecops"
+    ]
+  },
+  {
+    "id": "bola",
+    "term": "Broken object-level authorisation",
+    "aka": [
+      "BOLA"
+    ],
+    "group": "quality-security",
+    "definition": "The top risk in the OWASP API Security Top 10: an API returns or changes an object without checking that the caller may access that specific object, for example by changing an ID in the URL.",
+    "details": [
+      "Closely related to IDOR.",
+      "Prevented by object-level checks on every access, with identity taken from the authenticated context."
+    ],
+    "useCases": [
+      "Adding automated tests that a second tenant gets 404 on the first tenant's invoices."
+    ],
+    "related": [
+      "owasp-threat-modelling",
+      "authentication-authorisation"
+    ]
+  },
+  {
+    "id": "mass-assignment",
+    "term": "Mass assignment",
+    "aka": [
+      "over-posting"
+    ],
+    "group": "quality-security",
+    "definition": "A vulnerability where an API binds all fields from a request onto an object, letting attackers set fields they shouldn't, such as role or account balance.",
+    "details": [
+      "Part of broken object property-level authorisation in the OWASP API Top 10.",
+      "Prevented with explicit allow-lists of writable fields and separate input models."
+    ],
+    "useCases": [
+      "Stopping a profile update request from setting isAdmin to true."
+    ],
+    "related": [
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "host-header-poisoning",
+    "term": "Host header poisoning",
+    "aka": [
+      "Host header injection"
+    ],
+    "group": "quality-security",
+    "definition": "An attack in which a manipulated HTTP Host header makes an application generate links, redirects or cache entries pointing at an attacker's domain, for example a password reset link that leaks its token.",
+    "details": [
+      "Prevented by building absolute URLs from configuration, not from the request.",
+      "Proxies and CDNs should validate or overwrite the Host header."
+    ],
+    "useCases": [
+      "Fixing password reset emails so links always use the configured base URL."
+    ],
+    "related": [
+      "owasp-threat-modelling"
+    ]
+  },
+  {
+    "id": "dns-rebinding",
+    "term": "DNS rebinding",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "A technique in which an attacker's domain resolves to a harmless public address when checked and to an internal address when used, bypassing validation done at a different time from the connection.",
+    "details": [
+      "Defeats SSRF defences that only validate a URL when it's saved.",
+      "Defended by checking the resolved address at connection time, for example in an egress proxy."
+    ],
+    "useCases": [
+      "Blocking a webhook that resolves to 169.254.169.254 at delivery time."
+    ],
+    "related": [
+      "owasp-threat-modelling",
+      "browser-security"
+    ]
+  },
+  {
+    "id": "purple-teaming",
+    "term": "Purple teaming",
+    "aka": [],
+    "group": "quality-security",
+    "definition": "Attackers (red team) and defenders (blue team) working together, step by step through an attack path, to build and test detections and fixes, rather than only exchanging a report.",
+    "details": [
+      "Often follows a red-team exercise.",
+      "Turns attack paths into lasting detection rules and automated tests."
+    ],
+    "useCases": [
+      "Rebuilding detection for a lateral-movement technique the red team used undetected."
+    ],
+    "related": [
+      "owasp-threat-modelling",
+      "incident-management"
+    ]
   }
 ]

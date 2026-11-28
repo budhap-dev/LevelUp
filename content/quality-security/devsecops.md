@@ -6,7 +6,7 @@ tags: [security, ci-cd, supply-chain]
 level: Senior
 estimatedMinutes: 60
 related: [ci-cd-pipelines, owasp-threat-modelling]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -68,6 +68,31 @@ status: complete
 - **SLAs** for remediation by risk tier; ownership routed to service owners.
 - **Blameless security incident reviews** that improve the paved road.
 
+### Worked example: from 1,240 findings to 3 blocked builds
+
+A company with 40 repositories runs SAST, dependency scanning (SCA), secret scanning, IaC scanning and container scanning. A week of raw output is **1,240 findings**. Blocking on all "high" findings would stop nearly every build. Instead, the security team and champions agree a policy:
+
+| Finding | Action |
+|---|---|
+| A **verified** live secret | **Block**, revoke automatically through the provider's API where possible, and notify the owner |
+| A critical or high vulnerability that is **in CISA's KEV catalogue or has a high EPSS score, and is reachable** | **Block** if newly introduced; existing ones get a 7-day remediation ticket |
+| IaC that makes production storage public or opens admin ports to the internet | **Block** |
+| Other high-severity vulnerabilities | Pull request comment plus a ticket with a 30-day target |
+| Medium and low | Dashboard only; automated dependency updates handle most of them |
+| SAST rules with under 70% precision in a two-team pilot | Warn only, or disabled until tuned |
+
+**The week's funnel:**
+
+| Stage | Findings left |
+|---|---|
+| Raw output from five scanners | 1,240 |
+| After removing duplicates (the same CVE reported by SCA and the container scanner) | 410 |
+| After reachability analysis (vulnerable function actually called) | 160 |
+| Meeting the high-priority ticket criteria | 21 |
+| Blocking a build | **3**: two secrets and one public bucket |
+
+Every block was real, so teams trusted them. The 21 tickets went to owning teams through the service catalogue, with deadlines they could meet.
+
 ## How It Works
 
 ```mermaid
@@ -81,6 +106,33 @@ flowchart LR
   G -->|"improve paved road and rules"| B
   H["Findings routed to owning team with risk context and SLA"] --- C
   H --- F
+```
+
+### A secret slips past push protection
+
+```mermaid
+sequenceDiagram
+  participant D as Developer
+  participant G as Git host
+  participant C as CI pipeline
+  participant S as Security team
+  participant P as Partner API
+  %% step: A developer pushes a commit containing a partner's API token in a test file. Push protection doesn't know this vendor's token format, so the push succeeds.
+  %% step: The pull request triggers CI, where a custom secret-scanning rule, added from the security team's list of partner token patterns, matches the token.
+  %% step: The build is blocked with a clear message: treat the token as compromised. Deleting it from the branch isn't enough, because it's already in the repository's history.
+  %% step: The developer reports it through the documented route. There's no blame: fast reporting is what makes leaked secrets cheap to fix.
+  %% step: The security team revokes the token at the partner and issues a new one, stored only in the secrets manager.
+  %% step: They check the partner's access logs for any use of the old token during the exposure window. There was none.
+  %% step: The developer changes the code to read the token from the secrets manager at runtime. Rewriting history is optional now, because the old token is useless.
+  %% step: The token pattern is added to push protection as a custom pattern, so next time the push is blocked before the secret reaches the server.
+  D->>G: Push a commit containing a partner token
+  G->>C: Pull request triggers secret scanning
+  C-->>D: Build blocked: treat the token as compromised
+  D->>S: Report the leak
+  S->>P: Revoke the token and issue a new one
+  S->>P: Check logs for use during the exposure
+  D->>G: Read the token from the secrets manager
+  S->>G: Add the pattern to push protection
 ```
 
 ## When to Use / Trade-offs
@@ -485,6 +537,169 @@ Telemetry breadth, behavioural detections, correlation, automated response playb
 - No runtime visibility in containers.
 - Logs collected but never analysed.
 
+### What is a vulnerability disclosure policy, and why does every organisation need one? {#vulnerability-disclosure}
+
+**Level:** Foundation
+
+**Model answer:**
+A **vulnerability disclosure policy (VDP)** tells outside people (security researchers, customers or anyone who stumbles on a problem) **how to report a vulnerability to you, and what to expect** when they do. Without one, reports go to the wrong place, get ignored, or end up published.
+
+**A good VDP includes:**
+- **Scope:** which systems and products are covered, and which testing is off limits, such as denial of service, social engineering or accessing other users' data.
+- **How to report:** a dedicated address or form, and what information helps.
+- **What reporters can expect:** acknowledgement within a few days, updates, and coordinated disclosure timing, often around 90 days.
+- **Safe harbour:** a commitment not to take legal action against good-faith research within the rules.
+
+**Make it easy to find:** publish a `security.txt` file at `/.well-known/security.txt` (RFC 9116), with contact details and an expiry date.
+
+**Behind it, you need a process:** triage, an owner for each report, fixes tracked like incidents, and honest communication with the reporter. ISO/IEC 29147 (disclosure) and ISO/IEC 30111 (handling) describe these processes.
+
+**It's increasingly required:** the EU Cyber Resilience Act requires manufacturers of products with digital elements to have a coordinated vulnerability disclosure policy, and to report actively exploited vulnerabilities, with reporting obligations applying from September 2026.
+
+**A VDP isn't a bug bounty:** a bounty adds payment for valid findings and needs much more triage capacity.
+
+**What the interviewer is looking for:**
+Scope, reporting route, expectations, safe harbour, security.txt, a real handling process, regulatory drivers such as the Cyber Resilience Act, and the difference from a bug bounty.
+
+**Follow-ups:**
+- A researcher reports a vulnerability and demands payment. What do you do?
+- How do you handle a report about a third-party component you use?
+
+**Red flags:**
+- No way for outsiders to report a vulnerability.
+- Threatening researchers who report in good faith.
+
+### How do you use OWASP ASVS to define security requirements? {#asvs-requirements}
+
+**Level:** Senior
+
+**Model answer:**
+The **OWASP Application Security Verification Standard (ASVS)** is a catalogue of testable security requirements, grouped by area (authentication, session management, access control, input handling, cryptography, logging and more). Version 5.0 was released in 2025. Where the OWASP Top 10 raises awareness, ASVS gives you **requirements you can build and verify against**.
+
+**Choose a level by risk:**
+- **Level 1:** a baseline for all applications, largely testable from outside.
+- **Level 2:** the recommended level for most applications handling sensitive data or business transactions.
+- **Level 3:** for the most critical applications, such as high-value payments, health data or critical infrastructure.
+
+**Make it practical:**
+- **Tailor it:** select the requirements that apply to your architecture. A service with no file uploads doesn't need the upload controls.
+- **Turn requirements into defaults:** most should be met once by the platform, a shared library or the framework (session handling, password storage, security headers), not by every team.
+- **Map requirements to verification:** an automated test, a pipeline check, a configuration policy, or a manual review for what can't be automated.
+- **Use it in design reviews and threat models,** as a checklist of controls to consider.
+- **Track coverage per application:** which requirements are met, by which mechanism, and which are accepted risks.
+
+**Pitfalls:** treating it as a one-off audit checklist, or asking every team to read hundreds of requirements. Make the platform carry most of the load.
+
+**What the interviewer is looking for:**
+What ASVS is and how it differs from the Top 10, choosing levels by risk, tailoring, meeting requirements through shared defaults, mapping to tests and checks, and tracking coverage.
+
+**Follow-ups:**
+- Which ASVS level would you choose for an internal HR system?
+- How do you verify requirements that can't be tested automatically?
+
+**Red flags:**
+- Using the OWASP Top 10 as a requirements list.
+- Expecting every team to implement every requirement independently.
+
+### How do you keep dependencies up to date without letting in compromised packages? {#dependency-updates}
+
+**Level:** Senior
+
+**Model answer:**
+Two risks pull in opposite directions. **Old dependencies** accumulate known vulnerabilities and become painful to upgrade. **Brand-new versions** are where supply-chain attacks land, as in the 2025 compromises of popular npm packages such as `chalk` and `debug` and the self-spreading Shai-Hulud worm. The goal is **steady, automated updates with a short delay and strong checks**.
+
+**Automate the routine:**
+- Use **Renovate or Dependabot** to open update pull requests, grouped sensibly (for example all patch updates weekly) to limit noise.
+- **Auto-merge low-risk updates** (patch and minor versions of well-tested dependencies) when the test suite passes.
+- **Prioritise security updates** by real risk: known exploitation, reachability and exposure.
+
+**Add a cooldown:** wait a few days before adopting a new release (Renovate's `minimumReleaseAge`, Dependabot's cooldown setting, or package-manager settings). Most malicious versions are detected and removed within hours or days. Allow exceptions for urgent security fixes.
+
+**Reduce what can go wrong:**
+- **Lockfiles** committed, and installs that respect them (`npm ci`), so builds use exactly what was reviewed.
+- **Disable or restrict install scripts** where possible, since many attacks run code at install time.
+- Use a **curated internal registry or proxy** that can block known-bad versions quickly.
+- **Review new dependencies** before adding them: maintenance, popularity, permissions needed and whether a few lines of your own code would do.
+
+**Keep visibility:** SBOMs for every build, so you can answer "where do we use this package?" in minutes when a compromise is announced.
+
+**What the interviewer is looking for:**
+Balancing staleness against fresh-release risk, automated grouped updates, auto-merge with tests, a release-age cooldown, lockfiles, install-script controls, curated registries, vetting new dependencies, and SBOMs.
+
+**Follow-ups:**
+- A critical vulnerability fix was released an hour ago. Does the cooldown apply?
+- How do you handle a dependency that's no longer maintained?
+
+**Red flags:**
+- Updating everything manually once a year.
+- Auto-merging the newest version of anything the moment it's published.
+
+### How do you run a security exception, or risk acceptance, process? {#security-exceptions}
+
+**Level:** Architect
+
+**Model answer:**
+Some security findings can't be fixed on time: a vendor hasn't released a patch, a fix needs a major upgrade, or the risk is genuinely low in context. Without a process, these become silent, permanent gaps. With one, they become **explicit, owned, time-limited decisions**.
+
+**What an exception records:**
+- The **finding** and the specific asset affected.
+- **Why it can't be fixed now,** and the plan to fix it.
+- **Compensating controls,** such as a WAF rule, network isolation, extra monitoring or disabling a feature.
+- The **residual risk,** rated with the same method as other risks.
+- An **accountable owner** with authority to accept that level of risk, usually the business or product owner, not the engineer who found it.
+- An **expiry date,** after which the exception must be renewed with fresh justification or closed.
+
+**Approval levels by risk:** a team lead can accept low risks; a director and the security lead for high ones; critical risks go to an executive or risk committee. This makes the cost of accepting risk visible to the people who own it.
+
+**Make it work in tooling:**
+- Suppressions in scanners must **link to an exception record** and expire automatically, so a finding reappears if the exception lapses.
+- Report open exceptions, overdue renewals and trends to leadership.
+
+**Watch for patterns:** many exceptions for the same reason, such as an outdated framework, point to a systemic problem that needs investment, not more paperwork.
+
+**What the interviewer is looking for:**
+Explicit, time-limited exceptions with compensating controls, residual risk ratings, accountable owners at the right level, expiry built into tooling, reporting, and using patterns to drive systemic fixes.
+
+**Follow-ups:**
+- A team renews the same exception for the fourth time. What do you do?
+- Who should be allowed to accept a critical risk?
+
+**Red flags:**
+- Suppressing findings in the scanner with no record or expiry.
+- Engineers accepting risks on behalf of the business.
+
+### How do you get real value from penetration tests and bug bounties? {#pentest-bug-bounty}
+
+**Level:** Architect
+
+**Model answer:**
+Penetration tests and bug bounties find what automated tools and design reviews miss: chained vulnerabilities, business-logic flaws and real attacker creativity. They're expensive, so **aim them carefully and act on the results**.
+
+**Penetration tests:**
+- **Scope by risk and change:** new internet-facing systems, major redesigns, high-value flows such as payments and authentication, or areas threat modelling flagged.
+- **Time them** early enough to fix what they find, not the week before launch.
+- **Give testers context:** architecture diagrams, threat models and test accounts. Time spent rediscovering basics is wasted ("grey-box" testing is usually more valuable than "black-box").
+- **Threat-led testing** for critical services: simulate realistic attackers based on threat intelligence. Regulated financial firms may be required to do this, for example under the EU's DORA (Digital Operational Resilience Act), which follows the TIBER-EU approach.
+- **Retest fixes,** and do **variant analysis**: look for the same flaw elsewhere.
+
+**Bug bounties:**
+- Start with a **vulnerability disclosure policy,** then a **private programme** with invited researchers, and go public only when triage capacity is proven.
+- **Fund triage properly:** most submissions are duplicates or out of scope. Slow responses frustrate researchers and damage reputation.
+- **Pay fairly and quickly,** with clear rules on scope and rewards.
+
+**Use the results systemically:** for each finding, ask why it wasn't caught earlier, and improve the paved road, the scanners, the threat-modelling checklist or the training.
+
+**What the interviewer is looking for:**
+Risk-based scoping and timing, giving testers context, threat-led testing for critical services, retests and variant analysis, a staged bug bounty with real triage capacity, and feeding findings back into systemic controls.
+
+**Follow-ups:**
+- The pen test report has 40 findings. How do you prioritise them?
+- When is a bug bounty a bad idea?
+
+**Red flags:**
+- An annual pen test as the main security activity.
+- Fixing the reported instance without looking for variants.
+
 ## Cheat Sheet
 
 ### Concepts
@@ -507,6 +722,16 @@ Telemetry breadth, behavioural detections, correlation, automated response playb
 - **Owner routing with SLAs** — findings go to the owning team via the service catalogue.
 - **Security champions** — trained engineers per team with time, community and recognition.
 - **Metrics** — time to remediate, exposure windows, coverage, false-positive rate — not finding counts.
+
+### Revisit
+
+- **Gate policy** — block only verified secrets, reachable known-exploited vulnerabilities and public exposure; everything else gets tickets.
+- **Findings funnel** — deduplicate, check reachability and exploitability, then route to owners; raw counts mean little.
+- **Leaked secret** — treat it as compromised: revoke and rotate first, check for use, then fix the code and add the pattern.
+- **Vulnerability disclosure policy** — scope, reporting route, expectations and safe harbour, published via security.txt (RFC 9116).
+- **OWASP ASVS** — testable security requirements at three levels; meet most through platform defaults.
+- **Dependency cooldown** — wait a few days before adopting new releases, except urgent security fixes, to avoid compromised versions.
+- **Risk acceptance** — time-limited exceptions with compensating controls, approved by an owner at the right level.
 
 ## Further Reading
 
