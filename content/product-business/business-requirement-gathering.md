@@ -6,7 +6,7 @@ tags: [requirements, analysis]
 level: Senior
 estimatedMinutes: 45
 related: [stakeholder-management, adrs-nfrs]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -77,6 +77,24 @@ Business stakeholders rarely volunteer them, so ask explicitly:
 
 Jeff Patton's **story map** lays out the user journey (backbone of activities) horizontally and stories vertically by priority. Draw horizontal release lines to find the **thinnest end-to-end slice** that delivers value (the walking skeleton / MVP), rather than building one component completely before the next.
 
+### Worked example: splitting "manage my subscription"
+
+The backlog has one large story: *"As a subscriber, I can manage my subscription (pause, change plan, cancel) on web and mobile."* The team estimates it at 6–8 weeks, too big to learn anything soon. Support data shows **40% of cancellations mention a temporary reason**, such as a holiday or a tight month, so pausing is the most valuable part.
+
+Using Mike Cohn's **SPIDR** splitting techniques (Spikes, Paths, Interfaces, Data, Rules):
+
+| Technique | How it splits this story |
+|---|---|
+| **Paths** | Pause first; change plan and cancel become separate stories |
+| **Interfaces** | Web first; the mobile app follows in the next release |
+| **Data** | Monthly plans first; annual plans, which need pro-rating, later |
+| **Rules** | Allow pauses of 1–3 months; the "no more than twice a year" rule is checked manually by support at first |
+| **Spike** | The payment provider's pause API behaviour on failed payments is unclear: a 2-day spike before committing |
+
+**The first slice:** *"As a monthly subscriber on the web, I can pause my subscription for 1, 2 or 3 months, and billing resumes automatically."* It runs end to end (interface, billing, emails and support view), delivers the most valuable behaviour, and fits in one sprint.
+
+**Result:** the original story became 9 smaller ones. The first shipped in two weeks, and in its first month 18% of people who opened the cancel page paused instead. That evidence moved annual-plan pausing up the backlog and pushed "change plan" down.
+
 ## How It Works
 
 ```mermaid
@@ -91,6 +109,32 @@ flowchart LR
 ```
 
 Requirements work continues through delivery: each demo and release generates feedback that changes what comes next. Traceability (goal → requirement → story → test) can be kept lightweight in most contexts, and formal where regulation demands it.
+
+### An example mapping session
+
+```mermaid
+sequenceDiagram
+  participant PO as Product owner
+  participant E as Domain expert
+  participant D as Developer
+  participant T as Tester
+  %% step: The product owner reads out the story "Refund an order" and writes it on a yellow card. The session is time-boxed to about 25 minutes.
+  %% step: The tester asks about the time limit. The domain expert gives the rule (blue card): refunds within 30 days of delivery.
+  %% step: The expert adds concrete examples (green cards): delivered 30 days ago is refundable, 31 days ago is not. Examples at the boundaries are the most useful.
+  %% step: The developer asks how partial refunds work for orders with several items. Nobody in the room knows, so it becomes a red question card.
+  %% step: The expert adds another rule: orders paid by gift card are refunded as store credit, not cash, with its own examples.
+  %% step: With four rules and an open question, the product owner splits the story in two and sends the partial-refund question to finance with a due date. The question blocks only its own story.
+  %% step: The tester and developer turn the green examples into Given/When/Then scenarios, which become automated acceptance tests.
+  %% step: The first story is ready for the sprint. Its rules and examples now act as living documentation that runs in the pipeline.
+  PO->>T: Story: refund an order
+  T->>E: What's the time limit?
+  E-->>T: 30 days: day 30 yes, day 31 no
+  D->>E: Partial refunds for multi-item orders?
+  E->>PO: New rule: gift cards refund as store credit
+  PO->>PO: Split the story, send the question to finance
+  T->>D: Turn examples into Given/When/Then
+  D-->>PO: First story ready, tests automated
+```
 
 ## When to Use / Trade-offs
 
@@ -527,6 +571,180 @@ Capability mapping, linking requirements to capabilities, classification for bui
 - Jumping from requirements straight to technology choices.
 - Architecture artefacts the business can't relate to.
 
+### How do you split a large user story? {#splitting-stories}
+
+**Level:** Foundation
+
+**Model answer:**
+Split **vertically**: each smaller story should still deliver something a user can see and use, end to end. Splitting by technical layer ("build the API", "build the UI") creates pieces that deliver nothing alone and can't be tested with users.
+
+**Useful patterns** (Mike Cohn's SPIDR is one memorable set):
+- **Paths:** the happy path first, then alternative and error paths.
+- **Interfaces:** one channel or device first, for example web before mobile.
+- **Data:** a subset of data types first, such as monthly plans before annual ones.
+- **Rules:** the core rule first, with complex business rules added later or handled manually at first.
+- **Spikes:** a short time-boxed investigation when an unknown blocks the split.
+
+**Other common splits:**
+- **Workflow steps:** "submit an expense" before "approve an expense".
+- **Operations:** create and view before edit and delete.
+- **Performance:** make it work, then make it fast, if the first version is acceptable to users.
+
+**Choose the first slice by value and learning:** which slice tests the riskiest assumption, or delivers the most value soonest?
+
+**Check each slice with INVEST:** independent, negotiable, valuable, estimable, small and testable. A good size is a story the team can finish in a few days.
+
+**What the interviewer is looking for:**
+Vertical slicing, several concrete patterns, choosing the first slice by value or learning, and checking slices with INVEST.
+
+**Follow-ups:**
+- How do you split a story that is purely a back-end change?
+- When is a story too small?
+
+**Red flags:**
+- Splitting into front-end, back-end and database tasks.
+- Stories that only make sense once all the others are done.
+
+### How do you uncover the requirements hidden in a legacy system you're replacing? {#legacy-system-requirements}
+
+**Level:** Senior
+
+**Model answer:**
+The most dangerous requirement in a replacement is **"make it do what the old one does"**. Nobody knows everything the old system does, and some of it is no longer needed. Treat the old system as evidence to investigate, not a specification to copy.
+
+**Sources of hidden behaviour:**
+- **Code and configuration:** business rules buried in stored procedures, batch jobs, triggers and configuration tables. Static analysis and reading the code with domain experts finds them.
+- **Data:** the values actually stored show real cases, such as status codes nobody remembers or a "temporary" flag used on 30% of records.
+- **Usage logs and analytics:** which screens, reports and functions are actually used, and how often. Often a large share of reports are never opened.
+- **Integrations:** every system that reads or writes its database, files or APIs, found through network and access logs, not just documentation.
+- **People:** shadow the users, especially at month-end or other peaks, and look for workarounds such as spreadsheets that fill the system's gaps.
+
+**Separate what to keep from what to drop:** for each behaviour, ask whether it serves a current need, is required by regulation, or is a workaround for a past limitation. "Feature parity" usually means rebuilding years of accidental complexity.
+
+**Capture behaviour as tests:** characterisation tests and recorded input and output examples document what the old system does, and later verify the new one.
+
+**Validate with parallel running:** run both systems on the same inputs for a period and investigate every difference. Each difference is either a bug or an undocumented requirement.
+
+**What the interviewer is looking for:**
+Distrust of "feature parity", code, data, usage and integration evidence, observing users, deliberate keep-or-drop decisions, characterisation tests and parallel running.
+
+**Follow-ups:**
+- The original developers have all left. Where do you start?
+- A stakeholder insists every report must be rebuilt. What do you do?
+
+**Red flags:**
+- "Copy everything the old system does."
+- Relying only on the existing documentation.
+
+### How do you write requirements for a feature built on an LLM or another ML model? {#ai-feature-requirements}
+
+**Level:** Senior
+
+**Model answer:**
+Model-based features are **probabilistic**: the same input can give different outputs, and some outputs will be wrong. Requirements must define **acceptable behaviour statistically** and say what happens when the model fails, rather than specifying every output.
+
+**Define the task and success precisely:**
+- What decision or task the feature supports, for whom, and what a good result looks like, with real examples.
+- **Quality thresholds on an evaluation set:** "At least 90% of summaries rated accurate by reviewers on a 200-case test set, and no case where the summary contradicts the source."
+- The **cost of each error type:** a missed fraud case and a false accusation have very different costs, so thresholds may differ.
+
+**Specify behaviour at the edges:**
+- What the feature does when confidence is low: ask a clarifying question, hand over to a person, or decline.
+- Inputs it must refuse, such as requests outside its scope or unsafe content.
+- How users can correct or report bad outputs.
+
+**Non-functional requirements that matter more than usual:**
+- **Latency** for the whole interaction, including streaming.
+- **Cost per request** at expected volumes.
+- **Privacy:** what data the model may see, where it's processed, and whether it may be used for training.
+- **Security:** resistance to prompt injection when the feature reads untrusted content or calls tools.
+- **Explainability and audit** where decisions affect people, and compliance obligations such as the EU AI Act for high-risk uses.
+
+**Make the requirements testable:** the evaluation set *is* the acceptance criteria. Version it, grow it with real failures, and run it on every change of prompt, model or data.
+
+**What the interviewer is looking for:**
+Statistical acceptance criteria on an evaluation set, the cost of different errors, behaviour on low confidence and refusal, AI-specific NFRs (latency, cost, privacy, security, audit), and evaluation as a living test suite.
+
+**Follow-ups:**
+- Who builds the evaluation set, and how big should it be?
+- How do you write a requirement for "the tone should match our brand"?
+
+**Red flags:**
+- Acceptance criteria that expect exactly the same output every time.
+- No plan for what happens when the model is wrong.
+
+### How do you gather requirements for an integration with external systems? {#integration-requirements}
+
+**Level:** Architect
+
+**Model answer:**
+Integrations fail on the details nobody asked about: volumes, errors, ownership and change. Gather requirements for **the interface, the behaviour around it, and the relationship** with whoever owns the other side.
+
+**The interface:**
+- **Data:** which entities and fields, their meaning in both systems, formats, identifiers and how they map. Mapping customer or product identifiers is often the hardest part.
+- **Style and protocol:** API calls, events, file transfers or database replication, and why.
+- **Direction and source of truth:** which system owns each piece of data, and what happens when both change it.
+
+**Behaviour:**
+- **Volumes and timing:** records per day and at peak, batch windows, latency needs, and time zones.
+- **Errors:** what happens when the other side is down, slow or returns bad data? Retries, idempotency, dead-letter handling, reconciliation and who gets alerted.
+- **Ordering and duplicates:** must messages arrive in order? Can the receiver handle the same message twice?
+- **Security:** authentication, network path, data classification, and contractual or legal constraints on the data.
+
+**The relationship:**
+- **Ownership and support:** contacts, support hours, escalation routes and service levels on both sides.
+- **Change management:** how the other side announces changes, versioning and deprecation periods.
+- **Test environments:** do they exist, do they have realistic data, and can you test failure cases?
+
+**Capture it as a contract:** an interface specification (such as OpenAPI or AsyncAPI) plus an integration agreement covering service levels, support and change notice. Add **contract tests** where both sides can run them.
+
+**What the interviewer is looking for:**
+Data mapping and source of truth, volumes and timing, failure handling and reconciliation, ordering and duplicates, security, ownership and change management, test environments, and a written contract.
+
+**Follow-ups:**
+- The partner has no test environment. How do you proceed?
+- How do you handle a partner whose API changes without notice?
+
+**Red flags:**
+- Only documenting the happy-path fields.
+- No owner or escalation route on the other side.
+
+### How do you specify and validate a regulated calculation, such as interest, tax or pricing? {#regulated-calculations}
+
+**Level:** Architect
+
+**Model answer:**
+Regulated calculations must be **correct, explainable and reproducible**, sometimes years later. Prose descriptions are too ambiguous, so specify them **by example** and treat the rules as versioned data.
+
+**Specification:**
+- Work with domain experts (actuaries, tax specialists, compliance) to write **worked examples** covering normal cases, boundaries and odd cases: leap years, partial periods, negative balances, changes mid-period.
+- Pin down the details prose leaves out: **rounding** (which method, at which step, and to how many places), day-count conventions, currency handling, time zones and the order of operations.
+- Capture each rule's **source:** the regulation, contract clause or policy it comes from, for traceability.
+
+**Design for change and audit:**
+- **Effective dating:** rules and rates have start and end dates. A calculation for March uses March's rules, even if it's rerun in June.
+- **Versioned rule sets:** a rate change is a new version, not an overwrite.
+- **Store the inputs, rule version and intermediate results** with each result, so any figure can be explained and reproduced.
+
+**Validation:**
+- Turn the worked examples into **automated tests**, signed off by the domain experts.
+- Build a **golden dataset** of real or realistic cases with expected results, independently calculated, such as by the existing system or a spreadsheet the experts own.
+- **Parallel run** against the current system and investigate every difference above a tiny tolerance.
+- **Property tests** for invariants: totals equal the sum of parts, results never go below zero where they shouldn't.
+
+**Governance:** changes to rules go through review by the domain owner, with a record of who approved what and when.
+
+**What the interviewer is looking for:**
+Specification by worked examples, precise rounding and conventions, effective-dated and versioned rules, reproducibility, expert-owned test cases, golden datasets, parallel running and governed change.
+
+**Follow-ups:**
+- A customer disputes a charge from 18 months ago. How do you show how it was calculated?
+- How do you handle a rate change announced with one week's notice?
+
+**Red flags:**
+- Rules hard-coded with no effective dates.
+- Developers interpreting regulations alone.
+
 ## Cheat Sheet
 
 - **Problem before solution** — treat requests as hypotheses; ask why until you reach the goal.
@@ -543,6 +761,16 @@ Capability mapping, linking requirements to capabilities, classification for bui
 - **Remove, simplify, then automate** — redesign the process before building software.
 - **Capability map** — what the business does, independent of org chart and systems.
 - **RFP requirements** — scenarios and weighted criteria agreed before vendor responses.
+
+### Revisit
+
+- **SPIDR** — split stories by Spikes, Paths, Interfaces, Data or Rules, keeping each slice end to end.
+- **First slice** — choose by value or by the riskiest assumption it tests, not by what's easiest to build.
+- **Example mapping** — story (yellow), rules (blue), examples (green) and questions (red) in about 25 minutes.
+- **Legacy requirements** — mine code, data, usage logs and integrations; decide what to keep instead of copying everything.
+- **AI feature requirements** — acceptance thresholds on an evaluation set, error costs and behaviour when the model is unsure.
+- **Integration requirements** — data mapping, source of truth, volumes, failure handling, ownership and change notice.
+- **Regulated calculations** — worked examples, explicit rounding, effective-dated versioned rules and reproducible results.
 
 ## Further Reading
 

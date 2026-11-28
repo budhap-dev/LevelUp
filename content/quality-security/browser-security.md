@@ -6,7 +6,7 @@ tags: [security, cors, csp, cookies, frontend]
 level: Senior
 estimatedMinutes: 70
 related: [owasp-threat-modelling, authentication-authorisation, micro-frontends, javascript]
-lastReviewed: 2026-11-25
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -135,6 +135,27 @@ iframe.contentWindow?.postMessage({ type: 'init', orderId }, 'https://checkout.e
 - **`Permissions-Policy`**: disables powerful features (camera, geolocation, payment) for your page and its frames unless needed.
 - **Subresource Integrity (SRI)**: `<script src="…" integrity="sha384-…" crossorigin>` makes the browser refuse third-party files that were modified. Works only for static, versioned files.
 
+### Worked example: which requests carry a SameSite=Lax cookie?
+
+The app at `app.example.com` sets `__Host-session=…; Secure; HttpOnly; SameSite=Lax`. Which requests from where include it?
+
+| Request | Started from | Cookie sent? | Why |
+|---|---|---|---|
+| User clicks a link to `/orders` | An email or another site | **Yes** | Top-level navigation with GET |
+| Hidden form POST to `/transfer` | `attacker.net` | No | Cross-site, and not a safe method |
+| Image tag loading `/logout` | `attacker.net` | No | Cross-site subresource |
+| `fetch('/api/me', { credentials: 'include' })` | `attacker.net` | No | Cross-site subresource (and CORS wouldn't let it read the answer) |
+| Form POST to `/transfer` | `blog.example.com`, a compromised marketing site | **Yes** | **Same site:** SameSite compares registrable domains, and both are `example.com` |
+| Link to `/transfer?to=attacker&amount=500` | `attacker.net` | **Yes** | A top-level GET navigation |
+
+**What this shows:**
+- `SameSite=Lax` stops classic CSRF from other sites, which is why it's such a strong default.
+- It **doesn't protect against sibling subdomains.** A compromised `blog.example.com` counts as the same site. The `__Host-` prefix stops that subdomain from *overwriting* the cookie, but not from *sending requests* with it.
+- It **doesn't protect state changes made with GET.** State-changing actions must never use GET.
+- One more subtlety: for cookies with **no** SameSite attribute, Chrome treats them as Lax but still sends them on cross-site top-level POSTs within two minutes of being set, for compatibility. Setting `SameSite=Lax` explicitly avoids that window.
+
+**Defence in depth for state-changing requests:** check the `Origin` header or `Sec-Fetch-Site` on the server, and use CSRF tokens for cookie-authenticated forms.
+
 ## How It Works
 
 ### A preflighted CORS request
@@ -166,6 +187,33 @@ flowchart TB
   X3 --> D3["CSP frame-ancestors"]
   X4 --> D4["Same-origin policy, strict CORS, CORP and COOP"]
   D1 --> H["HttpOnly cookies limit damage if XSS succeeds"]
+```
+
+### A strict CSP stops an injected script
+
+```mermaid
+sequenceDiagram
+  participant A as Attacker
+  participant S as App server
+  participant B as Browser
+  participant R as Report collector
+  participant T as Team
+  %% step: An attacker posts a comment containing a script. One old template forgot to encode output, so the script is stored and will be included in the page.
+  %% step: For each response, the server generates a fresh random nonce, sends it in the Content-Security-Policy header and adds it to its own script tags.
+  %% step: The browser runs the app's nonced scripts. Because of strict-dynamic, the chunks they load run too, without any host allow-list.
+  %% step: The browser reaches the injected script. It has no nonce, so the browser refuses to run it. The XSS bug still exists, but it can't execute.
+  %% step: The browser sends a violation report naming the blocked inline script, the directive and the page.
+  %% step: The report collector notices a spike of violations from one page and alerts the team. CSP has turned an attack into a signal.
+  %% step: The team fixes the template's encoding, adds a regression test, and searches for the same pattern in other templates.
+  %% step: Violation reports for that page drop back to the normal background level, confirming the fix.
+  A->>S: Store a comment containing a script
+  S->>B: Page with a CSP nonce on its own scripts
+  B->>B: Run nonced scripts and their chunks
+  B->>B: Block the injected script, which has no nonce
+  B->>R: Send a CSP violation report
+  R->>T: Alert: violations spike on one page
+  T->>S: Fix encoding, add a regression test
+  R-->>T: Reports back to baseline
 ```
 
 ## When to Use / Trade-offs
@@ -645,6 +693,186 @@ Recognising the shared-origin risk, platform-level CSP and Trusted Types, protec
 - Each micro-frontend setting its own security headers.
 - Loading micro-frontends from mutable URLs without integrity checks.
 
+### What is Subresource Integrity, and when does it help? {#subresource-integrity}
+
+**Level:** Foundation
+
+**Model answer:**
+**Subresource Integrity (SRI)** lets a page say exactly which file it expects from another server. The page includes a cryptographic hash, and the browser refuses to run or apply the file if its contents don't match.
+
+```html
+<script src="https://cdn.example.net/lib@4.2.1/lib.min.js"
+        integrity="sha384-…base64 hash…"
+        crossorigin="anonymous"></script>
+```
+
+- Hashes use SHA-256, SHA-384 or SHA-512. Build tools can generate them.
+- **`crossorigin="anonymous"`** is needed for cross-origin files, so the browser can check the bytes through CORS.
+- It works for `<script>` and `<link rel="stylesheet">`.
+
+**When it helps:** loading **static, versioned files** from a CDN or another third party. If the CDN is compromised or the file is changed, the browser blocks it.
+
+**When it doesn't:**
+- **Files that change by design,** such as analytics loaders or tag managers that update in place. A fixed hash would break them.
+- **Services that return different code per browser.** The 2024 polyfill.io compromise is an example: the service generated code per user agent, so SRI couldn't be used. Self-hosting the polyfills was the real fix.
+- Code loaded later by the script itself, which SRI on the first file doesn't cover.
+
+**Good practice:** self-host critical libraries where you can, use SRI for anything else that's static, and combine it with a strict CSP.
+
+**What the interviewer is looking for:**
+What SRI checks, the need for crossorigin, where it helps (static versioned files) and where it can't (dynamic or per-browser scripts), and pairing it with self-hosting and CSP.
+
+**Follow-ups:**
+- How do you keep SRI hashes up to date when you upgrade a library?
+- Why not just self-host everything?
+
+**Red flags:**
+- Thinking SRI protects scripts that change every day.
+- Leaving out `crossorigin` and wondering why the file is blocked.
+
+### How do you secure WebSocket connections in the browser? {#websocket-security}
+
+**Level:** Senior
+
+**Model answer:**
+WebSockets aren't covered by the same-origin policy or CORS: **any website can open a WebSocket to your server,** and the browser will attach your cookies to the handshake when SameSite rules allow it. That makes some protections your job.
+
+**Protect the handshake:**
+- **Check the `Origin` header** against an allow-list before accepting the connection. Without this, **cross-site WebSocket hijacking** lets another site open an authenticated connection and read the messages.
+- **Authenticate deliberately:**
+  - With cookie sessions, use `SameSite=Lax` or `Strict` cookies *and* the Origin check.
+  - Or issue a **short-lived, single-use ticket** from an authenticated API call and send it in the first message. Avoid long-lived tokens in the URL, because URLs end up in logs.
+- Use **`wss://`** only.
+
+**Protect the conversation:**
+- **Authorise every action and subscription,** not just the connection: "Can this user join this channel?"
+- **Validate every message** against a schema, with size limits. Treat messages like any other untrusted input.
+- **Re-check authorisation on long-lived connections:** sessions expire, and permissions get revoked. Close or re-authenticate connections when that happens.
+- **Rate limit** messages and connections per user and per IP, and limit the number of open connections per user.
+
+**Operate it safely:** log connection and authorisation events, set idle timeouts, and make sure proxies and load balancers pass the Origin header through unchanged.
+
+**What the interviewer is looking for:**
+Knowing WebSockets bypass SOP and CORS, Origin checks against hijacking, deliberate authentication (cookies with SameSite, or short-lived tickets), per-message authorisation and validation, re-checking long-lived sessions, and rate limits.
+
+**Follow-ups:**
+- How would you test for cross-site WebSocket hijacking?
+- How do you revoke access for a user who's connected right now?
+
+**Red flags:**
+- Assuming CORS protects the WebSocket endpoint.
+- Authenticating once at connection time and never again.
+
+### What are cross-site leaks (XS-Leaks), and how do you defend against them? {#xs-leaks}
+
+**Level:** Senior
+
+**Model answer:**
+**XS-Leaks** are side-channel attacks in which another site can't read your pages, but can **infer something about the user** from observable behaviour: whether a request succeeded, how long it took, how many frames a page has, or whether a window navigated.
+
+**Examples:**
+- **Logged-in detection:** loading an authenticated-only resource as an image or script, and watching whether it errors.
+- **Search probing:** timing requests to `/search?q=…` in the user's account to learn whether results exist, such as "does this user's inbox contain an email from a certain bank?"
+- **Frame counting:** opening your page and checking `window.length`, which differs depending on the user's state.
+
+**Defences:**
+- **SameSite cookies:** cross-site subresource requests without cookies see the logged-out version, which removes many leaks.
+- **Fetch Metadata resource isolation:** browsers send `Sec-Fetch-Site`, `Sec-Fetch-Mode` and `Sec-Fetch-Dest` headers. The server rejects cross-site requests that aren't top-level navigations to sensitive endpoints.
+- **COOP** (`Cross-Origin-Opener-Policy: same-origin`) stops other sites keeping a handle on your window to inspect it.
+- **CORP** (`Cross-Origin-Resource-Policy: same-origin`) stops other sites embedding your resources.
+- **`frame-ancestors`** stops framing.
+- **Browser changes help too:** most browsers now partition the HTTP cache by top-level site, which closes many cache-probing attacks.
+
+**Prioritise** endpoints whose existence or response reveals something sensitive: search, account status, membership of private groups.
+
+**What the interviewer is looking for:**
+What XS-Leaks are (inference, not reading), concrete examples, SameSite, Fetch Metadata isolation, COOP, CORP and frame-ancestors, browser cache partitioning, and prioritising sensitive endpoints.
+
+**Follow-ups:**
+- Write the logic of a Fetch Metadata resource isolation policy.
+- Why are timing attacks hard to eliminate completely?
+
+**Red flags:**
+- "Same-origin policy means other sites can't learn anything."
+- Defending only with CORS.
+
+### Users can submit rich HTML, such as email templates or CMS pages. How do you render it safely? {#user-generated-html}
+
+**Level:** Architect
+
+**Model answer:**
+User-supplied HTML is XSS waiting to happen unless it's contained. Use **layers**: sanitise it, isolate where it runs, and restrict what it can do.
+
+**1. Sanitise with an allow-list:**
+- Use a well-maintained sanitiser such as DOMPurify, allowing only the tags and attributes the feature needs, and no `script`, event handlers, `javascript:` URLs or `style` tags if you can avoid them.
+- **Sanitise at render time with the current rules** and keep the original, so that improving the rules protects existing content.
+- Be careful with **SVG and MathML,** which have their own script and namespace tricks, and with **CSS,** which can leak data through attribute selectors and background-image URLs.
+
+**2. Isolate on a separate origin:**
+- Render user content on a **different registrable domain**, such as `example-usercontent.net`, the way large platforms do. Even if a script slips through, it can't reach your cookies or your app's origin.
+- Display it in an **`<iframe sandbox>`.** Never combine `allow-scripts` with `allow-same-origin` for untrusted content, because that lets the content remove its own sandbox.
+
+**3. Restrict with CSP on that origin:** for example `script-src 'none'` and tight `img-src` and `style-src` rules.
+
+**4. Handle links and media:**
+- Add `rel="noopener noreferrer ugc"` to user links.
+- **Proxy images** through your own service, so viewers' IP addresses and read status aren't leaked to arbitrary hosts, and so you can scan or strip unsafe content.
+
+**5. Prefer a restricted format** where possible: Markdown with a safe renderer, or a structured editor format, is much easier to secure than arbitrary HTML.
+
+**Test it** with known XSS payload lists and fuzzing, and run sanitiser upgrades promptly, because bypasses are found regularly.
+
+**What the interviewer is looking for:**
+Allow-list sanitising at render time, awareness of SVG and CSS risks, a separate registrable domain and sandboxed iframes, CSP on the content origin, safe links and proxied images, preferring restricted formats, and testing.
+
+**Follow-ups:**
+- Why is a subdomain of your main domain not enough isolation?
+- How would you let users embed videos from known providers?
+
+**Red flags:**
+- A regex that strips `<script>` tags.
+- Rendering user HTML directly in the main app's origin.
+
+### An XSS vulnerability is reported in production. How do you respond? {#xss-incident-response}
+
+**Level:** Architect
+
+**Model answer:**
+Treat it as a **security incident,** sized by how exploitable it is and what an attacker could do with it.
+
+**1. Triage quickly (first hours):**
+- **Reproduce** it and identify the type (stored, reflected or DOM-based), the affected pages and which users would see it.
+- **Assess the impact:** can it act as the victim (session-riding), read sensitive data, or reach admin users? Is there an existing CSP that blocks it? `HttpOnly` cookies limit theft, but an attacker can still act inside the page.
+
+**2. Contain:**
+- Disable the feature or the affected input with a feature flag, add a temporary WAF rule for the payload pattern, or tighten the CSP for that page.
+- For stored XSS, **find and neutralise stored payloads** in the database.
+
+**3. Investigate exploitation:**
+- Search logs for the payload pattern, and check CSP violation reports, which may show earlier attempts.
+- If it could have been exploited, consider **invalidating sessions,** and involve privacy and legal teams if personal data may have been accessed.
+
+**4. Fix the cause properly:**
+- Fix the encoding or the unsafe sink, not just the specific payload.
+- **Variant analysis:** search for the same pattern elsewhere, such as other uses of the same template helper or `dangerouslySetInnerHTML`.
+- Add **regression tests** and a lint or static-analysis rule for the pattern.
+
+**5. Communicate and learn:**
+- Thank the reporter. If it came through a bug bounty, pay it promptly and agree disclosure timing.
+- Run a blameless review: why did existing defences not catch it? Common answers are a missing CSP, an unsafe helper, or a missing review checklist.
+- Strengthen systemic defences: strict CSP, Trusted Types, and safe-by-default templating.
+
+**What the interviewer is looking for:**
+Fast triage of type and impact, containment options, cleaning stored payloads, checking for exploitation, session and privacy follow-up, root-cause fixes with variant analysis, and systemic improvements.
+
+**Follow-ups:**
+- The researcher threatens to publish in 7 days. How do you handle it?
+- How do you decide whether to force all users to sign in again?
+
+**Red flags:**
+- Blocking the specific payload string and closing the ticket.
+- No check for whether it was exploited.
+
 ## Cheat Sheet
 
 ### Origins and CORS
@@ -670,6 +898,16 @@ Recognising the shared-origin risk, platform-level CSP and Trusted Types, protec
 - **HSTS** — forces HTTPS in the browser. Preload only when every subdomain supports HTTPS.
 - **COOP / COEP / CORP** — cross-origin isolation headers that defend against cross-window and Spectre-style leaks.
 - **SRI** — an integrity hash on third-party script tags, for static, versioned files only.
+
+### Revisit
+
+- **SameSite=Lax limits** — stops cross-site CSRF, but not attacks from sibling subdomains or state changes made with GET.
+- **Strict CSP in action** — an injected script without the nonce is blocked and reported, turning an attack into an alert.
+- **Subresource Integrity** — a hash the browser checks on static third-party files; useless for files that change by design.
+- **WebSocket security** — no SOP or CORS protection: check Origin, authenticate deliberately, authorise every message.
+- **XS-Leaks** — other sites infer user state from side channels; defend with SameSite, Fetch Metadata, COOP and CORP.
+- **User-generated HTML** — sanitise at render time, isolate on a separate registrable domain in a sandboxed iframe, restrict with CSP.
+- **XSS incident** — triage, contain, clean stored payloads, check for exploitation, fix with variant analysis, strengthen defaults.
 
 ## Further Reading
 
