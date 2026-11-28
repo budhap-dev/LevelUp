@@ -39,7 +39,9 @@ describe('global search', () => {
     expect(router.state.location.hash).toBe('#q-cache-stampede');
     const item = await screen.findByText('What is a cache stampede and how do you prevent it?');
     await waitFor(() => expect(item.closest('details')).toHaveAttribute('open'));
-  });
+    // An end-to-end flow over the full content index and a large topic page: ~1 s alone, but it outgrew the 5 s
+    // default when all test files run in parallel.
+  }, 15_000);
 
   it('selects the best overall match first, whatever its kind', async () => {
     const user = userEvent.setup();

@@ -8361,5 +8361,333 @@
       "technical-strategy",
       "adrs-nfrs"
     ]
+  },
+  {
+    "id": "wsjf",
+    "term": "Weighted Shortest Job First",
+    "aka": [
+      "WSJF"
+    ],
+    "group": "product-business",
+    "definition": "A prioritisation method from SAFe that ranks work by Cost of Delay divided by job size, where Cost of Delay is the sum of relative scores for business value, time criticality, and risk reduction or opportunity enablement.",
+    "details": [
+      "Uses relative, modified-Fibonacci scores agreed within one session.",
+      "A relative-scoring approximation of CD3 (Cost of Delay divided by duration)."
+    ],
+    "useCases": [
+      "Ranking features for a SAFe programme increment when exact values aren't known."
+    ],
+    "related": [
+      "prioritisation",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "cd3",
+    "term": "CD3",
+    "aka": [
+      "Cost of Delay Divided by Duration"
+    ],
+    "group": "product-business",
+    "definition": "A sequencing rule that divides each item's Cost of Delay per unit of time by its duration and does the highest first, which minimises the total cost of delay across a sequence of work.",
+    "details": [
+      "Favours short, urgent, valuable work.",
+      "Fixed-date items need a separate check that they finish before their deadline."
+    ],
+    "useCases": [
+      "Showing that a six-week item blocking enterprise deals should go before a higher-RICE onboarding tweak."
+    ],
+    "related": [
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "class-of-service",
+    "term": "Class of service",
+    "aka": [
+      "urgency profile"
+    ],
+    "group": "delivery",
+    "definition": "A Kanban policy that groups work by how its value changes with time: expedite (value lost fast), fixed date (large cost after a deadline), standard (value lost steadily) and intangible (little cost now, rising later).",
+    "details": [
+      "Each class can have its own scheduling rules, such as a limit on expedite items.",
+      "Popularised by David J. Anderson's Kanban method."
+    ],
+    "useCases": [
+      "Scheduling a regulatory audit log so it lands before its deadline, ahead of more valuable standard work."
+    ],
+    "related": [
+      "prioritisation",
+      "agile-scrum-kanban-safe"
+    ]
+  },
+  {
+    "id": "kano-model",
+    "term": "Kano model",
+    "aka": [],
+    "group": "product-business",
+    "definition": "Noriaki Kano's model of how features affect customer satisfaction: basic (must-be) features cause dissatisfaction when missing, performance features satisfy in proportion to how well they work, and delighters satisfy without being expected.",
+    "details": [
+      "Delighters become expected over time and turn into basics.",
+      "Usually measured with a paired functional and dysfunctional survey question."
+    ],
+    "useCases": [
+      "Recognising that SSO is a basic need for enterprise buyers, so doing it brilliantly wins nothing but missing it loses deals."
+    ],
+    "related": [
+      "prioritisation",
+      "product-management"
+    ]
+  },
+  {
+    "id": "eisenhower-matrix",
+    "term": "Eisenhower matrix",
+    "aka": [
+      "urgent-important matrix"
+    ],
+    "group": "product-business",
+    "definition": "A personal prioritisation grid that sorts tasks by urgency and importance: do the urgent and important, schedule the important but not urgent, delegate or batch the urgent but not important, and drop the rest.",
+    "details": [
+      "Important but not urgent work, such as design and mentoring, is what gets squeezed out without deliberate scheduling."
+    ],
+    "useCases": [
+      "A tech lead blocking time for a design document while batching routine requests."
+    ],
+    "related": [
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "opportunity-solution-tree",
+    "term": "Opportunity solution tree",
+    "aka": [
+      "OST"
+    ],
+    "group": "product-business",
+    "definition": "Teresa Torres's visual map linking a desired product outcome to customer opportunities (needs and pain points), to candidate solutions, and to the assumption tests that check them.",
+    "details": [
+      "Encourages comparing several solutions per opportunity rather than committing to the first idea.",
+      "Kept up to date through continuous weekly customer interviews."
+    ],
+    "useCases": [
+      "Connecting 'raise activation to 40%' to the specific onboarding pain points customers reported."
+    ],
+    "related": [
+      "product-management",
+      "prioritisation"
+    ]
+  },
+  {
+    "id": "theory-of-constraints",
+    "term": "Theory of Constraints",
+    "aka": [
+      "TOC"
+    ],
+    "group": "delivery",
+    "definition": "Eliyahu Goldratt's management approach holding that a system's output is limited by its single biggest constraint, so improvement means finding the constraint, exploiting it fully, subordinating everything else to it, and then elevating it.",
+    "details": [
+      "Improving anything other than the constraint doesn't increase overall output.",
+      "Introduced in the 1984 novel The Goal."
+    ],
+    "useCases": [
+      "Recognising that a shared identity team limits eight initiatives, and adding capacity there first."
+    ],
+    "related": [
+      "prioritisation",
+      "agile-scrum-kanban-safe",
+      "dora-metrics"
+    ]
+  },
+  {
+    "id": "mom-test",
+    "term": "The Mom Test",
+    "aka": [],
+    "group": "product-business",
+    "definition": "Rob Fitzpatrick's rules for customer conversations that produce honest evidence: talk about the customer's life rather than your idea, ask about specific past behaviour rather than future intentions, and listen more than you talk.",
+    "details": [
+      "Named because even your mother would say your idea is great if asked directly.",
+      "Compliments and hypothetical promises are treated as weak evidence."
+    ],
+    "useCases": [
+      "Asking 'Tell me about the last time you prepared the board report' instead of 'Would you use a reporting feature?'."
+    ],
+    "related": [
+      "product-management",
+      "business-requirement-gathering"
+    ]
+  },
+  {
+    "id": "tracking-plan",
+    "term": "Tracking plan",
+    "aka": [
+      "analytics tracking plan",
+      "event schema"
+    ],
+    "group": "product-business",
+    "definition": "A documented list of the analytics events a product emits, with names, triggers, properties and owners, derived from the metrics and questions the team needs to answer.",
+    "details": [
+      "Treated as a contract: versioned, validated in CI and monitored for volume drops.",
+      "Commercially important events are best sent from the server."
+    ],
+    "useCases": [
+      "Defining report_exported with format and report_type properties to measure a new feature's adoption."
+    ],
+    "related": [
+      "product-management",
+      "data-privacy"
+    ]
+  },
+  {
+    "id": "minimum-detectable-effect",
+    "term": "Minimum detectable effect",
+    "aka": [
+      "MDE"
+    ],
+    "group": "product-business",
+    "definition": "The smallest true difference an experiment is designed to detect reliably, at a chosen significance level and statistical power. Smaller effects need many more users.",
+    "details": [
+      "Halving the minimum detectable effect roughly quadruples the sample size needed.",
+      "Choose it before the test, based on the smallest change worth acting on."
+    ],
+    "useCases": [
+      "Deciding that a 10% relative lift in checkout conversion is the smallest worth detecting, which needs about 38,000 users per variant."
+    ],
+    "related": [
+      "product-management"
+    ]
+  },
+  {
+    "id": "sample-ratio-mismatch",
+    "term": "Sample ratio mismatch",
+    "aka": [
+      "SRM"
+    ],
+    "group": "product-business",
+    "definition": "When the number of users in each experiment variant differs significantly from the designed split, such as 50/50. It signals a bug in assignment, redirects, bots or logging, and makes the results untrustworthy.",
+    "details": [
+      "Checked with a chi-squared test before reading any results.",
+      "A common cause is one variant failing to log exposures for some users."
+    ],
+    "useCases": [
+      "Discarding a 'winning' test after finding 52% of users landed in the treatment group of a 50/50 split."
+    ],
+    "related": [
+      "product-management"
+    ]
+  },
+  {
+    "id": "guardrail-metric",
+    "term": "Guardrail metric",
+    "aka": [],
+    "group": "product-business",
+    "definition": "A metric that must not get worse while a team optimises its primary metric, such as page load time, error rate, refunds or churn.",
+    "details": [
+      "Protects against wins that damage the wider product or business.",
+      "Defined up front alongside the primary metric."
+    ],
+    "useCases": [
+      "Rejecting a conversion lift that also raised payment errors."
+    ],
+    "related": [
+      "product-management"
+    ]
+  },
+  {
+    "id": "power-interest-grid",
+    "term": "Power/interest grid",
+    "aka": [
+      "Mendelow's matrix",
+      "stakeholder map"
+    ],
+    "group": "product-business",
+    "definition": "A stakeholder mapping tool, from Aubrey Mendelow, that places stakeholders by their power over and interest in the work, suggesting how to engage each: manage closely, keep satisfied, keep informed or monitor.",
+    "details": [
+      "Combine it with each stakeholder's stance and what they care about.",
+      "Revisit it as the project changes; positions move."
+    ],
+    "useCases": [
+      "Deciding that internal audit needs early consultation even though its day-to-day interest is low."
+    ],
+    "related": [
+      "stakeholder-management"
+    ]
+  },
+  {
+    "id": "daci",
+    "term": "DACI",
+    "aka": [
+      "Driver, Approver, Contributors, Informed"
+    ],
+    "group": "product-business",
+    "definition": "A decision-making framework assigning a Driver who runs the decision, a single Approver who makes it, Contributors who give input, and people who are Informed of the outcome.",
+    "details": [
+      "A decision-focused variant of RACI, popularised by Atlassian's Team Playbook.",
+      "Agree the roles before the decision becomes contentious."
+    ],
+    "useCases": [
+      "Clarifying that the CISO approves the token design while the platform lead drives the decision."
+    ],
+    "related": [
+      "stakeholder-management"
+    ]
+  },
+  {
+    "id": "watermelon-reporting",
+    "term": "Watermelon reporting",
+    "aka": [
+      "watermelon status"
+    ],
+    "group": "product-business",
+    "definition": "Status reporting that looks green on the outside but is red on the inside: a project reported as on track while the people doing the work know it isn't.",
+    "details": [
+      "Usually caused by fear of bad news or optimistic incentives.",
+      "Prevented by honest RAG status with trends, and by leaders who reward early warnings."
+    ],
+    "useCases": [
+      "Spotting a programme reported green for six months while three integrations hadn't started."
+    ],
+    "related": [
+      "stakeholder-management"
+    ]
+  },
+  {
+    "id": "bluf",
+    "term": "BLUF",
+    "aka": [
+      "bottom line up front"
+    ],
+    "group": "product-business",
+    "definition": "A writing convention, originally military, that puts the conclusion, request or recommendation in the first sentences, followed by the supporting detail.",
+    "details": [
+      "Lets busy readers act after reading only the opening.",
+      "Works well for executive summaries, status updates and decision requests."
+    ],
+    "useCases": [
+      "Opening a one-pager with 'We need a decision by Friday; we recommend moving the launch to 17 March.'"
+    ],
+    "related": [
+      "stakeholder-management",
+      "influence-without-authority"
+    ]
+  },
+  {
+    "id": "adkar",
+    "term": "ADKAR",
+    "aka": [
+      "Prosci ADKAR model"
+    ],
+    "group": "product-business",
+    "definition": "Prosci's model of the stages a person goes through to change successfully: Awareness of the need, Desire to take part, Knowledge of how, Ability to do it, and Reinforcement to make it stick.",
+    "details": [
+      "Useful as a checklist for change communication and training.",
+      "Shows why announcing a change isn't the same as people adopting it."
+    ],
+    "useCases": [
+      "Planning the retirement of an internal tool used by 400 people."
+    ],
+    "related": [
+      "stakeholder-management",
+      "leadership"
+    ]
   }
 ]

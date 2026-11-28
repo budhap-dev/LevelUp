@@ -6,7 +6,7 @@ tags: [stakeholders, communication]
 level: Senior
 estimatedMinutes: 45
 related: [influence-without-authority, product-management]
-lastReviewed: 2026-11-24
+lastReviewed: 2026-11-28
 status: complete
 ---
 
@@ -71,6 +71,32 @@ A good update can be read in two minutes:
 
 Honest RAG status (red, amber, green), with trends and decisions needed at the top, beats long activity lists. "Watermelon reporting" (green outside, red inside) destroys trust.
 
+### Worked example: retiring a legacy reporting tool
+
+A data team plans to retire an old internal reporting tool used by about 400 people, moving them to the company's standard BI platform within two quarters. A first brainstorm lists 6 groups. A second pass, asking "who uses its exports, who supports it, who signs off?", finds 11.
+
+**Stakeholder map (excerpt):**
+
+| Stakeholder | Power | Interest | Stance | What they care about | Plan |
+|---|---|---|---|---|---|
+| CFO (sponsor) | High | Medium | Champion | Licence cost (£180,000 a year), audit findings on the old tool | Keep satisfied: monthly one-page update, decisions only |
+| Finance controllers | Medium | High | Sceptic | Month-end close must not slip | Manage closely: migrate their 12 reports first, with parallel running over one close |
+| Regional sales ops | Medium | High | Neutral | Their weekly pipeline export | Keep informed, plus a champion in each region |
+| Internal audit | High | Low | Neutral | Evidence that report logic didn't change | Consult on the reconciliation approach early |
+| Service desk | Low | High | Unaware | Ticket volume at switch-over | Keep informed: briefing pack and FAQ two weeks before |
+| Owner of a nightly integration that reads the old tool's database | Low | Low (doesn't know yet) | Unaware | Their job will break | **Found by searching access logs.** Contacted directly in week 1 |
+
+**Communication plan:**
+
+| Audience | What | Channel | When |
+|---|---|---|---|
+| Sponsor and steering | Status, risks, decisions needed | One-page update and monthly meeting | Monthly |
+| Report owners | Migration schedule, testing requests | Direct messages and office hours | Fortnightly |
+| All 400 users | What changes, when, where to get help | Email, intranet banner, in-tool notice | 6 weeks, 2 weeks and 1 day before |
+| Service desk | FAQ, known issues, escalation path | Briefing session | 2 weeks before |
+
+**Result:** usage data showed 140 of the 900 reports had been opened in the past year, so the rest were archived instead of migrated, after owners confirmed. The finance reports ran in parallel through one month-end close and reconciled exactly. The undocumented integration was rebuilt before switch-off, not discovered by an outage.
+
 ## How It Works
 
 ```mermaid
@@ -85,6 +111,32 @@ flowchart TD
   G --> H["Decision by the accountable owner, recorded"]
   H --> I["Update plan and re-confirm expectations"]
   I --> E
+```
+
+### Delivering bad news without surprises
+
+```mermaid
+sequenceDiagram
+  participant L as Tech lead
+  participant S as Sponsor
+  participant G as Steering group
+  participant A as Affected teams
+  %% step: The payment provider's certification slips by two weeks. Within a day, the tech lead confirms the impact: the 3 March launch is at risk. They don't wait in the hope of catching up.
+  %% step: The same day, the tech lead tells the sponsor one to one: the facts, the impact, two options and a recommendation. Nobody senior hears it first in a meeting.
+  %% step: The sponsor asks what launching without Apple Pay would cost. The tech lead answers with data: about 12% of mobile checkouts use it.
+  %% step: Two days before the steering meeting, a short pre-read sets out the decision needed, the options and the recommendation, so the meeting can decide rather than discover.
+  %% step: The steering group chooses to move the launch to 17 March. The decision is recorded with its owner and reasoning.
+  %% step: The tech lead tells affected teams such as support and marketing directly, with the new date and what changes for them, before the general announcement.
+  %% step: The weekly update shows the status as amber, with its trend and the next checkpoint. The status is honest rather than optimistic.
+  %% step: After launch, the tech lead and sponsor review what early signal could have warned them sooner, and add it to the risk checks for the next project.
+  L->>L: Confirm impact within a day
+  L->>S: Tell the sponsor 1:1: facts, options, recommendation
+  S-->>L: Cost of launching without Apple Pay?
+  L->>G: Pre-read: decision, options, recommendation
+  G-->>L: Decision: launch on 17 March
+  L->>A: New date and what changes for you
+  L->>G: Weekly update: AMBER, trend, next checkpoint
+  L->>S: Review the early warning signs
 ```
 
 ## When to Use / Trade-offs
@@ -513,6 +565,184 @@ Anchoring on shared goals, fair representation of each view, common-scale quanti
 - Siding with whichever function you belong to.
 - Splitting capacity evenly to avoid conflict.
 
+### How do you write a one-page summary that gets an executive decision? {#executive-summary}
+
+**Level:** Foundation
+
+**Model answer:**
+Executives read many documents in little time. A good one-pager lets them **understand the decision and make it in a few minutes**.
+
+**Put the bottom line up front (BLUF):** the first two or three sentences say what you need and what you recommend. "We need a decision by Friday on the launch date. We recommend moving from 3 to 17 March, because launching earlier means dropping Apple Pay."
+
+**A structure that works:**
+1. **Decision needed and deadline.**
+2. **Context:** only what's needed to understand the decision, in two or three sentences.
+3. **Options,** usually two or three, each with its impact on outcomes, cost, time and risk.
+4. **Recommendation and why.**
+5. **Risks and what you'll do about them.**
+6. **What happens next** once they decide.
+
+**Writing style:**
+- **Business language:** customers, revenue, cost, risk and dates, not system names.
+- **Numbers with context:** "£40,000, about 5% of the quarter's budget".
+- **Short sentences and headings,** and supporting detail in an appendix or link.
+- **Honest uncertainty:** "We're confident about the cost; the date depends on the vendor."
+
+**Test it:** ask someone outside the project to read it in two minutes and tell you what decision is being asked for. If they can't, rewrite the opening.
+
+**What the interviewer is looking for:**
+Bottom line up front, a clear decision with a deadline, comparable options, a recommendation, business language, and testing it on a fresh reader.
+
+**Follow-ups:**
+- The executive disagrees with your recommendation. What do you do?
+- How is this different from a design document?
+
+**Red flags:**
+- Three pages of background before the decision.
+- Presenting options with no recommendation.
+
+### How do you facilitate a workshop that gets stakeholders to a decision? {#decision-workshops}
+
+**Level:** Senior
+
+**Model answer:**
+Workshops fail when people arrive with different expectations and leave without a decision. **Most of the work happens before the room.**
+
+**Before:**
+- **Agree the purpose and output** with the sponsor: "Choose one of three migration approaches", not "discuss migration".
+- **Agree the decision rule up front:** who decides, and how? The sponsor after hearing everyone, consensus, or a vote with the sponsor holding a veto.
+- **Invite the right people:** those who decide, those with essential knowledge, and those who must carry it out. Keep it small enough to work.
+- **Pre-wire the contentious ones** one to one, so objections are known before the meeting.
+- **Send a short pre-read** with the options and the criteria.
+
+**During:**
+- Open with the purpose, the decision rule and the agenda.
+- **Agree criteria before options:** weight cost, risk, time and customer impact first, so people don't just argue for favourites.
+- **Diverge, then converge:** explore options and concerns, then narrow down. Silent writing before discussion stops the loudest voice dominating.
+- Use simple tools: options against criteria in a table, dot voting to see where people stand, and a "parking lot" for off-topic issues.
+- **Close by stating the decision,** owners and next steps, and check everyone heard the same thing.
+
+**After:** send a written summary within a day, including the reasoning and any dissent, and follow up on actions.
+
+**What the interviewer is looking for:**
+A clear purpose and output, the decision rule agreed in advance, the right participants, pre-wiring, criteria before options, structured divergence and convergence, and a written follow-up.
+
+**Follow-ups:**
+- A senior person dominates the discussion. What do you do?
+- The workshop ends without a decision. What next?
+
+**Red flags:**
+- A workshop with no defined output.
+- Deciding how to decide only when people already disagree.
+
+### How do you communicate a change to people who didn't ask for it? {#communicating-change}
+
+**Level:** Senior
+
+**Model answer:**
+Changes people didn't ask for, such as a new login, a retired tool or a new process, fail more often through **poor change management** than through poor technology. People resist changes they don't understand or feel done to them.
+
+**Plan for the stages people go through.** Prosci's ADKAR model is a useful checklist:
+- **Awareness:** why the change is happening.
+- **Desire:** what's in it for them, or at least why it's necessary.
+- **Knowledge:** how to do things the new way.
+- **Ability:** time, practice and support to actually do it.
+- **Reinforcement:** follow-up, so people don't drift back.
+
+**Segment the audience:** heavy users, occasional users, admins, support staff and people whose integrations depend on the old way all need different messages.
+
+**Practical steps:**
+- **Announce early and repeat:** for example 6 weeks, 2 weeks and 1 day before, through channels people actually read, including in-product notices.
+- **Explain the why** in their terms, and be honest about anything that gets worse.
+- **Show, don't just tell:** short videos, a sandbox, side-by-side guides.
+- **Find champions** in each group to answer questions and report problems.
+- **Prepare support:** brief the service desk, publish an FAQ, and staff up at switch-over.
+- **Offer a transition period** where possible, with the old way available read-only.
+- **Listen and adjust:** feedback channels, early pilots, and a willingness to fix real problems before full rollout.
+
+**Measure:** adoption, support tickets, task completion and satisfaction after the change.
+
+**What the interviewer is looking for:**
+Change management as a discipline, ADKAR or similar stages, audience segmentation, early and repeated communication, champions, support readiness, transition periods and feedback.
+
+**Follow-ups:**
+- A vocal group lobbies to cancel the change. How do you respond?
+- How do you communicate a change that makes some people's work harder?
+
+**Red flags:**
+- One email on the day of the change.
+- Treating resistance as people being difficult.
+
+### How do you manage regulators and auditors as stakeholders? {#regulators-auditors}
+
+**Level:** Architect
+
+**Model answer:**
+Regulators and auditors have real power: findings can stop a launch, bring fines or require remediation programmes. Treat them as **high-power stakeholders whose trust is built over time**, not as adversaries to be handled at the end.
+
+**Know what they need:**
+- **Regulators** care about outcomes for customers and markets, and about whether you understand and control your risks.
+- **Internal and external auditors** need evidence that controls exist, are designed well and work in practice.
+
+**Principles:**
+- **No surprises:** tell them about significant changes, incidents or risks early, through the agreed channel and within any required notification deadlines. Late disclosure damages trust more than the issue itself.
+- **One accountable point of contact,** usually through compliance or risk teams. Engineers support them with accurate technical detail.
+- **Evidence by design:** build controls that produce evidence automatically, such as pipeline approvals, access reviews and change logs. Audits then become extracting existing evidence.
+- **Accuracy over reassurance:** answer precisely what's asked, say when you don't know and follow up. Never overstate a control.
+- **Track commitments:** every finding and promised remediation has an owner, a date and visible progress.
+
+**Engage early on big changes:** a cloud migration, a new AI system or outsourcing a critical service may need prior notification or approval, such as under the EU's DORA (Digital Operational Resilience Act) for financial entities' critical ICT third-party arrangements. Discuss the design while it can still change.
+
+**When you disagree with a finding:** respond with evidence through the formal process, separate facts from interpretation, and propose alternatives that meet the underlying intent.
+
+**What the interviewer is looking for:**
+Understanding what regulators and auditors need, early disclosure, a single point of contact, evidence by design, precise answers, tracked remediation, early engagement on major changes, and constructive disagreement.
+
+**Follow-ups:**
+- An auditor asks for evidence of a control you're not sure works. What do you do?
+- How do you explain a cloud architecture to a non-technical regulator?
+
+**Red flags:**
+- Treating audits as a quarterly scramble.
+- Hiding or minimising an issue to avoid scrutiny.
+
+### A programme has lost stakeholder trust after repeatedly missing its dates. How do you reset it? {#programme-reset}
+
+**Level:** Architect
+
+**Model answer:**
+After repeated slips, another optimistic date makes things worse. A reset needs **honesty about the past, a credible plan and visible proof**.
+
+**1. Find out the truth first** (2–4 weeks):
+- Review the actual scope, progress and velocity, not the reported status. An independent review or a peer from outside the programme helps.
+- Find the causes: scope growth, unrealistic estimates, dependencies, skills, decision delays or an architecture problem.
+
+**2. Re-baseline honestly:**
+- Forecast from **actual throughput,** using ranges ("most likely May, 85% confident by July") rather than a single date.
+- **Cut or phase scope** to deliver value sooner. Ask what the smallest valuable release would be.
+- Present it with the reasons for past misses and what will be different this time. Acknowledge the history plainly.
+
+**3. Change how it's run:**
+- **Shorter milestones** with demonstrable outcomes, such as working software every few weeks rather than percentage-complete reports.
+- **Clear decision rights** and a steering group that decides quickly.
+- **Honest status reporting,** including amber and red, with early warnings.
+- Fix the structural causes, such as dependencies on teams with no capacity allocated.
+
+**4. Rebuild trust with evidence:** hit the first few milestones exactly as promised, even if small. Credibility returns through kept promises, not presentations.
+
+**Consider stopping:** if the reset shows the business case no longer holds, recommend stopping or reshaping the programme. Sunk costs aren't a reason to continue.
+
+**What the interviewer is looking for:**
+Diagnosing the real state, honest re-baselining with ranges and reduced scope, structural changes to governance and milestones, rebuilding trust through kept promises, and willingness to stop.
+
+**Follow-ups:**
+- The sponsor insists on keeping the original scope and date. What do you do?
+- How do you keep the team motivated during a reset?
+
+**Red flags:**
+- Announcing a new single date without changing anything else.
+- Blaming the previous leadership or the team.
+
 ## Cheat Sheet
 
 - **Stakeholder** — anyone affected by, or able to affect, your work; identify them broadly and early.
@@ -529,6 +759,16 @@ Anchoring on shared goals, fair representation of each view, common-scale quanti
 - **Technical risk for executives** — impact, likelihood, cost and options, with an explicit decision or risk acceptance.
 - **Steering committee** — exists to decide and unblock; pre-reads, recorded decisions, welcomes bad news.
 - **Incident comms** — separate comms lead, fixed cadence, templates, segmented audiences.
+
+### Revisit
+
+- **Find hidden stakeholders** — search access logs, integrations and exports; the forgotten consumer is the one that causes the outage.
+- **Bad news sequence** — confirm the impact fast, tell the sponsor one to one with options, pre-read, decide, then tell affected teams.
+- **BLUF** — bottom line up front: the decision needed and your recommendation in the first sentences.
+- **Decision workshops** — agree the output and decision rule before the meeting, and criteria before options.
+- **ADKAR** — awareness, desire, knowledge, ability and reinforcement: the stages of individual change (Prosci).
+- **Regulators and auditors** — no surprises, one point of contact, evidence by design and tracked remediation.
+- **Programme reset** — find the truth, re-baseline with ranges and less scope, shorten milestones, then keep promises.
 
 ## Further Reading
 
